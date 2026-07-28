@@ -105,7 +105,7 @@
 	.chat-tab-wrap.active {
 		border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 		background: color-mix(in srgb, var(--surface-strong) 88%, var(--accent) 12%);
-		box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 	}
 
 	.utility-tab.active,
@@ -202,12 +202,15 @@
 	}
 
 	.add-tab {
+		display: grid;
 		width: 1.875rem;
 		height: 1.875rem;
 		flex: 0 0 1.875rem;
+		place-items: center;
 		border: 1px solid transparent;
 		border-radius: 8px;
 		font-size: 1.35rem;
+		line-height: 1;
 		transition:
 			background 160ms ease,
 			border-color 160ms ease,

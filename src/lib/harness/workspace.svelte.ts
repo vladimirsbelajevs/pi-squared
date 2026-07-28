@@ -48,6 +48,12 @@ export const THEME_LABELS: Record<Theme, string> = {
 	paper: 'Paper',
 	nord: 'Nord',
 	solarized: 'Solarized',
+	'everforest-dark-hard': 'Everforest Dark Hard',
+	'everforest-dark-medium': 'Everforest Dark Medium',
+	'everforest-dark-soft': 'Everforest Dark Soft',
+	'everforest-light-hard': 'Everforest Light Hard',
+	'everforest-light-medium': 'Everforest Light Medium',
+	'everforest-light-soft': 'Everforest Light Soft',
 	system: 'Follow system'
 };
 

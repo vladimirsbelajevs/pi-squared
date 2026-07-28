@@ -5,7 +5,18 @@ import type {
 	ThinkingLevel
 } from '$lib/contracts';
 
-export type Theme = 'graphite' | 'paper' | 'nord' | 'solarized' | 'system';
+export type Theme =
+	| 'graphite'
+	| 'paper'
+	| 'nord'
+	| 'solarized'
+	| 'everforest-dark-hard'
+	| 'everforest-dark-medium'
+	| 'everforest-dark-soft'
+	| 'everforest-light-hard'
+	| 'everforest-light-medium'
+	| 'everforest-light-soft'
+	| 'system';
 export type QueueMode = 'followUp' | 'steer';
 
 export interface NewDraft {

@@ -23,6 +23,10 @@ test('renders the tab-first harness shell', async ({ page }) => {
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await expect(page).toHaveURL(/\/settings$/);
 	await expect(page.getByRole('heading', { name: 'Theme' })).toBeVisible();
+	await page.getByRole('button', { name: 'Everforest Dark Medium' }).click();
+	await expect
+		.poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+		.toBe('everforest-dark-medium');
 });
 
 test('restores a deep-linked new-chat draft route', async ({ page }) => {

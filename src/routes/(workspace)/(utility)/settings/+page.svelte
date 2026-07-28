@@ -88,6 +88,25 @@
 		background: #2aa198;
 	}
 
+	.theme-everforest-dark-hard span {
+		background: #7fbbb3;
+	}
+
+	.theme-everforest-dark-medium span {
+		background: #83c092;
+	}
+
+	.theme-everforest-dark-soft span {
+		background: #a7c080;
+	}
+
+	.theme-everforest-light-hard span,
+	.theme-everforest-light-medium span,
+	.theme-everforest-light-soft span {
+		border: 1px solid #829181;
+		background: #3a94c5;
+	}
+
 	.theme-system span {
 		background: linear-gradient(135deg, #111 50%, #f6f3ec 50%);
 	}
