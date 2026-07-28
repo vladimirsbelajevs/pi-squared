@@ -117,7 +117,17 @@
 							<input bind:value={tab.projectName} placeholder="Project name" />
 						</label>
 						{#if tab.projectError}<p class="form-error" role="alert">{tab.projectError}</p>{/if}
-						<button class="primary-button" type="submit">Add trusted project</button>
+						<button class="add-project-submit" type="submit">
+							<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+								<path
+									d="M10 4.5V15.5M4.5 10H15.5"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+								/>
+							</svg>
+							Add project
+						</button>
 					</form>
 				</div>
 			{/if}
@@ -257,17 +267,29 @@
 		margin-top: 1rem;
 	}
 
-	.primary-button {
-		border: 1px solid transparent;
+	.add-project-submit {
+		display: inline-flex;
+		align-items: center;
+		justify-self: end;
+		gap: 0.35rem;
+		height: 2rem;
+		border: 1px solid var(--border);
 		border-radius: 0.35rem;
-		background: var(--accent-strong);
-		color: var(--accent-ink);
-		padding: 0.7rem 1rem;
-		font-weight: 700;
+		background: var(--surface-strong);
+		color: var(--accent);
+		padding: 0 0.65rem;
+		font-size: 0.75rem;
+		font-weight: 600;
 	}
 
-	.primary-button:hover {
-		filter: brightness(1.08);
+	.add-project-submit:hover {
+		border-color: var(--border-strong);
+		background: color-mix(in srgb, var(--surface-strong) 88%, var(--accent) 12%);
+	}
+
+	.add-project-submit svg {
+		width: 0.9rem;
+		height: 0.9rem;
 	}
 
 	.form-error {
