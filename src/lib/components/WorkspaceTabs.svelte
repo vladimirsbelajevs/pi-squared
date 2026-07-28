@@ -93,7 +93,7 @@
 		flex: 0 0 1.875rem;
 		place-items: center;
 		border: 1px solid transparent;
-		border-radius: 999px;
+		border-radius: 8px;
 		font-size: 1.15rem;
 		transition:
 			background 160ms ease,
@@ -126,7 +126,7 @@
 		max-width: 16rem;
 		overflow: hidden;
 		border: 1px solid transparent;
-		border-radius: 999px;
+		border-radius: 8px;
 		background: color-mix(in srgb, var(--surface) 88%, var(--border) 12%);
 		transition:
 			background 160ms ease,
@@ -206,7 +206,7 @@
 		height: 1.875rem;
 		flex: 0 0 1.875rem;
 		border: 1px solid transparent;
-		border-radius: 999px;
+		border-radius: 8px;
 		font-size: 1.35rem;
 		transition:
 			background 160ms ease,
