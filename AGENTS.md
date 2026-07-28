@@ -44,3 +44,14 @@ user confirmation and NEVER if code was written to files in their project.
 
 Node is installed using fnm if you cannot see node try to use fnm to get current
 default node
+
+### Svelte Reactivity
+
+- Treat `$effect` as an escape hatch and avoid it by default.
+- Never use `$effect` to synchronize or derive state; prefer `$derived`, event
+  handlers, function bindings, or explicit methods instead.
+- Prefer `{@attach}` for DOM lifecycle work and SvelteKit navigation hooks such
+  as `afterNavigate` for route lifecycle work.
+- Use `$effect` only when no declarative or lifecycle API expresses the required
+  browser-side integration; keep any such effect narrowly scoped and do not
+  write reactive state from it.

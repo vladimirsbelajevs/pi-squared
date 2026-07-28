@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { fly } from 'svelte/transition';
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
@@ -10,26 +12,39 @@
 	let projectId = $derived(page.params.projectId ?? '');
 	let sessionId = $derived(page.params.sessionId ?? '');
 	let chat = $derived(workspace.findChat(projectId, sessionId));
+	let observedChatId: string | undefined;
+	let previousItemCount = 0;
+	let wasStreaming = false;
 
-	$effect(() => {
-		void workspace.ensureChat(projectId, sessionId);
-	});
+	function ensureChatForRoute(): void {
+		const projectId = page.params.projectId;
+		const sessionId = page.params.sessionId;
+		if (projectId && sessionId) void workspace.ensureChat(projectId, sessionId);
+	}
 
-	$effect(() => {
-		if (chat) workspace.schedulePersist(chat.draft, chat.queueMode);
-	});
+	afterNavigate(ensureChatForRoute);
+	onMount(ensureChatForRoute);
 
-	$effect(() => {
-		const itemCount = chat?.snapshot?.items.length ?? 0;
-		const isStreaming = chat?.snapshot?.isStreaming ?? false;
-		void itemCount;
-		void isStreaming;
-		const scrollContainer = document.getElementById('workspace-content');
-		scrollContainer?.scrollTo({
-			top: scrollContainer.scrollHeight,
-			behavior: 'smooth'
-		});
-	});
+	function scrollForNewContent(chatId: string, itemCount: number, isStreaming: boolean) {
+		return (node: HTMLDivElement) => {
+			if (!node.isConnected) return;
+			if (chatId !== observedChatId) {
+				observedChatId = chatId;
+				previousItemCount = itemCount;
+				wasStreaming = isStreaming;
+				return;
+			}
+			const shouldScroll = itemCount > previousItemCount || (!wasStreaming && isStreaming);
+			previousItemCount = itemCount;
+			wasStreaming = isStreaming;
+			if (!shouldScroll) return;
+			const scrollContainer = document.getElementById('workspace-content');
+			scrollContainer?.scrollTo({
+				top: scrollContainer.scrollHeight,
+				behavior: 'smooth'
+			});
+		};
+	}
 </script>
 
 {#if !chat || chat.hydrating}
@@ -41,7 +56,10 @@
 	</section>
 {:else}
 	<section class="chat-view" role="tabpanel">
-		<div class="chat-scroll">
+		<div
+			class="chat-scroll"
+			{@attach scrollForNewContent(chat.id, chat.snapshot.items.length, chat.snapshot.isStreaming)}
+		>
 			<ChatTimeline {chat} />
 		</div>
 
@@ -69,6 +87,7 @@
 				autoFocus
 				error={chat.error}
 				onSend={(message) => workspace.sendPrompt(chat, message)}
+				onDraftChange={() => workspace.schedulePersist()}
 				onStop={() => workspace.stopChat(chat)}
 				onModelChange={(key) => workspace.changeModel(chat, key)}
 				onThinkingChange={(level) => workspace.changeThinking(chat, level)}

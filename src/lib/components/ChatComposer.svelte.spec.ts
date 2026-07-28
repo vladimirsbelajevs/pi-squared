@@ -56,6 +56,17 @@ describe('ChatComposer', () => {
 		await expect.element(screen.getByRole('alert')).toBeVisible();
 	});
 
+	it('reports draft changes from typing and sending', async () => {
+		const onDraftChange = vi.fn();
+		const screen = render(ChatComposer, props({ onDraftChange }));
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await textbox.fill('Persist this draft');
+		expect(onDraftChange).toHaveBeenLastCalledWith('Persist this draft');
+		await screen.getByRole('button', { name: 'Send message' }).click();
+		expect(onDraftChange).toHaveBeenLastCalledWith('');
+	});
+
 	it('shows queue and stop controls while streaming', async () => {
 		const onStop = vi.fn();
 		const onQueueModeChange = vi.fn();

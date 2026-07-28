@@ -1,13 +1,36 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import WorkspaceTabs from '$lib/components/WorkspaceTabs.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 	import type { WorkspaceTab } from '$lib/harness/types';
 
 	let { children } = $props();
+	let scrollContainer = $state<HTMLElement>();
+	let restoringScroll = false;
+
+	function rememberScrollPosition(event: Event): void {
+		if (restoringScroll) return;
+		workspace.rememberScrollPosition(
+			page.url.pathname,
+			(event.currentTarget as HTMLElement).scrollTop
+		);
+	}
+
+	function restoreScrollPosition(): void {
+		const pathname = page.url.pathname;
+		if (!scrollContainer) return;
+		const scrollTop = workspace.scrollPosition(pathname);
+		restoringScroll = true;
+		void tick().then(() => {
+			if (scrollContainer && page.url.pathname === pathname) scrollContainer.scrollTop = scrollTop;
+			requestAnimationFrame(() => (restoringScroll = false));
+		});
+	}
+
+	afterNavigate(restoreScrollPosition);
 
 	function createNewTab(): void {
 		const tab = workspace.createNewTab();
@@ -44,6 +67,7 @@
 
 	onMount(() => {
 		void workspace.start();
+		restoreScrollPosition();
 		return () => workspace.disposeConnection();
 	});
 </script>
@@ -56,7 +80,12 @@
 <main class="harness-shell">
 	<WorkspaceTabs {workspace} pathname={page.url.pathname} onNew={createNewTab} onClose={closeTab} />
 
-	<div id="workspace-content" class="workspace-content">
+	<div
+		id="workspace-content"
+		class="workspace-content"
+		bind:this={scrollContainer}
+		onscroll={rememberScrollPosition}
+	>
 		{#if workspace.error}
 			<div class="app-error" role="alert">{workspace.error}</div>
 		{/if}

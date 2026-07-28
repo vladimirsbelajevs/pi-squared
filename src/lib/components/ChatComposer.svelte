@@ -16,6 +16,7 @@
 		autoFocus?: boolean;
 		error?: string;
 		onSend: (message: string) => Promise<boolean>;
+		onDraftChange?: (draft: string) => void;
 		onStop?: () => void | Promise<void>;
 		onModelChange: (modelKey: string) => void | Promise<void>;
 		onThinkingChange: (level: ThinkingLevel) => void | Promise<void>;
@@ -33,6 +34,7 @@
 		autoFocus = false,
 		error,
 		onSend,
+		onDraftChange,
 		onStop,
 		onModelChange,
 		onThinkingChange,
@@ -77,6 +79,16 @@
 		textarea.style.height = `${Math.min(textarea.scrollHeight, 192)}px`;
 	}
 
+	function updateDraft(value: string): void {
+		draft = value;
+		onDraftChange?.(value);
+	}
+
+	function handleDraftInput(event: Event): void {
+		resizeTextarea();
+		onDraftChange?.((event.currentTarget as HTMLTextAreaElement).value);
+	}
+
 	function submitOnEnter(event: KeyboardEvent): void {
 		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
 		event.preventDefault();
@@ -91,17 +103,17 @@
 
 		localError = undefined;
 		submitting = true;
-		draft = '';
+		updateDraft('');
 		await Promise.resolve();
 		resizeTextarea();
 
 		try {
 			if (!(await onSend(message))) {
-				draft = message;
+				updateDraft(message);
 				localError = 'Message was not accepted. Please try again.';
 			}
 		} catch (sendError) {
-			draft = message;
+			updateDraft(message);
 			localError = sendError instanceof Error ? sendError.message : 'Unable to send this message.';
 		} finally {
 			submitting = false;
@@ -135,7 +147,7 @@
 					bind:this={textarea}
 					bind:value={draft}
 					rows="1"
-					oninput={resizeTextarea}
+					oninput={handleDraftInput}
 					onkeydown={submitOnEnter}></textarea>
 			</div>
 

@@ -1,30 +1,22 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
-	import { untrack } from 'svelte';
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
 	let tabId = $derived(page.params.tabId ?? '');
 	let tab = $derived(workspace.findNewTab(tabId));
 
-	$effect(() => {
-		const id = tabId;
-		untrack(() => workspace.ensureNewTab(id));
-	});
+	function ensureNewTabForRoute(): void {
+		const id = page.params.tabId;
+		if (id) workspace.ensureNewTab(id);
+	}
 
-	$effect(() => {
-		if (tab) {
-			workspace.schedulePersist(
-				tab.draft.prompt,
-				tab.draft.projectId,
-				tab.draft.modelKey,
-				tab.draft.thinkingLevel
-			);
-		}
-	});
+	afterNavigate(ensureNewTabForRoute);
+	onMount(ensureNewTabForRoute);
 
 	async function startChat(message: string): Promise<boolean> {
 		if (!tab) return false;
@@ -58,6 +50,7 @@
 				disabled={!tab.draft.projectId || !tab.draft.modelKey}
 				error={tab.error}
 				onSend={startChat}
+				onDraftChange={() => workspace.schedulePersist()}
 				onModelChange={(key) => workspace.changeNewTabModel(tab, key)}
 				onThinkingChange={(level) => workspace.changeNewTabThinking(tab, level)}
 			/>

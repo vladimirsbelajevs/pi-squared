@@ -93,6 +93,7 @@ export class HarnessWorkspace {
 	#events: EventSource | undefined;
 	#lastEventId: number | undefined;
 	#chatLoads = new SvelteMap<string, Promise<ChatTab | undefined>>();
+	#scrollPositions = new SvelteMap<string, number>();
 	#persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 	async start(): Promise<void> {
@@ -110,13 +111,20 @@ export class HarnessWorkspace {
 		this.#events = undefined;
 	}
 
-	schedulePersist(..._dependencies: unknown[]): void {
-		void _dependencies;
+	schedulePersist(): void {
 		if (this.#persistTimer) clearTimeout(this.#persistTimer);
 		this.#persistTimer = setTimeout(() => {
 			this.#persistTimer = undefined;
 			this.persist();
 		}, 150);
+	}
+
+	rememberScrollPosition(pathname: string, scrollTop: number): void {
+		this.#scrollPositions.set(pathname, scrollTop);
+	}
+
+	scrollPosition(pathname: string): number {
+		return this.#scrollPositions.get(pathname) ?? 0;
 	}
 
 	newHref(tabId: string): string {

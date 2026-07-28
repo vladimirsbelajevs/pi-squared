@@ -44,6 +44,27 @@ test('closes an active tab without reopening it', async ({ page }) => {
 	await expect(closeButton).toHaveCount(0);
 });
 
+test('restores each tab scroll position without animating to the bottom', async ({ page }) => {
+	await page.goto('/new/scroll-position');
+	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
+
+	await page.evaluate(() => {
+		const container = document.getElementById('workspace-content');
+		if (!container) throw new Error('Workspace scroll container is missing.');
+		container.style.paddingBottom = '1200px';
+		container.scrollTop = 180;
+		container.dispatchEvent(new Event('scroll'));
+	});
+
+	await page.getByRole('tab', { name: 'Historical sessions and harness settings' }).click();
+	await expect(page).toHaveURL(/\/history$/);
+	await page.getByRole('tab', { name: 'New chat' }).click();
+	await expect(page).toHaveURL(/\/new\/scroll-position$/);
+	await expect
+		.poll(() => page.evaluate(() => document.getElementById('workspace-content')?.scrollTop))
+		.toBe(180);
+});
+
 test('starting a chat does not recreate its draft tab', async ({ page }) => {
 	const project = {
 		id: 'project-1',
