@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionEntry } from '@earendil-works/pi-coding-agent';
-import { mapSessionEntry } from './pi.js';
+import { mapSessionEntry, normalizePiEvent } from './pi.js';
 
 describe('mapSessionEntry', () => {
 	it('keeps assistant text, reasoning, and tool calls browser-safe', () => {
@@ -57,5 +57,20 @@ describe('mapSessionEntry', () => {
 			kind: 'notice',
 			text: 'Model changed to anthropic/claude-sonnet'
 		});
+	});
+
+	it('forwards assistant text and reasoning deltas immediately', () => {
+		expect(
+			normalizePiEvent({
+				type: 'message_update',
+				assistantMessageEvent: { type: 'text_delta', delta: 'Streaming ' }
+			} as never)
+		).toEqual({ type: 'assistant_delta', text: 'Streaming ' });
+		expect(
+			normalizePiEvent({
+				type: 'message_update',
+				assistantMessageEvent: { type: 'thinking_delta', delta: 'Inspecting files.' }
+			} as never)
+		).toEqual({ type: 'assistant_delta', thinking: 'Inspecting files.' });
 	});
 });
