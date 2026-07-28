@@ -64,11 +64,13 @@
 <style>
 	.tab-strip {
 		display: flex;
-		align-items: stretch;
+		align-items: center;
+		gap: 0.4rem;
 		min-width: 0;
 		overflow-x: auto;
 		border-bottom: 1px solid var(--border);
 		background: var(--surface-muted);
+		padding: 0.4rem 0.55rem;
 		scrollbar-width: thin;
 	}
 
@@ -83,17 +85,24 @@
 
 	.utility-tab {
 		display: grid;
-		width: 48px;
-		flex: 0 0 48px;
+		width: 1.875rem;
+		height: 1.875rem;
+		flex: 0 0 1.875rem;
 		place-items: center;
-		border-right: 1px solid var(--border);
+		border: 1px solid transparent;
+		border-radius: 999px;
 		font-size: 1.15rem;
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease;
 	}
 
 	.utility-tab.active,
 	.chat-tab-wrap.active {
-		background: var(--surface);
-		box-shadow: inset 0 -2px var(--accent);
+		border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+		background: color-mix(in srgb, var(--surface-strong) 88%, var(--accent) 12%);
+		box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 	}
 
 	.utility-tab.active,
@@ -103,14 +112,30 @@
 
 	.tab-divider {
 		width: 1px;
-		background: var(--border-strong);
+		height: 1.25rem;
+		background: var(--border);
 	}
 
 	.chat-tab-wrap {
 		display: flex;
+		height: 1.875rem;
 		min-width: 10rem;
 		max-width: 16rem;
-		border-right: 1px solid var(--border);
+		overflow: hidden;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--surface) 88%, var(--border) 12%);
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			box-shadow 160ms ease;
+	}
+
+	.chat-tab,
+	.tab-close {
+		transition:
+			background 160ms ease,
+			color 160ms ease;
 	}
 
 	.chat-tab {
@@ -119,8 +144,20 @@
 		gap: 0.5rem;
 		min-width: 0;
 		flex: 1;
-		padding: 0.7rem 0.4rem 0.7rem 0.75rem;
+		padding: 0.2rem 0.3rem 0.2rem 0.65rem;
 		text-align: left;
+	}
+
+	.chat-tab-wrap:hover,
+	.utility-tab:hover {
+		border-color: var(--border-strong);
+		background: var(--surface-strong);
+		color: var(--text);
+	}
+
+	.chat-tab-wrap:hover .chat-tab,
+	.chat-tab-wrap:hover .tab-close {
+		color: var(--text);
 	}
 
 	.tab-title {
@@ -152,25 +189,31 @@
 		border: 0;
 		background: transparent;
 		color: var(--text-muted);
-		padding: 0 0.65rem 0 0.15rem;
-		font-size: 1.15rem;
+		padding: 0 0.65rem 0 0.35rem;
+		font-size: 1.05rem;
 		line-height: 1;
 	}
 
 	.tab-close:hover {
-		color: var(--danger);
+		color: var(--danger) !important;
 	}
 
 	.add-tab {
-		width: 44px;
-		flex: 0 0 44px;
-		border-left: 1px solid var(--border);
+		width: 1.875rem;
+		height: 1.875rem;
+		flex: 0 0 1.875rem;
+		border: 1px solid transparent;
+		border-radius: 999px;
 		font-size: 1.35rem;
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease;
 	}
 
 	.add-tab:hover,
-	.utility-tab:hover,
-	.chat-tab:hover {
+	.add-tab:focus-visible {
+		border-color: var(--border-strong);
 		background: var(--surface-strong);
 		color: var(--text);
 	}

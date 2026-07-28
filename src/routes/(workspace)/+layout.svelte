@@ -19,24 +19,27 @@
 		return workspace.tabs[index + 1] ?? workspace.tabs[index - 1];
 	}
 
+	function navigateToFallback(tab: WorkspaceTab | undefined): Promise<void> {
+		if (!tab) return goto(resolve('/history'), { replaceState: true });
+		if (tab.kind === 'new') {
+			return goto(resolve(`/new/${encodeURIComponent(tab.id)}`), { replaceState: true });
+		}
+		return goto(
+			resolve(`/chat/${encodeURIComponent(tab.projectId)}/${encodeURIComponent(tab.sessionId)}`),
+			{ replaceState: true }
+		);
+	}
+
 	function closeTab(tab: WorkspaceTab, event: MouseEvent): void {
 		event.preventDefault();
 		event.stopPropagation();
 		const wasActive = page.url.pathname === workspace.hrefForTab(tab);
 		const fallback = fallbackTab(tab);
-		void workspace.closeTab(tab).then(() => {
-			if (!wasActive) return;
-			if (!fallback) return goto(resolve('/history'), { replaceState: true });
-			if (fallback.kind === 'new') {
-				return goto(resolve(`/new/${encodeURIComponent(fallback.id)}`), { replaceState: true });
-			}
-			return goto(
-				resolve(
-					`/chat/${encodeURIComponent(fallback.projectId)}/${encodeURIComponent(fallback.sessionId)}`
-				),
-				{ replaceState: true }
-			);
-		});
+		if (wasActive) {
+			void navigateToFallback(fallback).then(() => workspace.closeTab(tab));
+			return;
+		}
+		void workspace.closeTab(tab);
 	}
 
 	onMount(() => {

@@ -32,3 +32,14 @@ test('restores a deep-linked new-chat draft route', async ({ page }) => {
 	await expect(page.getByRole('tab', { name: 'New chat' })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
 });
+
+test('closes an active tab without reopening it', async ({ page }) => {
+	await page.goto('/history');
+	await page.getByRole('button', { name: 'New chat tab' }).click();
+
+	const closeButton = page.getByRole('button', { name: 'Close New chat' });
+	await closeButton.click();
+
+	await expect(page).toHaveURL(/\/history$/);
+	await expect(closeButton).toHaveCount(0);
+});
