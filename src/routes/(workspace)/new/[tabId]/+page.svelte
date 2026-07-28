@@ -3,12 +3,13 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { fly, slide } from 'svelte/transition';
+	import { fade, fly, slide } from 'svelte/transition';
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
 	let tabId = $derived(page.params.tabId ?? '');
 	let tab = $derived(workspace.findNewTab(tabId));
+	let introReady = $state(false);
 
 	function ensureNewTabForRoute(): void {
 		const id = page.params.tabId;
@@ -16,7 +17,23 @@
 	}
 
 	afterNavigate(ensureNewTabForRoute);
-	onMount(ensureNewTabForRoute);
+	onMount(() => {
+		ensureNewTabForRoute();
+		let restoreFrame: number | undefined;
+		const introFrame = requestAnimationFrame(() => {
+			introReady = true;
+			const pathname = page.url.pathname;
+			restoreFrame = requestAnimationFrame(() => {
+				if (page.url.pathname !== pathname) return;
+				const scrollContainer = document.getElementById('workspace-content');
+				if (scrollContainer) scrollContainer.scrollTop = workspace.scrollPosition(pathname);
+			});
+		});
+		return () => {
+			cancelAnimationFrame(introFrame);
+			if (restoreFrame) cancelAnimationFrame(restoreFrame);
+		};
+	});
 
 	async function startChat(message: string): Promise<boolean> {
 		if (!tab) return false;
@@ -36,98 +53,113 @@
 </script>
 
 {#if tab}
-	<section class="new-tab-view" role="tabpanel">
-		<div class="new-chat-center" in:fly={{ y: 20, duration: 520 }}>
-			<header class="new-chat-intro">
-				<h1>What do you want to build?</h1>
-			</header>
+	{#key tab.id}
+		<section class="new-tab-view" role="tabpanel">
+			<div class="new-chat-center">
+				{#if introReady}
+					<header class="new-chat-intro" in:fly={{ y: -24, duration: 800 }}>
+						<h1>What do you want to build?</h1>
+					</header>
 
-			<ChatComposer
-				bind:draft={tab.draft.prompt}
-				models={workspace.models}
-				modelKey={tab.draft.modelKey}
-				thinkingLevel={tab.draft.thinkingLevel}
-				disabled={!tab.draft.projectId || !tab.draft.modelKey}
-				error={tab.error}
-				onSend={startChat}
-				onDraftChange={() => workspace.schedulePersist()}
-				onModelChange={(key) => workspace.changeNewTabModel(tab, key)}
-				onThinkingChange={(level) => workspace.changeNewTabThinking(tab, level)}
-			/>
+					<div class="composer-wrap" in:fly={{ y: 24, duration: 800, delay: 200 }}>
+						<ChatComposer
+							bind:draft={tab.draft.prompt}
+							models={workspace.models}
+							modelKey={tab.draft.modelKey}
+							thinkingLevel={tab.draft.thinkingLevel}
+							disabled={!tab.draft.projectId || !tab.draft.modelKey}
+							error={tab.error}
+							onSend={startChat}
+							onDraftChange={() => workspace.schedulePersist()}
+							onModelChange={(key) => workspace.changeNewTabModel(tab, key)}
+							onThinkingChange={(level) => workspace.changeNewTabThinking(tab, level)}
+						/>
+					</div>
 
-			<div class:missing={!tab.draft.projectId} class="project-row">
-				<label class="project-picker">
-					<span>Project</span>
-					<select
-						value={tab.draft.projectId}
-						onchange={(event) => workspace.selectNewTabProject(tab, event.currentTarget.value)}
+					<div
+						class:missing={!tab.draft.projectId}
+						class="project-row"
+						in:fade={{ duration: 240, delay: 1000 }}
 					>
-						<option value="" disabled>Select an added project</option>
-						{#each workspace.projects as project (project.id)}
-							<option value={project.id}>{project.name} · {project.cwd}</option>
-						{/each}
-					</select>
-				</label>
-				<button
-					class="add-project-button"
-					type="button"
-					aria-label={tab.addingProject ? 'Cancel adding project' : 'Add project'}
-					title={tab.addingProject ? 'Cancel adding project' : 'Add project'}
-					onclick={() => (tab.addingProject = !tab.addingProject)}
-				>
-					{#if tab.addingProject}
-						<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-							<path
-								d="M5 5L15 15M15 5L5 15"
-								stroke="currentColor"
-								stroke-width="1.8"
-								stroke-linecap="round"
-							/>
-						</svg>
-					{:else}
-						<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-							<path
-								d="M10 4.5V15.5M4.5 10H15.5"
-								stroke="currentColor"
-								stroke-width="1.8"
-								stroke-linecap="round"
-							/>
-						</svg>
-					{/if}
-				</button>
-			</div>
-
-			{#if tab.addingProject}
-				<div class="add-project-panel" transition:slide={{ duration: 240 }}>
-					<p>
-						Added projects are trusted local workspaces. Pi can read, edit, and run commands there.
-					</p>
-					<form onsubmit={addProject}>
-						<label>
-							<span>Absolute directory</span>
-							<input bind:value={tab.projectPath} placeholder="/home/me/code/project" required />
+						<label class="project-picker">
+							<span>Project</span>
+							<select
+								value={tab.draft.projectId}
+								onchange={(event) => workspace.selectNewTabProject(tab, event.currentTarget.value)}
+							>
+								<option value="" disabled>Select an added project</option>
+								{#each workspace.projects as project (project.id)}
+									<option value={project.id}>{project.name} · {project.cwd}</option>
+								{/each}
+							</select>
 						</label>
-						<label>
-							<span>Display name <em>optional</em></span>
-							<input bind:value={tab.projectName} placeholder="Project name" />
-						</label>
-						{#if tab.projectError}<p class="form-error" role="alert">{tab.projectError}</p>{/if}
-						<button class="add-project-submit" type="submit">
-							<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-								<path
-									d="M10 4.5V15.5M4.5 10H15.5"
-									stroke="currentColor"
-									stroke-width="1.8"
-									stroke-linecap="round"
-								/>
-							</svg>
-							Add project
+						<button
+							class="add-project-button"
+							type="button"
+							aria-label={tab.addingProject ? 'Cancel adding project' : 'Add project'}
+							title={tab.addingProject ? 'Cancel adding project' : 'Add project'}
+							onclick={() => (tab.addingProject = !tab.addingProject)}
+						>
+							{#if tab.addingProject}
+								<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+									<path
+										d="M5 5L15 15M15 5L5 15"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+									/>
+								</svg>
+							{:else}
+								<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+									<path
+										d="M10 4.5V15.5M4.5 10H15.5"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+									/>
+								</svg>
+							{/if}
 						</button>
-					</form>
-				</div>
-			{/if}
-		</div>
-	</section>
+					</div>
+
+					{#if tab.addingProject}
+						<div class="add-project-panel" transition:slide={{ duration: 240 }}>
+							<p>
+								Added projects are trusted local workspaces. Pi can read, edit, and run commands
+								there.
+							</p>
+							<form onsubmit={addProject}>
+								<label>
+									<span>Absolute directory</span>
+									<input
+										bind:value={tab.projectPath}
+										placeholder="/home/me/code/project"
+										required
+									/>
+								</label>
+								<label>
+									<span>Display name <em>optional</em></span>
+									<input bind:value={tab.projectName} placeholder="Project name" />
+								</label>
+								{#if tab.projectError}<p class="form-error" role="alert">{tab.projectError}</p>{/if}
+								<button class="add-project-submit" type="submit">
+									<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+										<path
+											d="M10 4.5V15.5M4.5 10H15.5"
+											stroke="currentColor"
+											stroke-width="1.8"
+											stroke-linecap="round"
+										/>
+									</svg>
+									Add project
+								</button>
+							</form>
+						</div>
+					{/if}
+				{/if}
+			</div>
+		</section>
+	{/key}
 {/if}
 
 <style>
@@ -155,6 +187,10 @@
 		font-weight: 500;
 		letter-spacing: -0.035em;
 		text-wrap: balance;
+	}
+
+	.composer-wrap {
+		width: 100%;
 	}
 
 	.project-row {
