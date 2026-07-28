@@ -33,6 +33,17 @@ Open the printed local URL. Add a project only from a new-chat tab, choose one o
 
 The app is designed for local, single-user use. Bind it to localhost unless an authentication and isolation layer is added.
 
+## Navigation
+
+The browser workspace stays alive while navigating between routes. The URL selects the visible tab:
+
+- `/history` lists sessions from all added projects.
+- `/settings` contains harness preferences.
+- `/new/<tab-id>` identifies an unsent new-chat draft.
+- `/chat/<project-id>/<session-id>` opens a persistent Pi session.
+
+Open tabs, drafts, runtime IDs, and the SSE replay cursor are stored in the browser so live runtimes can be reused after reload when still available.
+
 ## Data Locations
 
 Pi Squared stores only its added-project registry. The registry is created on first use and is never bundled with the application.

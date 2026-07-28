@@ -9,10 +9,14 @@ function formatEvent(event: unknown, id?: number): Uint8Array {
 	);
 }
 
-export const GET: RequestHandler = ({ request }) => {
+export const GET: RequestHandler = ({ request, url }) => {
 	const lastEventHeader = request.headers.get('last-event-id');
-	const lastEventId =
+	const headerEventId =
 		lastEventHeader && /^\d+$/.test(lastEventHeader) ? Number(lastEventHeader) : undefined;
+	const queryEventId = url.searchParams.get('lastEventId');
+	const lastEventId =
+		headerEventId ??
+		(queryEventId && /^\d+$/.test(queryEventId) ? Number(queryEventId) : undefined);
 	let unsubscribe: (() => void) | undefined;
 	let heartbeat: ReturnType<typeof setInterval> | undefined;
 

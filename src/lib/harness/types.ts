@@ -1,0 +1,83 @@
+import type { ModelOption, RuntimeSnapshot, ThinkingLevel } from '$lib/contracts';
+
+export type Theme = 'graphite' | 'paper' | 'nord' | 'solarized' | 'system';
+export type QueueMode = 'followUp' | 'steer';
+
+export interface NewDraft {
+	projectId: string;
+	modelKey: string;
+	thinkingLevel: ThinkingLevel;
+	prompt: string;
+}
+
+export interface NewTab {
+	id: string;
+	kind: 'new';
+	title: string;
+	draft: NewDraft;
+	addingProject: boolean;
+	projectPath: string;
+	projectName: string;
+	projectError?: string;
+	error?: string;
+}
+
+export interface StreamingTool {
+	id: string;
+	name: string;
+	text: string;
+	isError?: boolean;
+}
+
+export interface TransientNotice {
+	id: string;
+	message: string;
+}
+
+export interface ChatTab {
+	id: string;
+	kind: 'chat';
+	title: string;
+	projectId: string;
+	sessionId: string;
+	runtimeId?: string;
+	snapshot?: RuntimeSnapshot;
+	hydrating: boolean;
+	draft: string;
+	queueMode: QueueMode;
+	streamText: string;
+	streamThinking: string;
+	streamTools: StreamingTool[];
+	transientNotices: TransientNotice[];
+	error?: string;
+}
+
+export type WorkspaceTab = NewTab | ChatTab;
+
+export interface StoredWorkspaceV1 {
+	version: 1;
+	lastEventId?: number;
+	tabs: Array<StoredNewTab | StoredChatTab>;
+}
+
+export interface StoredNewTab {
+	kind: 'new';
+	id: string;
+	title: string;
+	draft: NewDraft;
+}
+
+export interface StoredChatTab {
+	kind: 'chat';
+	id: string;
+	title: string;
+	projectId: string;
+	sessionId: string;
+	runtimeId?: string;
+	draft: string;
+	queueMode: QueueMode;
+}
+
+export function modelKey(model: Pick<ModelOption, 'provider' | 'id'>): string {
+	return `${model.provider}::${model.id}`;
+}
