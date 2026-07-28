@@ -122,6 +122,70 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByText('README contents')).toBeVisible();
 	});
 
+	it('merges consecutive assistant tool batches into one group', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-1',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							thinking: 'I will inspect the project.',
+							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{"path":"README.md"}' }]
+						},
+						{
+							id: 'result-1',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'README contents'
+						},
+						{
+							id: 'assistant-2',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [
+								{ id: 'tool-2', name: 'glob', arguments: '{"pattern":"src/**"}' },
+								{ id: 'tool-3', name: 'read', arguments: '{"path":"package.json"}' }
+							]
+						},
+						{
+							id: 'result-2',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-2',
+							text: 'Source files'
+						},
+						{
+							id: 'result-3',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-3',
+							text: 'Package details'
+						},
+						{
+							id: 'assistant-3',
+							kind: 'message',
+							role: 'assistant',
+							text: 'The project is ready to run.'
+						}
+					]
+				}
+			})
+		});
+
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(1);
+		await expect.element(screen.getByText('3 tools called')).toBeVisible();
+		expect(screen.container.querySelector('.tool-group-status')).toHaveTextContent('completed');
+		await expect.element(screen.getByText('The project is ready to run.')).toBeVisible();
+	});
+
 	it('groups unmatched live tools and leaves unmatched historical results visible', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {

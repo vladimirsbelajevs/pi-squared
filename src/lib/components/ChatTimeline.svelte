@@ -11,6 +11,7 @@
 	type TimelineEntry = {
 		item: ChatItem;
 		tools: ToolView[];
+		thinking?: string;
 	};
 
 	type Props = { chat: ChatTab };
@@ -25,10 +26,12 @@
 	let timeline = $derived.by(() => {
 		const items = chat.snapshot?.items ?? [];
 		const calledIds = items.flatMap((item) => item.toolCalls?.map((tool) => tool.id) ?? []);
+		const timeline: TimelineEntry[] = [];
+		let activeToolEntry: TimelineEntry | undefined;
 
-		return items.flatMap((item): TimelineEntry[] => {
+		for (const item of items) {
 			if (item.role === 'tool' && item.toolCallId && calledIds.includes(item.toolCallId)) {
-				return [];
+				continue;
 			}
 
 			const tools = (item.toolCalls ?? []).map((call) => ({
@@ -38,8 +41,24 @@
 				),
 				stream: chat.streamTools.find((candidate) => candidate.id === call.id)
 			}));
-			return [{ item, tools }];
-		});
+			const isToolOnlyAssistant = item.role === 'assistant' && !item.text && tools.length > 0;
+
+			if (isToolOnlyAssistant && activeToolEntry) {
+				activeToolEntry.tools.push(...tools);
+				if (item.thinking) {
+					activeToolEntry.thinking = [activeToolEntry.thinking, item.thinking]
+						.filter(Boolean)
+						.join('\n\n');
+				}
+				continue;
+			}
+
+			const entry = { item, tools, thinking: item.thinking };
+			timeline.push(entry);
+			activeToolEntry = isToolOnlyAssistant ? entry : undefined;
+		}
+
+		return timeline;
 	});
 	let unmatchedStreamingTools = $derived(
 		chat.streamTools.filter(
@@ -82,10 +101,10 @@
 	{:else}
 		<article class={`message message-${item.role ?? 'assistant'}`}>
 			<header>{item.label || item.role || 'message'}</header>
-			{#if item.thinking}
+			{#if entry.thinking}
 				<details class="thinking">
 					<summary>Reasoning</summary>
-					<pre>{item.thinking}</pre>
+					<pre>{entry.thinking}</pre>
 				</details>
 			{/if}
 			{#if item.text}<pre class="message-text">{item.text}</pre>{/if}
