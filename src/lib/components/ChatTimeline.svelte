@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
 	import type { ChatItem, ChatToolCall } from '$lib/contracts';
 	import type { ChatTab, StreamingTool } from '$lib/harness/types';
 
@@ -16,6 +17,10 @@
 
 	type Props = { chat: ChatTab };
 	let { chat }: Props = $props();
+	let copiedMessageId = $state<string>();
+	let copyError = $state<string>();
+	let copiedMessageTimer: ReturnType<typeof setTimeout> | undefined;
+	let hoveredMessageId = $state<string>();
 	let waitingForResponse = $derived(
 		chat.snapshot?.isStreaming === true &&
 			!chat.streamThinking &&
@@ -84,10 +89,48 @@
 		if (tools.some((tool) => toolStatus(tool) === 'running')) return 'running';
 		return `${completed}/${tools.length} complete`;
 	}
+
+	function formatTimestamp(timestamp: string | undefined): string | undefined {
+		if (!timestamp) return undefined;
+		const date = new Date(timestamp);
+		if (Number.isNaN(date.getTime())) return undefined;
+		return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
+	}
+
+	function formatTimestampTitle(timestamp: string): string {
+		return new Intl.DateTimeFormat(undefined, {
+			dateStyle: 'medium',
+			timeStyle: 'short'
+		}).format(new Date(timestamp));
+	}
+
+	function modelName(item: ChatItem): string | undefined {
+		return item.modelName ?? chat.snapshot?.model?.name;
+	}
+
+	async function copyMessage(item: ChatItem): Promise<void> {
+		if (!item.text) return;
+		try {
+			if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
+			await navigator.clipboard.writeText(item.text);
+			copyError = undefined;
+			copiedMessageId = item.id;
+			if (copiedMessageTimer) clearTimeout(copiedMessageTimer);
+			copiedMessageTimer = setTimeout(() => {
+				copiedMessageId = undefined;
+			}, 1600);
+		} catch (error) {
+			copyError = error instanceof Error ? error.message : 'Unable to copy the message.';
+		}
+	}
 </script>
 
 {#if chat.snapshot?.modelFallbackMessage}
 	<p class="fallback-error">{chat.snapshot.modelFallbackMessage}</p>
+{/if}
+
+{#if copyError}
+	<p class="copy-error" role="alert">{copyError}</p>
 {/if}
 
 {#each chat.transientNotices as notice (notice.id)}
@@ -99,47 +142,108 @@
 	{#if item.kind === 'notice'}
 		<p class="timeline-notice">{item.text}</p>
 	{:else}
-		<article class={`message message-${item.role ?? 'assistant'}`}>
-			<header>{item.label || item.role || 'message'}</header>
-			{#if entry.thinking}
-				<details class="thinking">
-					<summary>Reasoning</summary>
-					<pre>{entry.thinking}</pre>
-				</details>
+		{@const timestamp = formatTimestamp(item.timestamp)}
+		{@const showMessageMeta = hoveredMessageId === item.id}
+		<div
+			class={`message-entry message-entry-${item.role ?? 'assistant'}`}
+			role="group"
+			aria-label={`${item.role ?? 'assistant'} message`}
+			onmouseenter={() => (hoveredMessageId = item.id)}
+			onmouseleave={() => {
+				if (hoveredMessageId === item.id) hoveredMessageId = undefined;
+			}}
+		>
+			<article class={`message message-${item.role ?? 'assistant'}`}>
+				<header>{item.label || item.role || 'message'}</header>
+				{#if entry.thinking}
+					<details class="thinking">
+						<summary>Reasoning</summary>
+						<pre>{entry.thinking}</pre>
+					</details>
+				{/if}
+				{#if item.text}<pre class="message-text">{item.text}</pre>{/if}
+				{#if entry.tools.length}
+					<details
+						class:tool-group-error={entry.tools.some((tool) => toolStatus(tool) === 'failed')}
+						class="tool-group"
+					>
+						<summary class="tool-group-summary">
+							<span>{toolCountLabel(entry.tools.length)}</span>
+							<span class="tool-group-status">{toolGroupStatus(entry.tools)}</span>
+						</summary>
+						<div class="tool-list">
+							{#each entry.tools as tool (tool.call.id)}
+								<section class:tool-entry-error={toolStatus(tool) === 'failed'} class="tool-entry">
+									<div class="tool-entry-heading">
+										<strong>{tool.call.name}</strong>
+										<span>{toolStatus(tool)}</span>
+									</div>
+									<div class="tool-detail">
+										<span>Arguments</span>
+										<pre>{tool.call.arguments}</pre>
+									</div>
+									{#if tool.result || tool.stream}
+										<details class="tool-detail tool-result">
+											<summary>Result</summary>
+											<pre>{tool.result?.text || tool.stream?.text || 'No output.'}</pre>
+										</details>
+									{/if}
+								</section>
+							{/each}
+						</div>
+					</details>
+				{/if}
+			</article>
+			{#if item.role === 'user' || item.role === 'assistant'}
+				<div class="message-meta-row">
+					{#if showMessageMeta}
+						<div
+							class="message-meta-content"
+							in:fly={{ y: -3, duration: 140 }}
+							out:fade={{ duration: 100 }}
+						>
+							{#if item.role === 'assistant' && modelName(item)}
+								<span>{modelName(item)}</span>
+							{/if}
+							{#if timestamp && item.timestamp}
+								<time datetime={item.timestamp} title={formatTimestampTitle(item.timestamp)}
+									>{timestamp}</time
+								>
+							{/if}
+							{#if item.text}
+								<button
+									class:copied={copiedMessageId === item.id}
+									class="copy-action"
+									type="button"
+									aria-label={copiedMessageId === item.id ? 'Copied message' : 'Copy message'}
+									title="Copy message"
+									onclick={() => copyMessage(item)}
+								>
+									<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+										<rect
+											x="7"
+											y="6"
+											width="8"
+											height="9"
+											rx="1.25"
+											stroke="currentColor"
+											stroke-width="1.5"
+										/>
+										<path
+											d="M5 12V5.25C5 4.56 5.56 4 6.25 4H12"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+										/>
+									</svg>
+									<span>{copiedMessageId === item.id ? 'Copied' : 'Copy'}</span>
+								</button>
+							{/if}
+						</div>
+					{/if}
+				</div>
 			{/if}
-			{#if item.text}<pre class="message-text">{item.text}</pre>{/if}
-			{#if entry.tools.length}
-				<details
-					class:tool-group-error={entry.tools.some((tool) => toolStatus(tool) === 'failed')}
-					class="tool-group"
-				>
-					<summary class="tool-group-summary">
-						<span>{toolCountLabel(entry.tools.length)}</span>
-						<span class="tool-group-status">{toolGroupStatus(entry.tools)}</span>
-					</summary>
-					<div class="tool-list">
-						{#each entry.tools as tool (tool.call.id)}
-							<section class:tool-entry-error={toolStatus(tool) === 'failed'} class="tool-entry">
-								<div class="tool-entry-heading">
-									<strong>{tool.call.name}</strong>
-									<span>{toolStatus(tool)}</span>
-								</div>
-								<div class="tool-detail">
-									<span>Arguments</span>
-									<pre>{tool.call.arguments}</pre>
-								</div>
-								{#if tool.result || tool.stream}
-									<details class="tool-detail tool-result">
-										<summary>Result</summary>
-										<pre>{tool.result?.text || tool.stream?.text || 'No output.'}</pre>
-									</details>
-								{/if}
-							</section>
-						{/each}
-					</div>
-				</details>
-			{/if}
-		</article>
+		</div>
 	{/if}
 {/each}
 
@@ -197,9 +301,19 @@
 		font-size: 0.9rem;
 	}
 
-	.message {
-		max-width: 54rem;
+	.copy-error {
+		width: min(54rem, 100%);
 		margin: 0 auto 1rem;
+		color: var(--danger);
+		font-size: 0.82rem;
+	}
+
+	.message-entry {
+		max-width: 54rem;
+		margin: 0 auto 0.25rem;
+	}
+
+	.message {
 		overflow: hidden;
 		border: 1px solid var(--border);
 		border-radius: 0.55rem;
@@ -222,8 +336,57 @@
 		color: var(--accent);
 	}
 
-	.message-user {
+	.message-meta-row {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		height: 1.75rem;
+	}
+
+	.message-meta-content {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.55rem;
+		color: var(--text-muted);
+		font-size: 0.72rem;
+		white-space: nowrap;
+	}
+
+	.copy-action {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: 0;
+		border-radius: 0.25rem;
+		background: transparent;
+		color: inherit;
+		padding: 0.2rem;
+		font: inherit;
+	}
+
+	.copy-action:hover:not(:disabled),
+	.copy-action:focus-visible,
+	.copy-action.copied {
+		background: var(--surface-muted);
+		color: var(--text);
+	}
+
+	.copy-action:disabled {
+		cursor: not-allowed;
+		opacity: 0.45;
+	}
+
+	.copy-action svg {
+		width: 0.9rem;
+		height: 0.9rem;
+	}
+
+	.message-entry-user {
 		margin-left: max(0px, calc((100% - 54rem) / 2 + 7rem));
+	}
+
+	.message-user {
 		background: color-mix(in srgb, var(--accent-strong) 12%, var(--surface));
 	}
 
@@ -449,7 +612,7 @@
 	}
 
 	@media (max-width: 700px) {
-		.message-user {
+		.message-entry-user {
 			margin-left: 1.5rem;
 		}
 	}

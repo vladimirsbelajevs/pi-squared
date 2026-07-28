@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { ChatTab } from '$lib/harness/types';
 import ChatTimeline from './ChatTimeline.svelte';
@@ -64,6 +65,46 @@ describe('ChatTimeline', () => {
 		}
 	});
 
+	it('renders metadata and copy controls for user and assistant messages', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'user-1',
+							kind: 'message',
+							role: 'user',
+							text: 'Inspect this message.',
+							timestamp: '2026-07-28T23:35:00.000Z'
+						},
+						{
+							id: 'assistant-1',
+							kind: 'message',
+							role: 'assistant',
+							text: 'The message metadata is ready.',
+							modelName: 'GPT-5.6 Terra',
+							timestamp: '2026-07-28T23:36:00.000Z'
+						}
+					]
+				}
+			})
+		});
+
+		const messages = screen.container.querySelectorAll('.message-entry');
+		expect(screen.container.querySelectorAll('.message-meta-row')).toHaveLength(2);
+		expect(screen.container.querySelectorAll('.message-meta-content')).toHaveLength(0);
+
+		await userEvent.hover(messages[0] as HTMLElement);
+		await expect.element(screen.getByRole('button', { name: 'Copy message' })).toBeVisible();
+		expect(screen.container.querySelectorAll('.message-meta-content time')).toHaveLength(1);
+
+		await userEvent.hover(messages[1] as HTMLElement);
+		await expect.element(screen.getByText('GPT-5.6 Terra')).toBeVisible();
+	});
+
 	it('groups tool calls with their results and keeps the group collapsed by default', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
@@ -120,6 +161,8 @@ describe('ChatTimeline', () => {
 		expect(result.open).toBe(true);
 		expect((results[1] as HTMLDetailsElement).open).toBe(false);
 		await expect.element(screen.getByText('README contents')).toBeVisible();
+		await userEvent.hover(screen.container.querySelector('.message-entry') as HTMLElement);
+		expect(screen.container.querySelectorAll('.copy-action')).toHaveLength(0);
 	});
 
 	it('merges consecutive assistant tool batches into one group', async () => {

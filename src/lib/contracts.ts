@@ -39,6 +39,8 @@ export interface ChatItem {
 	kind: 'message' | 'notice';
 	role?: 'user' | 'assistant' | 'tool' | 'bash' | 'custom';
 	text: string;
+	timestamp?: string;
+	modelName?: string;
 	thinking?: string;
 	toolCalls?: ChatToolCall[];
 	toolCallId?: string;

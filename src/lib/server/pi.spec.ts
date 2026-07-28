@@ -11,6 +11,8 @@ describe('mapSessionEntry', () => {
 			timestamp: '2026-07-28T00:00:00.000Z',
 			message: {
 				role: 'assistant',
+				provider: 'openai',
+				model: 'gpt-5.6-terra',
 				content: [
 					{ type: 'thinking', thinking: 'Inspect the repository.' },
 					{ type: 'text', text: 'I found the relevant route.' },
@@ -30,6 +32,8 @@ describe('mapSessionEntry', () => {
 			kind: 'message',
 			role: 'assistant',
 			text: 'I found the relevant route.',
+			timestamp: '2026-07-28T00:00:00.000Z',
+			modelName: 'gpt-5.6-terra',
 			thinking: 'Inspect the repository.',
 			toolCalls: [
 				{
@@ -79,6 +83,7 @@ describe('mapSessionEntry', () => {
 			kind: 'message',
 			role: 'tool',
 			text: 'file contents',
+			timestamp: '2026-07-28T00:01:00.000Z',
 			toolCallId: 'tool-1',
 			label: 'read',
 			isError: false

@@ -115,7 +115,8 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				id: entry.id,
 				kind: 'message',
 				role: 'user',
-				text: textFromContent(message.content)
+				text: textFromContent(message.content),
+				timestamp: entry.timestamp
 			};
 		}
 		if (role === 'assistant') {
@@ -124,6 +125,13 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				kind: 'message',
 				role: 'assistant',
 				text: textFromContent(message.content),
+				timestamp: entry.timestamp,
+				modelName:
+					typeof message.responseModel === 'string'
+						? message.responseModel
+						: typeof message.model === 'string'
+							? message.model
+							: undefined,
 				thinking: thinkingFromContent(message.content),
 				toolCalls: toolCallsFromContent(message.content),
 				isError: message.stopReason === 'error'
@@ -135,6 +143,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				kind: 'message',
 				role: 'tool',
 				text: textFromContent(message.content),
+				timestamp: entry.timestamp,
 				toolCallId: typeof message.toolCallId === 'string' ? message.toolCallId : undefined,
 				label: typeof message.toolName === 'string' ? message.toolName : 'Tool result',
 				isError: message.isError === true
@@ -146,6 +155,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				kind: 'message',
 				role: 'bash',
 				text: typeof message.output === 'string' ? message.output : '',
+				timestamp: entry.timestamp,
 				label: typeof message.command === 'string' ? message.command : 'bash',
 				isError:
 					message.cancelled === true || (message.exitCode !== undefined && message.exitCode !== 0)
@@ -156,7 +166,8 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				id: entry.id,
 				kind: 'message',
 				role: 'custom',
-				text: textFromContent(message.content)
+				text: textFromContent(message.content),
+				timestamp: entry.timestamp
 			};
 		}
 		return undefined;
