@@ -146,7 +146,9 @@ export class HarnessWorkspace {
 		return tab;
 	}
 
-	ensureNewTab(tabId: string): NewTab {
+	ensureNewTab(tabId: string): NewTab | undefined {
+		const existing = this.findNewTab(tabId);
+		if (existing || this.tabs.some((tab) => tab.id === tabId)) return existing;
 		return this.createNewTab(tabId);
 	}
 
@@ -521,10 +523,20 @@ export class HarnessWorkspace {
 		if (!restored) return;
 		this.#lastEventId = restored.lastEventId;
 		const tabs: WorkspaceTab[] = [];
+		const tabIds = new SvelteSet<string>();
+		const chatSessions = new SvelteSet<string>();
 		for (const tab of restored.tabs) {
+			if (tabIds.has(tab.id)) continue;
+			if (tab.kind === 'chat') {
+				const sessionKey = `${tab.projectId}:${tab.sessionId}`;
+				if (chatSessions.has(sessionKey)) continue;
+				chatSessions.add(sessionKey);
+			}
+			tabIds.add(tab.id);
 			tabs.push(tab.kind === 'new' ? this.#fromStoredNew(tab) : this.#fromStoredChat(tab));
 		}
 		this.tabs = tabs;
+		if (tabs.length !== restored.tabs.length) this.persist();
 	}
 
 	#readStoredWorkspace(): StoredWorkspaceV1 | undefined {

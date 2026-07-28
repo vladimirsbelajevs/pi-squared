@@ -43,3 +43,46 @@ test('closes an active tab without reopening it', async ({ page }) => {
 	await expect(page).toHaveURL(/\/history$/);
 	await expect(closeButton).toHaveCount(0);
 });
+
+test('starting a chat does not recreate its draft tab', async ({ page }) => {
+	const project = {
+		id: 'project-1',
+		name: 'Test project',
+		cwd: '/tmp/test-project',
+		addedAt: '2026-01-01T00:00:00.000Z',
+		lastOpenedAt: '2026-01-01T00:00:00.000Z'
+	};
+	const model = { provider: 'test', id: 'model-1', name: 'Test model', reasoning: true };
+	const snapshot = {
+		runtimeId: 'runtime-1',
+		project,
+		sessionId: 'session-1',
+		model,
+		thinkingLevel: 'medium',
+		isStreaming: false,
+		items: []
+	};
+
+	await page.addInitScript(() => localStorage.clear());
+	await page.route('**/api/projects', async (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		await route.fulfill({ json: { projects: [project] } });
+	});
+	await page.route('**/api/models', (route) => route.fulfill({ json: { models: [model] } }));
+	await page.route('**/api/sessions', (route) => route.fulfill({ json: { sessions: [] } }));
+	await page.route('**/api/runtimes', async (route) => {
+		if (route.request().method() !== 'POST') return route.fallback();
+		await route.fulfill({ json: { snapshot } });
+	});
+	await page.route('**/api/runtimes/runtime-1/prompt', (route) =>
+		route.fulfill({ json: { queued: true } })
+	);
+
+	await page.goto('/new/draft-tab');
+	const message = page.getByRole('textbox', { name: 'Message Pi' });
+	await message.fill('Start this chat');
+	await message.press('Enter');
+
+	await expect(page).toHaveURL(/\/chat\/project-1\/session-1$/);
+	await expect(page.getByRole('tab', { name: 'New chat' })).toHaveCount(1);
+});

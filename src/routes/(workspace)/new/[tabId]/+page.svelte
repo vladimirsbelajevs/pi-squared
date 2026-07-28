@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { fly, slide } from 'svelte/transition';
+	import { untrack } from 'svelte';
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
@@ -10,7 +11,8 @@
 	let tab = $derived(workspace.findNewTab(tabId));
 
 	$effect(() => {
-		workspace.ensureNewTab(tabId);
+		const id = tabId;
+		untrack(() => workspace.ensureNewTab(id));
 	});
 
 	$effect(() => {
