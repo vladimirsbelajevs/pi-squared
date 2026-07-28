@@ -140,6 +140,7 @@
 <style>
 	.new-tab-view {
 		display: grid;
+		min-height: 100%;
 		place-items: center;
 		overflow: auto;
 		padding: clamp(1rem, 4vw, 3rem);

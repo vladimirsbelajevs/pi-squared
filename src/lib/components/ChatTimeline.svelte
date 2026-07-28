@@ -3,6 +3,13 @@
 
 	type Props = { chat: ChatTab };
 	let { chat }: Props = $props();
+	let waitingForResponse = $derived(
+		chat.snapshot?.isStreaming === true &&
+			!chat.streamThinking &&
+			!chat.streamText &&
+			chat.streamTools.length === 0 &&
+			chat.permissionRequests.length === 0
+	);
 </script>
 
 {#if chat.snapshot?.modelFallbackMessage}
@@ -37,6 +44,13 @@
 		</article>
 	{/if}
 {/each}
+
+{#if waitingForResponse}
+	<div class="thinking-indicator" role="status">
+		<span>Pi is thinking</span>
+		<span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+	</div>
+{/if}
 
 {#if chat.streamThinking || chat.streamText}
 	<article class="message message-assistant streaming">
@@ -145,6 +159,43 @@
 		text-align: center;
 	}
 
+	.thinking-indicator {
+		display: flex;
+		align-items: center;
+		width: fit-content;
+		max-width: 54rem;
+		gap: 0.5rem;
+		margin: 1rem auto;
+		border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+		color: var(--text-muted);
+		padding: 0.45rem 0.75rem;
+		font-size: 0.78rem;
+	}
+
+	.thinking-dots {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+	}
+
+	.thinking-dots i {
+		width: 0.3rem;
+		height: 0.3rem;
+		border-radius: 50%;
+		background: var(--accent);
+		animation: thinking-dot 1.1s ease-in-out infinite;
+	}
+
+	.thinking-dots i:nth-child(2) {
+		animation-delay: 140ms;
+	}
+
+	.thinking-dots i:nth-child(3) {
+		animation-delay: 280ms;
+	}
+
 	.streaming {
 		border-color: var(--accent);
 	}
@@ -153,9 +204,22 @@
 		border-style: dashed;
 	}
 
+	@keyframes thinking-dot {
+		50% {
+			opacity: 0.35;
+			transform: translateY(-0.16rem);
+		}
+	}
+
 	@media (max-width: 700px) {
 		.message-user {
 			margin-left: 1.5rem;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.thinking-dots i {
+			animation: none;
 		}
 	}
 </style>

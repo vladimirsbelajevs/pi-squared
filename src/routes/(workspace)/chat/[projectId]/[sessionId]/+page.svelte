@@ -21,7 +21,9 @@
 
 	$effect(() => {
 		const itemCount = chat?.snapshot?.items.length ?? 0;
+		const isStreaming = chat?.snapshot?.isStreaming ?? false;
 		void itemCount;
+		void isStreaming;
 		const scrollContainer = document.getElementById('workspace-content');
 		scrollContainer?.scrollTo({
 			top: scrollContainer.scrollHeight,
