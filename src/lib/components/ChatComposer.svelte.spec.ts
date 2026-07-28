@@ -67,17 +67,25 @@ describe('ChatComposer', () => {
 		expect(onDraftChange).toHaveBeenLastCalledWith('');
 	});
 
-	it('shows queue and stop controls while streaming', async () => {
+	it('shows only a stop action while streaming and queues with Enter', async () => {
 		const onStop = vi.fn();
+		const onSend = vi.fn().mockResolvedValue(true);
 		const onQueueModeChange = vi.fn();
 		const screen = render(
 			ChatComposer,
-			props({ isStreaming: true, onStop, onQueueModeChange, queueMode: 'followUp' })
+			props({ isStreaming: true, onStop, onSend, onQueueModeChange, queueMode: 'followUp' })
 		);
 
 		await expect.element(screen.getByRole('button', { name: 'Stop response' })).toBeVisible();
 		await expect.element(screen.getByRole('combobox', { name: 'Queue' })).toHaveValue('followUp');
+		expect(screen.container.querySelectorAll('.composer-actions button')).toHaveLength(1);
+		expect(screen.container.querySelector('.send-action')).toBeNull();
 		await screen.getByRole('button', { name: 'Stop response' }).click();
 		expect(onStop).toHaveBeenCalledOnce();
+
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+		await textbox.fill('Queue this follow-up');
+		await userEvent.keyboard('{Enter}');
+		await vi.waitFor(() => expect(onSend).toHaveBeenCalledWith('Queue this follow-up'));
 	});
 });

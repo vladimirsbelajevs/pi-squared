@@ -152,33 +152,40 @@
 			</div>
 
 			<div class="composer-actions">
-				{#if isStreaming && onStop}
-					<button class="stop-action" type="button" aria-label="Stop response" onclick={onStop}>
+				{#if isStreaming}
+					<button
+						class="stop-action"
+						type="button"
+						aria-label="Stop response"
+						disabled={!onStop}
+						onclick={() => onStop?.()}
+					>
 						<span aria-hidden="true"></span>
 					</button>
+				{:else}
+					<button
+						class="send-action"
+						type="submit"
+						disabled={submitDisabled}
+						aria-label="Send message"
+					>
+						<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+							<path
+								d="M10 15.5V4.5"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+							<path
+								d="M5.75 8.75L10 4.5L14.25 8.75"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</button>
 				{/if}
-				<button
-					class="send-action"
-					type="submit"
-					disabled={submitDisabled}
-					aria-label={isStreaming ? 'Queue message' : 'Send message'}
-				>
-					<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-						<path
-							d="M10 15.5V4.5"
-							stroke="currentColor"
-							stroke-width="1.8"
-							stroke-linecap="round"
-						/>
-						<path
-							d="M5.75 8.75L10 4.5L14.25 8.75"
-							stroke="currentColor"
-							stroke-width="1.8"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-				</button>
 			</div>
 		</div>
 
