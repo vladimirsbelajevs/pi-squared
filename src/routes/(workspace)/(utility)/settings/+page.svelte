@@ -3,17 +3,10 @@
 	import type { Theme } from '$lib/harness/types';
 </script>
 
-<header class="section-heading">
-	<p class="eyebrow">Local preferences</p>
-	<h1>Harness settings</h1>
-	<p>Visual preferences remain in this browser. Pi settings remain project-owned.</p>
-</header>
+<h1 class="visually-hidden">Settings</h1>
 
 <section class="settings-card" aria-labelledby="theme-heading">
-	<div>
-		<h2 id="theme-heading">Theme</h2>
-		<p>Applies to tabs, history, settings, and every chat.</p>
-	</div>
+	<h2 id="theme-heading">Theme</h2>
 	<div class="theme-grid">
 		{#each Object.entries(THEME_LABELS) as [value, label] (value)}
 			<button
@@ -29,51 +22,28 @@
 </section>
 
 <style>
-	.section-heading {
-		max-width: 54rem;
-	}
-
-	.section-heading h1 {
-		margin: 0.2rem 0 0.55rem;
-		font-size: clamp(2rem, 4vw, 3.2rem);
-		line-height: 1.05;
-		letter-spacing: -0.04em;
-	}
-
-	.section-heading p {
-		margin: 0;
-		color: var(--text-muted);
-		line-height: 1.6;
-	}
-
-	.eyebrow {
-		margin: 0 0 0.35rem;
-		color: var(--accent);
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 
 	.settings-card {
 		display: grid;
-		max-width: 54rem;
-		gap: 1.5rem;
-		margin-top: 2rem;
-		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		background: var(--surface);
-		padding: 1.25rem;
+		width: min(100%, 38rem);
+		gap: 1rem;
+		margin: 0 auto;
 	}
 
 	.settings-card h2 {
 		margin: 0;
 		font-size: 1.2rem;
-	}
-
-	.settings-card p {
-		margin: 0.25rem 0 0;
-		color: var(--text-muted);
 	}
 
 	.theme-grid {

@@ -7,12 +7,15 @@
 
 <section class="utility-view" role="tabpanel">
 	<nav class="utility-nav" aria-label="Harness utility">
-		<p class="eyebrow">Pi Squared</p>
-		<a class:active={page.url.pathname === '/history'} href={resolve('/history')}
-			>Historical sessions</a
+		<a
+			class:active={page.url.pathname === '/history'}
+			aria-current={page.url.pathname === '/history' ? 'page' : undefined}
+			href={resolve('/history')}>Sessions</a
 		>
-		<a class:active={page.url.pathname === '/settings'} href={resolve('/settings')}
-			>Harness settings</a
+		<a
+			class:active={page.url.pathname === '/settings'}
+			aria-current={page.url.pathname === '/settings' ? 'page' : undefined}
+			href={resolve('/settings')}>Settings</a
 		>
 	</nav>
 
@@ -21,69 +24,50 @@
 
 <style>
 	.utility-view {
-		display: grid;
-		grid-template-columns: 13rem minmax(0, 1fr);
 		min-height: 0;
+		padding: clamp(1.5rem, 5vw, 4.5rem);
 	}
 
 	.utility-nav {
 		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		padding: 1.5rem 0.8rem;
-		border-right: 1px solid var(--border);
+		width: fit-content;
+		gap: 0.2rem;
+		margin: 0 auto clamp(1.75rem, 4vw, 3.25rem);
+		border: 1px solid var(--border);
+		border-radius: 999px;
 		background: var(--surface-muted);
+		padding: 0.2rem;
 	}
 
 	.utility-nav a {
-		padding: 0.65rem 0.75rem;
 		border: 1px solid transparent;
-		border-radius: 0.35rem;
+		border-radius: 999px;
+		padding: 0.4rem 0.8rem;
 		color: var(--text-muted);
+		font-size: 0.78rem;
+		font-weight: 600;
 		text-decoration: none;
 	}
 
 	.utility-nav a:hover,
 	.utility-nav a.active {
-		border-color: var(--border);
+		border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 		background: var(--surface);
 		color: var(--text);
 	}
 
 	.utility-content {
-		overflow: auto;
-		padding: clamp(1.5rem, 5vw, 4.5rem);
-	}
-
-	.eyebrow {
-		margin: 0 0 0.35rem;
-		color: var(--accent);
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
+		width: min(100%, 54rem);
+		margin: 0 auto;
 	}
 
 	@media (max-width: 700px) {
 		.utility-view {
-			grid-template-columns: 1fr;
+			padding: 1.25rem 0.75rem;
 		}
 
 		.utility-nav {
-			flex-direction: row;
-			align-items: center;
-			overflow-x: auto;
-			padding: 0.7rem;
-			border-right: 0;
-			border-bottom: 1px solid var(--border);
-		}
-
-		.utility-nav .eyebrow {
-			display: none;
-		}
-
-		.utility-nav a {
-			white-space: nowrap;
+			margin-bottom: 1.75rem;
 		}
 	}
 </style>

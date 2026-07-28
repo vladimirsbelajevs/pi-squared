@@ -24,16 +24,12 @@
 	}
 </script>
 
-<header class="section-heading">
-	<p class="eyebrow">All projects</p>
-	<h1>Historical sessions</h1>
-	<p>Open any saved conversation in its own continuable chat tab.</p>
-</header>
+<h1 class="visually-hidden">Sessions</h1>
 
 <div class="history-controls">
 	<input bind:value={query} aria-label="Search historical sessions" placeholder="Search sessions" />
 	<select bind:value={projectId} aria-label="Filter sessions by project">
-		<option value="">All projects</option>
+		<option value="">Any project</option>
 		{#each workspace.projects as project (project.id)}
 			<option value={project.id}>{project.name}</option>
 		{/each}
@@ -58,43 +54,27 @@
 </div>
 
 <style>
-	.section-heading {
-		max-width: 54rem;
-	}
-
-	.section-heading h1 {
-		margin: 0.2rem 0 0.55rem;
-		font-size: clamp(2rem, 4vw, 3.2rem);
-		line-height: 1.05;
-		letter-spacing: -0.04em;
-	}
-
-	.section-heading p {
-		margin: 0;
-		color: var(--text-muted);
-		line-height: 1.6;
-	}
-
-	.eyebrow {
-		margin: 0 0 0.35rem;
-		color: var(--accent);
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 
 	.history-controls {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 12rem;
 		gap: 0.75rem;
-		max-width: 54rem;
-		margin: 2rem 0 1rem;
+		margin: 0 0 1rem;
 	}
 
 	.session-list {
 		display: grid;
-		max-width: 54rem;
 		gap: 0.6rem;
 	}
 

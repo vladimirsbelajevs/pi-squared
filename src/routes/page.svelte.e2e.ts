@@ -7,7 +7,7 @@ test('renders the tab-first harness shell', async ({ page }) => {
 	await expect(
 		page.getByRole('tab', { name: 'Historical sessions and harness settings' })
 	).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'Historical sessions' })).toBeVisible();
+	await expect(page.getByRole('textbox', { name: 'Search historical sessions' })).toBeVisible();
 	await page.getByRole('button', { name: 'New chat tab' }).click();
 	await expect(page).toHaveURL(/\/new\/.+$/);
 	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
@@ -20,9 +20,9 @@ test('renders the tab-first harness shell', async ({ page }) => {
 
 	await page.getByRole('tab', { name: 'Historical sessions and harness settings' }).click();
 	await expect(page).toHaveURL(/\/history$/);
-	await page.getByRole('link', { name: 'Harness settings' }).click();
+	await page.getByRole('link', { name: 'Settings' }).click();
 	await expect(page).toHaveURL(/\/settings$/);
-	await expect(page.getByRole('heading', { name: 'Harness settings' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Theme' })).toBeVisible();
 });
 
 test('restores a deep-linked new-chat draft route', async ({ page }) => {
