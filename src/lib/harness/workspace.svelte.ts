@@ -169,12 +169,20 @@ export class HarnessWorkspace {
 		this.persist();
 	}
 
+	selectNewTabProject(tab: NewTab, projectId: string): void {
+		tab.draft.projectId = projectId;
+		if (this.projects.some((project) => project.id === projectId)) {
+			localStorage.setItem(LAST_PROJECT_KEY, projectId);
+		}
+		this.persist();
+	}
+
 	async addProject(tab: NewTab): Promise<boolean> {
 		tab.projectError = '';
 		try {
 			const { project } = await createProject({ cwd: tab.projectPath, name: tab.projectName });
 			this.projects = [project, ...this.projects];
-			tab.draft.projectId = project.id;
+			this.selectNewTabProject(tab, project.id);
 			tab.projectPath = '';
 			tab.projectName = '';
 			tab.addingProject = false;

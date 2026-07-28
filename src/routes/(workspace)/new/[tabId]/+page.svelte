@@ -66,7 +66,10 @@
 			<div class:missing={!tab.draft.projectId} class="project-row">
 				<label class="project-picker">
 					<span>Project</span>
-					<select bind:value={tab.draft.projectId} onchange={() => workspace.persist()}>
+					<select
+						value={tab.draft.projectId}
+						onchange={(event) => workspace.selectNewTabProject(tab, event.currentTarget.value)}
+					>
 						<option value="" disabled>Select an added project</option>
 						{#each workspace.projects as project (project.id)}
 							<option value={project.id}>{project.name} · {project.cwd}</option>
