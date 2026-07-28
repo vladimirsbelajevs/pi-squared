@@ -57,10 +57,7 @@
 				error={tab.error}
 				onSend={startChat}
 				onModelChange={(key) => workspace.changeNewTabModel(tab, key)}
-				onThinkingChange={(level) => {
-					tab.draft.thinkingLevel = level;
-					workspace.persist();
-				}}
+				onThinkingChange={(level) => workspace.changeNewTabThinking(tab, level)}
 			/>
 
 			<div class:missing={!tab.draft.projectId} class="project-row">

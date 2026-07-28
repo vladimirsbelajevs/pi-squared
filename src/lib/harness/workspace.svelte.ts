@@ -37,6 +37,8 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 const STORAGE_KEY = 'pi-squared:workspace:v1';
 const LEGACY_OPEN_CHATS_KEY = 'pi-squared:open-chats';
 const LAST_PROJECT_KEY = 'pi-squared:last-project';
+const LAST_MODEL_KEY = 'pi-squared:last-model';
+const LAST_THINKING_LEVEL_KEY = 'pi-squared:last-thinking-level';
 const THEME_KEY = 'pi-squared:theme';
 
 export const THEME_LABELS: Record<Theme, string> = {
@@ -165,7 +167,19 @@ export class HarnessWorkspace {
 
 	changeNewTabModel(tab: NewTab, key: string): void {
 		tab.draft.modelKey = key;
-		if (this.selectedModel(key)?.reasoning === false) tab.draft.thinkingLevel = 'off';
+		const model = this.selectedModel(key);
+		if (!model) return;
+		localStorage.setItem(LAST_MODEL_KEY, key);
+		if (model.reasoning === false) {
+			tab.draft.thinkingLevel = 'off';
+			localStorage.setItem(LAST_THINKING_LEVEL_KEY, 'off');
+		}
+		this.persist();
+	}
+
+	changeNewTabThinking(tab: NewTab, thinkingLevel: ThinkingLevel): void {
+		tab.draft.thinkingLevel = thinkingLevel;
+		localStorage.setItem(LAST_THINKING_LEVEL_KEY, thinkingLevel);
 		this.persist();
 	}
 
@@ -298,6 +312,8 @@ export class HarnessWorkspace {
 		try {
 			const { snapshot } = await setRuntimeModel(chat.runtimeId, model);
 			this.#applySnapshot(chat, snapshot);
+			localStorage.setItem(LAST_MODEL_KEY, key);
+			if (model.reasoning === false) localStorage.setItem(LAST_THINKING_LEVEL_KEY, 'off');
 		} catch (error) {
 			chat.error = error instanceof Error ? error.message : 'Unable to change the model.';
 		}
@@ -308,6 +324,7 @@ export class HarnessWorkspace {
 		try {
 			const { snapshot } = await setRuntimeThinking(chat.runtimeId, thinkingLevel);
 			this.#applySnapshot(chat, snapshot);
+			localStorage.setItem(LAST_THINKING_LEVEL_KEY, thinkingLevel);
 		} catch (error) {
 			chat.error = error instanceof Error ? error.message : 'Unable to change reasoning.';
 		}
@@ -340,11 +357,19 @@ export class HarnessWorkspace {
 		const projectId = this.projects.some((project) => project.id === remembered)
 			? (remembered ?? '')
 			: (this.projects[0]?.id ?? '');
-		const model = this.models[0];
+		const rememberedModel = localStorage.getItem(LAST_MODEL_KEY);
+		const model = this.selectedModel(rememberedModel ?? '') ?? this.models[0];
+		const rememberedThinking = localStorage.getItem(LAST_THINKING_LEVEL_KEY);
+		const thinkingLevel =
+			model?.reasoning === false
+				? 'off'
+				: isThinkingLevel(rememberedThinking)
+					? rememberedThinking
+					: 'medium';
 		return {
 			projectId,
 			modelKey: model ? modelKey(model) : '',
-			thinkingLevel: 'medium',
+			thinkingLevel,
 			prompt: ''
 		};
 	}
