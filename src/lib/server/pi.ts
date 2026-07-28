@@ -135,6 +135,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				kind: 'message',
 				role: 'tool',
 				text: textFromContent(message.content),
+				toolCallId: typeof message.toolCallId === 'string' ? message.toolCallId : undefined,
 				label: typeof message.toolName === 'string' ? message.toolName : 'Tool result',
 				isError: message.isError === true
 			};

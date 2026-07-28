@@ -59,6 +59,32 @@ describe('mapSessionEntry', () => {
 		});
 	});
 
+	it('keeps the originating tool call id on tool results', () => {
+		const entry = {
+			type: 'message',
+			id: 'entry-tool-result',
+			parentId: 'entry-assistant',
+			timestamp: '2026-07-28T00:01:00.000Z',
+			message: {
+				role: 'toolResult',
+				toolCallId: 'tool-1',
+				toolName: 'read',
+				content: [{ type: 'text', text: 'file contents' }],
+				isError: false
+			}
+		} as unknown as SessionEntry;
+
+		expect(mapSessionEntry(entry)).toEqual({
+			id: 'entry-tool-result',
+			kind: 'message',
+			role: 'tool',
+			text: 'file contents',
+			toolCallId: 'tool-1',
+			label: 'read',
+			isError: false
+		});
+	});
+
 	it('forwards assistant text and reasoning deltas immediately', () => {
 		expect(
 			normalizePiEvent({

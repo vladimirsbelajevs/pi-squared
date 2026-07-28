@@ -41,6 +41,7 @@ export interface ChatItem {
 	text: string;
 	thinking?: string;
 	toolCalls?: ChatToolCall[];
+	toolCallId?: string;
 	isError?: boolean;
 	label?: string;
 }

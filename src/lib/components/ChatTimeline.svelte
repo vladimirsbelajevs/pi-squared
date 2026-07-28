@@ -1,5 +1,17 @@
 <script lang="ts">
-	import type { ChatTab } from '$lib/harness/types';
+	import type { ChatItem, ChatToolCall } from '$lib/contracts';
+	import type { ChatTab, StreamingTool } from '$lib/harness/types';
+
+	type ToolView = {
+		call: ChatToolCall;
+		result?: ChatItem;
+		stream?: StreamingTool;
+	};
+
+	type TimelineEntry = {
+		item: ChatItem;
+		tools: ToolView[];
+	};
 
 	type Props = { chat: ChatTab };
 	let { chat }: Props = $props();
@@ -10,6 +22,49 @@
 			chat.streamTools.length === 0 &&
 			chat.permissionRequests.length === 0
 	);
+	let timeline = $derived.by(() => {
+		const items = chat.snapshot?.items ?? [];
+		const calledIds = items.flatMap((item) => item.toolCalls?.map((tool) => tool.id) ?? []);
+
+		return items.flatMap((item): TimelineEntry[] => {
+			if (item.role === 'tool' && item.toolCallId && calledIds.includes(item.toolCallId)) {
+				return [];
+			}
+
+			const tools = (item.toolCalls ?? []).map((call) => ({
+				call,
+				result: items.find(
+					(candidate) => candidate.role === 'tool' && candidate.toolCallId === call.id
+				),
+				stream: chat.streamTools.find((candidate) => candidate.id === call.id)
+			}));
+			return [{ item, tools }];
+		});
+	});
+	let unmatchedStreamingTools = $derived(
+		chat.streamTools.filter(
+			(stream) => !timeline.some((entry) => entry.tools.some((tool) => tool.call.id === stream.id))
+		)
+	);
+
+	function toolCountLabel(count: number, action = 'called'): string {
+		return `${count} tool${count === 1 ? '' : 's'} ${action}`;
+	}
+
+	function toolStatus(tool: ToolView): 'pending' | 'running' | 'completed' | 'failed' {
+		if (tool.result) return tool.result.isError ? 'failed' : 'completed';
+		if (tool.stream?.isError) return 'failed';
+		return tool.stream ? 'running' : 'pending';
+	}
+
+	function toolGroupStatus(tools: ToolView[]): string {
+		const failed = tools.filter((tool) => toolStatus(tool) === 'failed').length;
+		if (failed) return `${failed} failed`;
+		const completed = tools.filter((tool) => toolStatus(tool) === 'completed').length;
+		if (completed === tools.length) return 'completed';
+		if (tools.some((tool) => toolStatus(tool) === 'running')) return 'running';
+		return `${completed}/${tools.length} complete`;
+	}
 </script>
 
 {#if chat.snapshot?.modelFallbackMessage}
@@ -20,7 +75,8 @@
 	<p class="timeline-notice">{notice.message}</p>
 {/each}
 
-{#each chat.snapshot?.items ?? [] as item (item.id)}
+{#each timeline as entry (entry.item.id)}
+	{@const item = entry.item}
 	{#if item.kind === 'notice'}
 		<p class="timeline-notice">{item.text}</p>
 	{:else}
@@ -33,13 +89,36 @@
 				</details>
 			{/if}
 			{#if item.text}<pre class="message-text">{item.text}</pre>{/if}
-			{#if item.toolCalls}
-				{#each item.toolCalls as tool (tool.id)}
-					<details class="tool-call">
-						<summary>{tool.name}</summary>
-						<pre>{tool.arguments}</pre>
-					</details>
-				{/each}
+			{#if entry.tools.length}
+				<details
+					class:tool-group-error={entry.tools.some((tool) => toolStatus(tool) === 'failed')}
+					class="tool-group"
+				>
+					<summary class="tool-group-summary">
+						<span>{toolCountLabel(entry.tools.length)}</span>
+						<span class="tool-group-status">{toolGroupStatus(entry.tools)}</span>
+					</summary>
+					<div class="tool-list">
+						{#each entry.tools as tool (tool.call.id)}
+							<section class:tool-entry-error={toolStatus(tool) === 'failed'} class="tool-entry">
+								<div class="tool-entry-heading">
+									<strong>{tool.call.name}</strong>
+									<span>{toolStatus(tool)}</span>
+								</div>
+								<div class="tool-detail">
+									<span>Arguments</span>
+									<pre>{tool.call.arguments}</pre>
+								</div>
+								{#if tool.result || tool.stream}
+									<details class="tool-detail tool-result">
+										<summary>Result</summary>
+										<pre>{tool.result?.text || tool.stream?.text || 'No output.'}</pre>
+									</details>
+								{/if}
+							</section>
+						{/each}
+					</div>
+				</details>
 			{/if}
 		</article>
 	{/if}
@@ -65,12 +144,31 @@
 	</article>
 {/if}
 
-{#each chat.streamTools as tool (tool.id)}
-	<article class:message-error={tool.isError} class="message message-tool streaming-tool">
-		<header>{tool.name} <span>running</span></header>
-		<pre class="message-text">{tool.text}</pre>
-	</article>
-{/each}
+{#if unmatchedStreamingTools.length}
+	<details
+		class:tool-group-error={unmatchedStreamingTools.some((tool) => tool.isError)}
+		class="tool-group live-tool-group streaming-tool"
+	>
+		<summary class="tool-group-summary">
+			<span>{toolCountLabel(unmatchedStreamingTools.length, 'running')}</span>
+			<span class="tool-group-status">running</span>
+		</summary>
+		<div class="tool-list">
+			{#each unmatchedStreamingTools as tool (tool.id)}
+				<section class:tool-entry-error={tool.isError} class="tool-entry">
+					<div class="tool-entry-heading">
+						<strong>{tool.name}</strong>
+						<span>{tool.isError ? 'failed' : 'running'}</span>
+					</div>
+					<details class="tool-detail tool-result">
+						<summary>Result</summary>
+						<pre>{tool.text || 'Waiting for output.'}</pre>
+					</details>
+				</section>
+			{/each}
+		</div>
+	</details>
+{/if}
 
 <style>
 	.fallback-error {
@@ -121,7 +219,7 @@
 
 	.message-text,
 	.thinking pre,
-	.tool-call pre {
+	.tool-detail pre {
 		margin: 0;
 		overflow-x: auto;
 		padding: 0.8rem;
@@ -135,12 +233,11 @@
 	}
 
 	.thinking,
-	.tool-call {
+	.tool-group {
 		border-top: 1px solid var(--border);
 	}
 
-	.thinking summary,
-	.tool-call summary {
+	.thinking summary {
 		padding: 0.6rem 0.8rem;
 		color: var(--text-muted);
 		font-size: 0.8rem;
@@ -149,6 +246,127 @@
 
 	.thinking pre {
 		color: var(--text-muted);
+	}
+
+	.tool-group-summary {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		padding: 0.6rem 0.8rem;
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.tool-group-summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.tool-group-summary::after {
+		content: '›';
+		color: var(--accent);
+		font-size: 1rem;
+		transition: transform 160ms ease;
+	}
+
+	.tool-group[open] > .tool-group-summary::after {
+		transform: rotate(90deg);
+	}
+
+	.tool-group-status {
+		margin-left: auto;
+		color: var(--accent);
+		font-size: 0.68rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+
+	.tool-group-error > .tool-group-summary,
+	.tool-group-error > .tool-group-summary .tool-group-status {
+		color: var(--danger);
+	}
+
+	.tool-list {
+		display: grid;
+		gap: 0.65rem;
+		padding: 0 0.75rem 0.75rem;
+	}
+
+	.tool-entry {
+		overflow: hidden;
+		border: 1px solid var(--border);
+		border-radius: 0.45rem;
+		background: var(--surface-muted);
+	}
+
+	.tool-entry-error {
+		border-color: color-mix(in srgb, var(--danger) 65%, var(--border));
+	}
+
+	.tool-entry-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.5rem 0.65rem;
+		border-bottom: 1px solid var(--border);
+		color: var(--text);
+		font-size: 0.75rem;
+	}
+
+	.tool-entry-heading span,
+	.tool-detail > span,
+	.tool-result summary {
+		color: var(--text-muted);
+		font-size: 0.65rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+
+	.tool-entry-error .tool-entry-heading span {
+		color: var(--danger);
+	}
+
+	.tool-detail + .tool-detail {
+		border-top: 1px solid var(--border);
+	}
+
+	.tool-detail > span {
+		display: block;
+		padding: 0.5rem 0.65rem 0;
+	}
+
+	.tool-result summary {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.5rem 0.65rem;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.tool-result summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.tool-result summary::before {
+		content: '›';
+		color: var(--accent);
+		font-size: 0.9rem;
+		transition: transform 160ms ease;
+	}
+
+	.tool-result[open] summary::before {
+		transform: rotate(90deg);
+	}
+
+	.live-tool-group {
+		max-width: 54rem;
+		margin: 0 auto 1rem;
+		border: 1px solid var(--accent);
+		border-radius: 0.55rem;
+		background: var(--surface-muted);
 	}
 
 	.timeline-notice {
@@ -218,8 +436,11 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.thinking-dots i {
+		.thinking-dots i,
+		.tool-group-summary::after,
+		.tool-result summary::before {
 			animation: none;
+			transition: none;
 		}
 	}
 </style>
