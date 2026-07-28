@@ -1,0 +1,27 @@
+{
+  "name": "pi-squared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "@types/node": "latest",
+    "typebox": "latest",
+    "typescript": "latest"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
