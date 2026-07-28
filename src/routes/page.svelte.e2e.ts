@@ -14,7 +14,7 @@ test('renders the tab-first harness shell', async ({ page }) => {
 	await expect(page.getByRole('textbox', { name: 'Message Pi' })).toBeVisible();
 	await expect(page.getByRole('combobox', { name: 'Model' })).toBeVisible();
 	await expect(page.getByRole('combobox', { name: 'Reasoning' })).toBeVisible();
-	await expect(page.getByRole('combobox', { name: 'Working project' })).toBeVisible();
+	await expect(page.getByRole('combobox', { name: 'Project' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Add project' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Start chat' })).toHaveCount(0);
 

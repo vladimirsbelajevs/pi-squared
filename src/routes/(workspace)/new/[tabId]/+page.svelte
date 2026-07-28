@@ -45,7 +45,6 @@
 	<section class="new-tab-view" role="tabpanel">
 		<div class="new-chat-center" in:fly={{ y: 20, duration: 520 }}>
 			<header class="new-chat-intro">
-				<p class="eyebrow">New chat</p>
 				<h1>What do you want to build?</h1>
 			</header>
 
@@ -65,8 +64,8 @@
 			/>
 
 			<div class:missing={!tab.draft.projectId} class="project-row">
-				<label>
-					<span>Working project</span>
+				<label class="project-picker">
+					<span>Project</span>
 					<select bind:value={tab.draft.projectId} onchange={() => workspace.persist()}>
 						<option value="" disabled>Select an added project</option>
 						{#each workspace.projects as project (project.id)}
@@ -77,9 +76,29 @@
 				<button
 					class="add-project-button"
 					type="button"
+					aria-label={tab.addingProject ? 'Cancel adding project' : 'Add project'}
+					title={tab.addingProject ? 'Cancel adding project' : 'Add project'}
 					onclick={() => (tab.addingProject = !tab.addingProject)}
 				>
-					{tab.addingProject ? 'Cancel' : '+ Add project'}
+					{#if tab.addingProject}
+						<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+							<path
+								d="M5 5L15 15M15 5L5 15"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
+					{:else}
+						<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+							<path
+								d="M10 4.5V15.5M4.5 10H15.5"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
+					{/if}
 				</button>
 			</div>
 
@@ -132,22 +151,12 @@
 		text-wrap: balance;
 	}
 
-	.eyebrow {
-		margin: 0 0 0.35rem;
-		color: var(--accent);
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-	}
-
 	.project-row {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		align-items: end;
-		gap: 0.7rem;
-		margin-top: 0.85rem;
-		padding: 0 0.25rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		margin-top: 0.65rem;
 	}
 
 	label {
@@ -168,36 +177,63 @@
 		font-weight: 400;
 	}
 
-	.project-row label > span {
-		color: var(--text-muted);
-		font-size: 0.72rem;
-		font-weight: 500;
+	.project-picker {
+		display: flex;
+		align-items: center;
+		min-width: 0;
 	}
 
-	.project-row select {
-		padding: 0.55rem 0.65rem;
+	.project-picker span {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+	}
+
+	.project-picker select {
+		width: auto;
+		max-width: 18rem;
+		border: 0;
+		border-radius: 0.35rem;
 		background: var(--surface-muted);
-		font-size: 0.8rem;
+		color: var(--text-muted);
+		padding: 0.35rem 1.7rem 0.35rem 0.5rem;
+		font-size: 0.72rem;
+		text-overflow: ellipsis;
 	}
 
-	.project-row.missing select {
-		border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+	.project-picker select:hover,
+	.project-picker select:focus {
+		background: var(--surface-strong);
+		color: var(--text);
+	}
+
+	.project-row.missing .project-picker select {
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 55%, transparent);
 	}
 
 	.add-project-button {
-		height: 2.45rem;
+		display: grid;
+		width: 1.9rem;
+		height: 1.9rem;
+		place-items: center;
 		border: 1px solid var(--border);
-		border-radius: 0.4rem;
+		border-radius: 0.35rem;
 		background: transparent;
 		color: var(--accent);
-		padding: 0 0.8rem;
-		font-size: 0.8rem;
-		white-space: nowrap;
+		padding: 0;
 	}
 
 	.add-project-button:hover {
 		border-color: var(--border-strong);
 		background: var(--surface-muted);
+	}
+
+	.add-project-button svg {
+		width: 1rem;
+		height: 1rem;
 	}
 
 	.add-project-panel {
@@ -245,12 +281,8 @@
 			transform: none;
 		}
 
-		.project-row {
-			grid-template-columns: 1fr;
-		}
-
-		.add-project-button {
-			justify-self: start;
+		.project-picker select {
+			max-width: min(16rem, calc(100vw - 6rem));
 		}
 	}
 </style>
