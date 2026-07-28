@@ -33,6 +33,60 @@ test('restores a deep-linked new-chat draft route', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
 });
 
+test('opens a historical session without reselecting its tab', async ({ page }) => {
+	const project = {
+		id: 'project-1',
+		name: 'Test project',
+		cwd: '/tmp/test-project',
+		addedAt: '2026-01-01T00:00:00.000Z',
+		lastOpenedAt: '2026-01-01T00:00:00.000Z'
+	};
+	const model = { provider: 'test', id: 'model-1', name: 'Test model', reasoning: true };
+	const session = {
+		projectId: project.id,
+		projectName: project.name,
+		sessionId: 'session-1',
+		name: 'Historical chat',
+		firstMessage: 'Inspect this project',
+		createdAt: '2026-01-01T00:00:00.000Z',
+		modifiedAt: '2026-01-01T01:00:00.000Z',
+		messageCount: 2
+	};
+	const snapshot = {
+		runtimeId: 'runtime-1',
+		project,
+		sessionId: session.sessionId,
+		sessionName: session.name,
+		model,
+		thinkingLevel: 'medium',
+		isStreaming: false,
+		items: [
+			{ id: 'user-1', kind: 'message', role: 'user', text: session.firstMessage },
+			{ id: 'assistant-1', kind: 'message', role: 'assistant', text: 'Project summary' }
+		]
+	};
+
+	await page.addInitScript(() => localStorage.clear());
+	await page.route('**/api/projects', (route) => route.fulfill({ json: { projects: [project] } }));
+	await page.route('**/api/models', (route) => route.fulfill({ json: { models: [model] } }));
+	await page.route('**/api/sessions', (route) => route.fulfill({ json: { sessions: [session] } }));
+	await page.route('**/api/runtimes', async (route) => {
+		if (route.request().method() !== 'POST') return route.fallback();
+		await route.fulfill({ json: { snapshot } });
+	});
+
+	await page.goto('/history');
+	await page.getByRole('link', { name: /Historical chat/ }).click();
+
+	await expect(page).toHaveURL(/\/chat\/project-1\/session-1$/);
+	await expect(page.getByText('Project summary')).toBeVisible();
+	await expect(page.getByText('Opening session…')).toHaveCount(0);
+	await expect(page.getByRole('tab', { name: 'Historical chat' })).toHaveAttribute(
+		'aria-selected',
+		'true'
+	);
+});
+
 test('closes an active tab without reopening it', async ({ page }) => {
 	await page.goto('/history');
 	await page.getByRole('button', { name: 'New chat tab' }).click();

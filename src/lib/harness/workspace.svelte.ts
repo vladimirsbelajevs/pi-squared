@@ -262,7 +262,7 @@ export class HarnessWorkspace {
 		const existing = this.findChat(projectId, sessionId);
 		if (existing?.snapshot) return existing;
 
-		const chat =
+		let chat =
 			existing ??
 			({
 				id: randomId(),
@@ -279,7 +279,10 @@ export class HarnessWorkspace {
 				transientNotices: [],
 				permissionRequests: []
 			} satisfies ChatTab);
-		if (!existing) this.tabs.push(chat);
+		if (!existing) {
+			this.tabs.push(chat);
+			chat = this.findChat(projectId, sessionId) ?? chat;
+		}
 
 		const load = this.#hydrateChat(chat)
 			.then(() => chat)
