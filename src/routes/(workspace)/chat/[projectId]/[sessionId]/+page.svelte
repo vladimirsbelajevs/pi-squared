@@ -18,6 +18,15 @@
 	$effect(() => {
 		if (chat) workspace.schedulePersist(chat.draft, chat.queueMode);
 	});
+
+	$effect(() => {
+		const itemCount = chat?.snapshot?.items.length ?? 0;
+		void itemCount;
+		document.scrollingElement?.scrollTo({
+			top: document.scrollingElement.scrollHeight,
+			behavior: 'smooth'
+		});
+	});
 </script>
 
 {#if !chat || chat.hydrating}
@@ -71,18 +80,21 @@
 
 <style>
 	.chat-view {
-		display: grid;
-		grid-template-rows: minmax(0, 1fr) auto;
-		min-height: 0;
+		display: flex;
+		min-height: calc(100dvh - 3rem);
+		flex-direction: column;
 	}
 
 	.chat-scroll {
-		overflow: auto;
+		flex: 1;
 		padding: 1.5rem max(1rem, calc((100vw - 54rem) / 2)) 2rem;
 	}
 
 	.thread-composer-dock {
-		position: relative;
+		position: sticky;
+		bottom: 0;
+		width: 100%;
+		flex-shrink: 0;
 		z-index: 2;
 		padding: 1.65rem max(1rem, calc((100vw - 54rem) / 2)) calc(1rem + env(safe-area-inset-bottom));
 		background: linear-gradient(180deg, transparent, var(--canvas) 28%, var(--canvas));

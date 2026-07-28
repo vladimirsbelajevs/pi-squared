@@ -72,6 +72,7 @@
 		display: grid;
 		grid-template-rows: auto minmax(0, 1fr);
 		min-height: 100vh;
+		min-height: 100dvh;
 	}
 
 	.app-error {

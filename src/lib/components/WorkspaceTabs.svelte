@@ -63,6 +63,9 @@
 
 <style>
 	.tab-strip {
+		position: sticky;
+		top: 0;
+		z-index: 3;
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
