@@ -56,23 +56,31 @@
 <main class="harness-shell">
 	<WorkspaceTabs {workspace} pathname={page.url.pathname} onNew={createNewTab} onClose={closeTab} />
 
-	{#if workspace.error}
-		<div class="app-error" role="alert">{workspace.error}</div>
-	{/if}
+	<div id="workspace-content" class="workspace-content">
+		{#if workspace.error}
+			<div class="app-error" role="alert">{workspace.error}</div>
+		{/if}
 
-	{#if workspace.initializing}
-		<section class="loading-state"><span class="pulse"></span>Loading local harness…</section>
-	{:else}
-		{@render children()}
-	{/if}
+		{#if workspace.initializing}
+			<section class="loading-state"><span class="pulse"></span>Loading local harness…</section>
+		{:else}
+			{@render children()}
+		{/if}
+	</div>
 </main>
 
 <style>
 	.harness-shell {
 		display: grid;
 		grid-template-rows: auto minmax(0, 1fr);
-		min-height: 100vh;
-		min-height: 100dvh;
+		height: 100vh;
+		height: 100dvh;
+		overflow: hidden;
+	}
+
+	.workspace-content {
+		min-height: 0;
+		overflow: auto;
 	}
 
 	.app-error {

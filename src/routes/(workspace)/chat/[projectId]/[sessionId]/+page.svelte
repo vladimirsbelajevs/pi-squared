@@ -22,8 +22,9 @@
 	$effect(() => {
 		const itemCount = chat?.snapshot?.items.length ?? 0;
 		void itemCount;
-		document.scrollingElement?.scrollTo({
-			top: document.scrollingElement.scrollHeight,
+		const scrollContainer = document.getElementById('workspace-content');
+		scrollContainer?.scrollTo({
+			top: scrollContainer.scrollHeight,
 			behavior: 'smooth'
 		});
 	});
@@ -42,7 +43,7 @@
 			<ChatTimeline {chat} />
 		</div>
 
-		<div class="thread-composer-dock" in:fly={{ y: 18, duration: 420 }}>
+		<div class="thread-composer-dock" in:fly={{ y: 24, duration: 800, delay: 200 }}>
 			{#each chat.permissionRequests as request (request.id)}
 				<PermissionApproval
 					{request}
@@ -81,7 +82,7 @@
 <style>
 	.chat-view {
 		display: flex;
-		min-height: calc(100dvh - 3rem);
+		min-height: 100%;
 		flex-direction: column;
 	}
 
@@ -120,7 +121,7 @@
 	.route-state {
 		display: grid;
 		place-content: center;
-		min-height: 0;
+		min-height: 100%;
 		color: var(--text-muted);
 	}
 
