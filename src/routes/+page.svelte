@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { fly, slide } from 'svelte/transition';
+	import ChatComposer from '$lib/components/ChatComposer.svelte';
 	import {
-		THINKING_LEVELS,
 		type HistoricalSession,
 		type ModelOption,
 		type Project,
@@ -25,6 +26,10 @@
 		kind: 'new';
 		title: string;
 		draft: NewDraft;
+		addingProject: boolean;
+		projectPath: string;
+		projectName: string;
+		projectError?: string;
 		error?: string;
 	}
 
@@ -72,10 +77,6 @@
 	let theme = $state<Theme>('graphite');
 	let historyQuery = $state('');
 	let historyProjectId = $state('');
-	let addingProject = $state(false);
-	let projectPath = $state('');
-	let projectName = $state('');
-	let projectError = $state('');
 	let loading = $state(true);
 	let generalError = $state('');
 
@@ -121,7 +122,15 @@
 	}
 
 	function createNewTab(): void {
-		const tab: NewTab = { id: newId(), kind: 'new', title: 'New chat', draft: defaultDraft() };
+		const tab: NewTab = {
+			id: newId(),
+			kind: 'new',
+			title: 'New chat',
+			draft: defaultDraft(),
+			addingProject: false,
+			projectPath: '',
+			projectName: ''
+		};
 		tabs.push(tab);
 		activeTabId = tab.id;
 	}
@@ -196,24 +205,22 @@
 		document.documentElement.dataset.theme = nextTheme;
 	}
 
-	async function addNewProject(event: SubmitEvent): Promise<void> {
+	async function addNewProject(event: SubmitEvent, tab: NewTab): Promise<void> {
 		event.preventDefault();
-		projectError = '';
+		tab.projectError = '';
 		try {
 			const response = await api<{ project: Project }>('/api/projects', {
 				method: 'POST',
-				body: JSON.stringify({ cwd: projectPath, name: projectName })
+				body: JSON.stringify({ cwd: tab.projectPath, name: tab.projectName })
 			});
 			projects = [response.project, ...projects];
-			for (const tab of tabs) {
-				if (tab.kind === 'new' && !tab.draft.projectId) tab.draft.projectId = response.project.id;
-			}
-			projectPath = '';
-			projectName = '';
-			addingProject = false;
+			tab.draft.projectId = response.project.id;
+			tab.projectPath = '';
+			tab.projectName = '';
+			tab.addingProject = false;
 			await refreshSessions();
 		} catch (error) {
-			projectError = error instanceof Error ? error.message : 'Unable to add the project.';
+			tab.projectError = error instanceof Error ? error.message : 'Unable to add the project.';
 		}
 	}
 
@@ -222,12 +229,12 @@
 		sessions = response.sessions;
 	}
 
-	async function startChat(tab: NewTab): Promise<void> {
+	async function startChat(tab: NewTab, openingPrompt: string): Promise<boolean> {
 		tab.error = '';
 		const model = selectedModel(tab.draft.modelKey);
-		if (!tab.draft.projectId || !model || !tab.draft.prompt.trim()) {
-			tab.error = 'Choose a project and model, then enter an opening prompt.';
-			return;
+		if (!tab.draft.projectId || !model) {
+			tab.error = 'Choose a project and model before sending a message.';
+			return false;
 		}
 
 		try {
@@ -241,7 +248,6 @@
 					thinkingLevel: tab.draft.thinkingLevel
 				})
 			});
-			const openingPrompt = tab.draft.prompt;
 			const chat: ChatTab = {
 				id: tab.id,
 				kind: 'chat',
@@ -254,10 +260,13 @@
 				streamTools: []
 			};
 			tabs = tabs.map((candidate) => (candidate.id === tab.id ? chat : candidate));
-			await sendPrompt(chat, openingPrompt);
+			const sent = await sendPrompt(chat, openingPrompt);
+			if (!sent) chat.draft = openingPrompt;
 			saveChats();
+			return sent;
 		} catch (error) {
 			tab.error = error instanceof Error ? error.message : 'Unable to start the chat.';
+			return false;
 		}
 	}
 
@@ -301,25 +310,25 @@
 		}
 	}
 
-	async function sendPrompt(chat: ChatTab, text = chat.draft): Promise<void> {
+	async function sendPrompt(chat: ChatTab, text: string): Promise<boolean> {
 		const message = text.trim();
-		if (!message) return;
+		if (!message) return false;
 		chat.error = '';
-		chat.draft = '';
 		try {
 			await api(`/api/runtimes/${chat.snapshot.runtimeId}/prompt`, {
 				method: 'POST',
 				body: JSON.stringify({ text: message, streamingBehavior: chat.queueMode })
 			});
+			return true;
 		} catch (error) {
-			chat.draft = message;
 			chat.error = error instanceof Error ? error.message : 'Unable to send the message.';
+			return false;
 		}
 	}
 
-	function sendChat(event: SubmitEvent, chat: ChatTab): void {
-		event.preventDefault();
-		void sendPrompt(chat);
+	function changeNewTabModel(tab: NewTab, key: string): void {
+		tab.draft.modelKey = key;
+		if (selectedModel(key)?.reasoning === false) tab.draft.thinkingLevel = 'off';
 	}
 
 	async function stopChat(chat: ChatTab): Promise<void> {
@@ -591,16 +600,29 @@
 		</section>
 	{:else if activeTab?.kind === 'new'}
 		<section class="new-tab-view" role="tabpanel">
-			<div class="launchpad">
-				<p class="eyebrow">New tab</p>
-				<h1>Start a project conversation</h1>
-				<p class="launchpad-intro">
-					Choose where Pi works, select an authenticated model, then send the opening instruction.
-				</p>
+			<div class="new-chat-center" in:fly={{ y: 20, duration: 520 }}>
+				<header class="new-chat-intro">
+					<p class="eyebrow">New chat</p>
+					<h1>What do you want to build?</h1>
+				</header>
 
-				<div class="launch-form">
+				<ChatComposer
+					bind:draft={activeTab.draft.prompt}
+					{models}
+					modelKey={activeTab.draft.modelKey}
+					thinkingLevel={activeTab.draft.thinkingLevel}
+					disabled={!activeTab.draft.projectId || !activeTab.draft.modelKey}
+					error={activeTab.error}
+					onSend={(message) => startChat(activeTab, message)}
+					onModelChange={(key) => changeNewTabModel(activeTab, key)}
+					onThinkingChange={(level) => {
+						activeTab.draft.thinkingLevel = level;
+					}}
+				/>
+
+				<div class:missing={!activeTab.draft.projectId} class="project-row">
 					<label>
-						<span>Project</span>
+						<span>Working project</span>
 						<select bind:value={activeTab.draft.projectId}>
 							<option value="" disabled>Select an added project</option>
 							{#each projects as project (project.id)}
@@ -609,116 +631,44 @@
 						</select>
 					</label>
 					<button
-						class="subtle-button"
+						class="add-project-button"
 						type="button"
-						onclick={() => (addingProject = !addingProject)}
+						onclick={() => (activeTab.addingProject = !activeTab.addingProject)}
 					>
-						{addingProject ? 'Cancel project' : '+ Add project'}
-					</button>
-
-					{#if addingProject}
-						<div class="add-project-panel">
-							<p>
-								Added projects are trusted local workspaces. Pi can read, edit, and run commands
-								there.
-							</p>
-							<form onsubmit={addNewProject}>
-								<label>
-									<span>Absolute directory</span>
-									<input bind:value={projectPath} placeholder="/home/me/code/project" required />
-								</label>
-								<label>
-									<span>Display name <em>optional</em></span>
-									<input bind:value={projectName} placeholder="Project name" />
-								</label>
-								{#if projectError}<p class="form-error" role="alert">{projectError}</p>{/if}
-								<button class="primary-button" type="submit">Add trusted project</button>
-							</form>
-						</div>
-					{/if}
-
-					<div class="control-pair">
-						<label>
-							<span>Model</span>
-							<select bind:value={activeTab.draft.modelKey}>
-								<option value="" disabled>Select a configured model</option>
-								{#each models as model (modelKey(model))}
-									<option value={modelKey(model)}>{model.name} · {model.provider}</option>
-								{/each}
-							</select>
-						</label>
-						<label>
-							<span>Reasoning</span>
-							<select bind:value={activeTab.draft.thinkingLevel}>
-								{#each THINKING_LEVELS as level (level)}
-									<option value={level}>{level}</option>
-								{/each}
-							</select>
-						</label>
-					</div>
-
-					<label>
-						<span>Opening instruction</span>
-						<textarea
-							bind:value={activeTab.draft.prompt}
-							placeholder="Ask Pi about this project…"
-							rows="5"></textarea>
-					</label>
-					{#if activeTab.error}<p class="form-error" role="alert">{activeTab.error}</p>{/if}
-					<button
-						class="primary-button launch-button"
-						type="button"
-						disabled={!projects.length || !models.length}
-						onclick={() => startChat(activeTab)}
-					>
-						Start chat
+						{activeTab.addingProject ? 'Cancel' : '+ Add project'}
 					</button>
 				</div>
+
+				{#if activeTab.addingProject}
+					<div class="add-project-panel" transition:slide={{ duration: 240 }}>
+						<p>
+							Added projects are trusted local workspaces. Pi can read, edit, and run commands
+							there.
+						</p>
+						<form onsubmit={(event) => addNewProject(event, activeTab)}>
+							<label>
+								<span>Absolute directory</span>
+								<input
+									bind:value={activeTab.projectPath}
+									placeholder="/home/me/code/project"
+									required
+								/>
+							</label>
+							<label>
+								<span>Display name <em>optional</em></span>
+								<input bind:value={activeTab.projectName} placeholder="Project name" />
+							</label>
+							{#if activeTab.projectError}
+								<p class="form-error" role="alert">{activeTab.projectError}</p>
+							{/if}
+							<button class="primary-button" type="submit">Add trusted project</button>
+						</form>
+					</div>
+				{/if}
 			</div>
 		</section>
 	{:else if activeTab?.kind === 'chat'}
 		<section class="chat-view" role="tabpanel">
-			<div class="chat-controls">
-				<div class="project-lockup">
-					<span class="eyebrow">Project</span>
-					<strong>{activeTab.snapshot.project.name}</strong>
-					<span title={activeTab.snapshot.project.cwd}>{activeTab.snapshot.project.cwd}</span>
-				</div>
-				<label class="compact-control">
-					<span>Model</span>
-					<select
-						value={activeTab.snapshot.model ? modelKey(activeTab.snapshot.model) : ''}
-						disabled={activeTab.snapshot.isStreaming}
-						onchange={(event) =>
-							changeModel(activeTab, (event.currentTarget as HTMLSelectElement).value)}
-					>
-						{#each models as model (modelKey(model))}
-							<option value={modelKey(model)}>{model.name}</option>
-						{/each}
-					</select>
-				</label>
-				<label class="compact-control">
-					<span>Reasoning</span>
-					<select
-						value={activeTab.snapshot.thinkingLevel}
-						disabled={activeTab.snapshot.isStreaming}
-						onchange={(event) =>
-							changeThinking(
-								activeTab,
-								(event.currentTarget as HTMLSelectElement).value as ThinkingLevel
-							)}
-					>
-						{#each THINKING_LEVELS as level (level)}
-							<option value={level}>{level}</option>
-						{/each}
-					</select>
-				</label>
-				{#if activeTab.snapshot.isStreaming}
-					<button class="stop-button" type="button" onclick={() => stopChat(activeTab)}>Stop</button
-					>
-				{/if}
-			</div>
-
 			<div class="chat-scroll">
 				{#if activeTab.snapshot.modelFallbackMessage}
 					<p class="form-error">{activeTab.snapshot.modelFallbackMessage}</p>
@@ -765,28 +715,29 @@
 				{/each}
 			</div>
 
-			{#if activeTab.error}<p class="chat-error" role="alert">{activeTab.error}</p>{/if}
-			<form class="composer" onsubmit={(event) => sendChat(event, activeTab)}>
-				<textarea
-					bind:value={activeTab.draft}
-					aria-label="Message Pi"
-					placeholder="Message Pi…"
-					rows="3"></textarea>
-				<div class="composer-actions">
-					{#if activeTab.snapshot.isStreaming}
-						<label class="queue-control"
-							>Queue as
-							<select bind:value={activeTab.queueMode}>
-								<option value="followUp">follow-up</option>
-								<option value="steer">steer</option>
-							</select>
-						</label>
-					{/if}
-					<button class="primary-button" type="submit"
-						>{activeTab.snapshot.isStreaming ? 'Queue message' : 'Send message'}</button
-					>
+			<div class="thread-composer-dock" in:fly={{ y: 18, duration: 420 }}>
+				<div class="thread-project" title={activeTab.snapshot.project.cwd}>
+					<span class="project-dot"></span>
+					{activeTab.snapshot.project.name}
 				</div>
-			</form>
+				<ChatComposer
+					bind:draft={activeTab.draft}
+					{models}
+					modelKey={activeTab.snapshot.model ? modelKey(activeTab.snapshot.model) : ''}
+					thinkingLevel={activeTab.snapshot.thinkingLevel}
+					queueMode={activeTab.queueMode}
+					isStreaming={activeTab.snapshot.isStreaming}
+					autoFocus
+					error={activeTab.error}
+					onSend={(message) => sendPrompt(activeTab, message)}
+					onStop={() => stopChat(activeTab)}
+					onModelChange={(key) => changeModel(activeTab, key)}
+					onThinkingChange={(level) => changeThinking(activeTab, level)}
+					onQueueModeChange={(mode) => {
+						activeTab.queueMode = mode;
+					}}
+				/>
+			</div>
 		</section>
 	{/if}
 </main>

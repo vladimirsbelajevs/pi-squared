@@ -298,19 +298,16 @@ textarea {
 	overflow: auto;
 	padding: clamp(1.5rem, 5vw, 4.5rem);
 }
-.section-heading,
-.launchpad {
+.section-heading {
 	max-width: 54rem;
 }
-.section-heading h1,
-.launchpad h1 {
+.section-heading h1 {
 	margin: 0.2rem 0 0.55rem;
 	font-size: clamp(2rem, 4vw, 3.2rem);
 	line-height: 1.05;
 	letter-spacing: -0.04em;
 }
-.section-heading p,
-.launchpad-intro {
+.section-heading p {
 	margin: 0;
 	color: var(--text-muted);
 	line-height: 1.6;
@@ -445,16 +442,22 @@ textarea {
 	display: grid;
 	place-items: center;
 	overflow: auto;
-	padding: clamp(1.5rem, 5vw, 4.5rem);
+	padding: clamp(1rem, 4vw, 3rem);
 }
-.launchpad {
-	width: min(100%, 46rem);
+.new-chat-center {
+	width: min(100%, 48rem);
+	transform: translateY(-3vh);
 }
-.launchpad > .launch-form,
-.add-project-panel form {
-	display: grid;
-	gap: 1rem;
-	margin-top: 2rem;
+.new-chat-intro {
+	margin-bottom: 1.5rem;
+	text-align: center;
+}
+.new-chat-intro h1 {
+	margin: 0;
+	font-size: clamp(1.7rem, 4vw, 2.65rem);
+	font-weight: 500;
+	letter-spacing: -0.035em;
+	text-wrap: balance;
 }
 label {
 	display: grid;
@@ -471,21 +474,47 @@ label em {
 	font-style: normal;
 	font-weight: 400;
 }
-.subtle-button {
-	justify-self: start;
-	border: 0;
+.project-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: end;
+	gap: 0.7rem;
+	margin-top: 0.85rem;
+	padding: 0 0.25rem;
+}
+.project-row label > span {
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	font-weight: 500;
+}
+.project-row select {
+	padding: 0.55rem 0.65rem;
+	background: var(--surface-muted);
+	font-size: 0.8rem;
+}
+.project-row.missing select {
+	border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+}
+.add-project-button {
+	height: 2.45rem;
+	border: 1px solid var(--border);
+	border-radius: 0.4rem;
 	background: transparent;
 	color: var(--accent);
-	padding: 0;
+	padding: 0 0.8rem;
+	font-size: 0.8rem;
+	white-space: nowrap;
 }
-.subtle-button:hover {
-	text-decoration: underline;
+.add-project-button:hover {
+	border-color: var(--border-strong);
+	background: var(--surface-muted);
 }
 .add-project-panel {
+	margin-top: 0.75rem;
 	padding: 1rem;
 	border: 1px dashed var(--border-strong);
 	background: var(--surface-muted);
-	border-radius: 0.45rem;
+	border-radius: 0.65rem;
 }
 .add-project-panel > p {
 	margin: 0;
@@ -494,15 +523,11 @@ label em {
 	line-height: 1.5;
 }
 .add-project-panel form {
+	display: grid;
+	gap: 0.8rem;
 	margin-top: 1rem;
 }
-.control-pair {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 1rem;
-}
-.primary-button,
-.stop-button {
+.primary-button {
 	border: 1px solid transparent;
 	border-radius: 0.35rem;
 	padding: 0.7rem 1rem;
@@ -515,16 +540,7 @@ label em {
 .primary-button:hover {
 	filter: brightness(1.08);
 }
-.launch-button {
-	justify-self: start;
-}
-.stop-button {
-	border-color: var(--danger);
-	background: transparent;
-	color: var(--danger);
-}
-.form-error,
-.chat-error {
+.form-error {
 	margin: 0;
 	color: var(--danger);
 	font-size: 0.9rem;
@@ -532,45 +548,12 @@ label em {
 
 .chat-view {
 	display: grid;
-	grid-template-rows: auto minmax(0, 1fr) auto;
+	grid-template-rows: minmax(0, 1fr) auto;
 	min-height: 0;
-}
-.chat-controls {
-	display: flex;
-	align-items: end;
-	gap: 0.8rem;
-	overflow-x: auto;
-	padding: 0.8rem clamp(1rem, 3vw, 2rem);
-	border-bottom: 1px solid var(--border);
-	background: var(--surface-muted);
-}
-.project-lockup {
-	display: grid;
-	min-width: 0;
-	margin-right: auto;
-}
-.project-lockup strong {
-	font-size: 0.95rem;
-}
-.project-lockup > span:last-child {
-	max-width: 24rem;
-	overflow: hidden;
-	color: var(--text-muted);
-	font-size: 0.75rem;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.compact-control {
-	min-width: 9rem;
-	font-size: 0.7rem;
-}
-.compact-control select {
-	padding: 0.4rem 0.5rem;
-	font-size: 0.8rem;
 }
 .chat-scroll {
 	overflow: auto;
-	padding: 1.5rem max(1rem, calc((100vw - 54rem) / 2));
+	padding: 1.5rem max(1rem, calc((100vw - 54rem) / 2)) 2rem;
 }
 .message {
 	max-width: 54rem;
@@ -646,35 +629,26 @@ label em {
 .streaming-tool {
 	border-style: dashed;
 }
-.chat-error {
-	margin: 0 auto 0.5rem;
-	width: min(54rem, calc(100% - 2rem));
+.thread-composer-dock {
+	position: relative;
+	z-index: 2;
+	padding: 1.65rem max(1rem, calc((100vw - 54rem) / 2)) calc(1rem + env(safe-area-inset-bottom));
+	background: linear-gradient(180deg, transparent, var(--canvas) 28%, var(--canvas));
 }
-.composer {
-	display: grid;
-	gap: 0.7rem;
-	padding: 1rem max(1rem, calc((100vw - 54rem) / 2));
-	border-top: 1px solid var(--border);
-	background: var(--surface-muted);
-}
-.composer textarea {
-	min-height: 4.5rem;
-}
-.composer-actions {
-	display: flex;
-	justify-content: flex-end;
-	align-items: center;
-	gap: 1rem;
-}
-.queue-control {
+.thread-project {
 	display: flex;
 	align-items: center;
-	gap: 0.5rem;
+	gap: 0.4rem;
+	max-width: 54rem;
+	margin: 0 auto 0.45rem;
 	color: var(--text-muted);
+	font-size: 0.7rem;
 }
-.queue-control select {
-	width: auto;
-	padding: 0.35rem;
+.project-dot {
+	width: 0.42rem;
+	height: 0.42rem;
+	border-radius: 50%;
+	background: var(--success);
 }
 
 @media (max-width: 700px) {
@@ -695,20 +669,12 @@ label em {
 	.utility-nav button {
 		white-space: nowrap;
 	}
-	.history-controls,
-	.control-pair {
+	.history-controls {
 		grid-template-columns: 1fr;
 	}
 	.chat-tab {
 		min-width: 8rem;
 		max-width: 11rem;
-	}
-	.chat-controls {
-		align-items: start;
-		flex-wrap: wrap;
-	}
-	.project-lockup {
-		flex-basis: 100%;
 	}
 	.message-user {
 		margin-left: 1.5rem;
@@ -720,14 +686,16 @@ label em {
 		grid-column: 1;
 		grid-row: auto;
 	}
-	.composer-actions {
-		align-items: stretch;
-		flex-direction: column;
+	.new-chat-center {
+		transform: none;
 	}
-	.composer-actions .primary-button {
-		width: 100%;
+	.project-row {
+		grid-template-columns: 1fr;
 	}
-	.queue-control {
-		justify-content: space-between;
+	.add-project-button {
+		justify-self: start;
+	}
+	.thread-composer-dock {
+		padding-inline: 0.75rem;
 	}
 }
