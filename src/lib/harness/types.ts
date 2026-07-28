@@ -1,4 +1,9 @@
-import type { ModelOption, RuntimeSnapshot, ThinkingLevel } from '$lib/contracts';
+import type {
+	ModelOption,
+	PermissionRequest,
+	RuntimeSnapshot,
+	ThinkingLevel
+} from '$lib/contracts';
 
 export type Theme = 'graphite' | 'paper' | 'nord' | 'solarized' | 'system';
 export type QueueMode = 'followUp' | 'steer';
@@ -34,6 +39,11 @@ export interface TransientNotice {
 	message: string;
 }
 
+export interface PendingPermission extends PermissionRequest {
+	responding?: boolean;
+	error?: string;
+}
+
 export interface ChatTab {
 	id: string;
 	kind: 'chat';
@@ -49,6 +59,7 @@ export interface ChatTab {
 	streamThinking: string;
 	streamTools: StreamingTool[];
 	transientNotices: TransientNotice[];
+	permissionRequests: PendingPermission[];
 	error?: string;
 }
 

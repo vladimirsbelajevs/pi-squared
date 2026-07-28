@@ -4,6 +4,7 @@
 	import { fly } from 'svelte/transition';
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
 	import ChatTimeline from '$lib/components/ChatTimeline.svelte';
+	import PermissionApproval from '$lib/components/PermissionApproval.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
 	let projectId = $derived(page.params.projectId ?? '');
@@ -33,6 +34,14 @@
 		</div>
 
 		<div class="thread-composer-dock" in:fly={{ y: 18, duration: 420 }}>
+			{#each chat.permissionRequests as request (request.id)}
+				<PermissionApproval
+					{request}
+					onSelect={(request, value) => workspace.respondToPermission(chat, request, value)}
+					onConfirm={(request, confirmed) => workspace.confirmPermission(chat, request, confirmed)}
+					onCancel={(request) => workspace.cancelPermission(chat, request)}
+				/>
+			{/each}
 			<div class="thread-project" title={chat.snapshot.project.cwd}>
 				<span class="project-dot"></span>{chat.snapshot.project.name}
 			</div>

@@ -1,6 +1,7 @@
 import type {
 	HistoricalSession,
 	ModelOption,
+	PermissionResponse,
 	Project,
 	RuntimeSnapshot,
 	StreamEnvelope,
@@ -80,6 +81,16 @@ export function promptRuntime(
 
 export function abortRuntime(runtimeId: string): Promise<{ ok: true }> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/abort`, { method: 'POST' });
+}
+
+export function respondToPermission(
+	runtimeId: string,
+	response: PermissionResponse
+): Promise<{ ok: true }> {
+	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/permission`, {
+		method: 'POST',
+		body: JSON.stringify(response)
+	});
 }
 
 export function setRuntimeModel(

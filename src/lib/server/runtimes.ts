@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type {
 	ModelOption,
+	PermissionResponse,
 	Project,
 	RuntimeEvent,
 	RuntimeSnapshot,
 	ThinkingLevel
 } from '$lib/contracts';
 import { eventBroker } from '$lib/server/event-broker';
+import { PermissionBridge } from '$lib/server/permission-bridge';
 import { getProject, markProjectOpened } from '$lib/server/projects';
 import {
 	buildSnapshot,
@@ -27,6 +29,7 @@ interface RuntimeRecord {
 	modelFallbackMessage?: string;
 	lastAccessedAt: number;
 	promptActive: boolean;
+	permissions: PermissionBridge;
 }
 
 const runtimes = new Map<string, RuntimeRecord>();
@@ -98,18 +101,26 @@ export async function createRuntime(input: {
 		thinkingLevel: input.thinkingLevel
 	});
 
+	const id = randomUUID();
+	const permissions = new PermissionBridge((event) => eventBroker.publish(id, event));
+	created.session.extensionRunner.setUIContext(permissions.extensionUI, 'rpc');
 	const record: RuntimeRecord = {
-		id: randomUUID(),
+		id,
 		project: await markProjectOpened(project.id),
 		session: created.session,
 		unsubscribe: () => undefined,
 		modelFallbackMessage: created.modelFallbackMessage,
 		lastAccessedAt: Date.now(),
-		promptActive: false
+		promptActive: false,
+		permissions
 	};
 	record.unsubscribe = attachSessionEvents(record);
 	runtimes.set(record.id, record);
 	return buildSnapshot(record.id, record.project, record.session, record.modelFallbackMessage);
+}
+
+export function respondToPermissionRequest(runtimeId: string, response: PermissionResponse): void {
+	getRecord(runtimeId).permissions.respond(response);
 }
 
 export function getRuntimeSnapshot(runtimeId: string): RuntimeSnapshot {
@@ -163,6 +174,7 @@ export function setRuntimeThinkingLevel(
 
 export async function abortRuntime(runtimeId: string): Promise<void> {
 	const record = getRecord(runtimeId);
+	record.permissions.cancelAll();
 	await record.session.abort();
 	publishSnapshot(record);
 }
@@ -171,6 +183,7 @@ export async function disposeRuntime(runtimeId: string): Promise<void> {
 	const record = runtimes.get(runtimeId);
 	if (!record) return;
 	runtimes.delete(runtimeId);
+	record.permissions.cancelAll();
 	if (record.session.isStreaming) await record.session.abort();
 	record.unsubscribe();
 	record.session.dispose();

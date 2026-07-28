@@ -17,6 +17,7 @@ import {
 	listSessions,
 	openEventStream,
 	promptRuntime,
+	respondToPermission,
 	setRuntimeModel,
 	setRuntimeThinking
 } from '$lib/harness/api';
@@ -25,6 +26,7 @@ import {
 	type ChatTab,
 	type NewDraft,
 	type NewTab,
+	type PendingPermission,
 	type QueueMode,
 	type StoredChatTab,
 	type StoredNewTab,
@@ -266,7 +268,8 @@ export class HarnessWorkspace {
 				streamText: '',
 				streamThinking: '',
 				streamTools: [],
-				transientNotices: []
+				transientNotices: [],
+				permissionRequests: []
 			} satisfies ChatTab);
 		if (!existing) this.tabs.push(chat);
 
@@ -305,6 +308,65 @@ export class HarnessWorkspace {
 			await abortRuntime(chat.runtimeId);
 		} catch (error) {
 			chat.error = error instanceof Error ? error.message : 'Unable to stop the response.';
+		}
+	}
+
+	async respondToPermission(
+		chat: ChatTab,
+		request: PendingPermission,
+		value: string
+	): Promise<void> {
+		if (!chat.runtimeId || request.responding) return;
+		request.error = undefined;
+		request.responding = true;
+		try {
+			await respondToPermission(chat.runtimeId, { requestId: request.id, value });
+			chat.permissionRequests = chat.permissionRequests.filter(
+				(candidate) => candidate.id !== request.id
+			);
+		} catch (error) {
+			request.error =
+				error instanceof Error ? error.message : 'Unable to submit the permission response.';
+		} finally {
+			request.responding = false;
+		}
+	}
+
+	async confirmPermission(
+		chat: ChatTab,
+		request: PendingPermission,
+		confirmed: boolean
+	): Promise<void> {
+		if (!chat.runtimeId || request.responding) return;
+		request.error = undefined;
+		request.responding = true;
+		try {
+			await respondToPermission(chat.runtimeId, { requestId: request.id, confirmed });
+			chat.permissionRequests = chat.permissionRequests.filter(
+				(candidate) => candidate.id !== request.id
+			);
+		} catch (error) {
+			request.error =
+				error instanceof Error ? error.message : 'Unable to submit the permission response.';
+		} finally {
+			request.responding = false;
+		}
+	}
+
+	async cancelPermission(chat: ChatTab, request: PendingPermission): Promise<void> {
+		if (!chat.runtimeId || request.responding) return;
+		request.error = undefined;
+		request.responding = true;
+		try {
+			await respondToPermission(chat.runtimeId, { requestId: request.id, cancelled: true });
+			chat.permissionRequests = chat.permissionRequests.filter(
+				(candidate) => candidate.id !== request.id
+			);
+		} catch (error) {
+			request.error =
+				error instanceof Error ? error.message : 'Unable to submit the permission response.';
+		} finally {
+			request.responding = false;
 		}
 	}
 
@@ -448,6 +510,18 @@ export class HarnessWorkspace {
 			chat.transientNotices.push({ id: `notice-${envelope.id}`, message: event.message });
 			return;
 		}
+		if (event.type === 'permission_request') {
+			if (!chat.permissionRequests.some((request) => request.id === event.request.id)) {
+				chat.permissionRequests.push({ ...event.request });
+			}
+			return;
+		}
+		if (event.type === 'permission_resolved') {
+			chat.permissionRequests = chat.permissionRequests.filter(
+				(request) => request.id !== event.requestId
+			);
+			return;
+		}
 		if (event.type === 'error') chat.error = event.message;
 	}
 
@@ -503,7 +577,8 @@ export class HarnessWorkspace {
 			streamText: '',
 			streamThinking: '',
 			streamTools: [],
-			transientNotices: []
+			transientNotices: [],
+			permissionRequests: []
 		};
 	}
 
@@ -671,7 +746,8 @@ export class HarnessWorkspace {
 			streamText: '',
 			streamThinking: '',
 			streamTools: [],
-			transientNotices: []
+			transientNotices: [],
+			permissionRequests: []
 		};
 	}
 

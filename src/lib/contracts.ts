@@ -57,6 +57,20 @@ export interface RuntimeSnapshot {
 	modelFallbackMessage?: string;
 }
 
+export interface PermissionRequest {
+	id: string;
+	method: 'select' | 'confirm' | 'input';
+	title: string;
+	message?: string;
+	options?: string[];
+	placeholder?: string;
+}
+
+export type PermissionResponse =
+	| { requestId: string; value: string }
+	| { requestId: string; confirmed: boolean }
+	| { requestId: string; cancelled: true };
+
 export type RuntimeEvent =
 	| { type: 'snapshot'; snapshot: RuntimeSnapshot }
 	| { type: 'assistant_delta'; text?: string; thinking?: string }
@@ -69,6 +83,8 @@ export type RuntimeEvent =
 	  }
 	| { type: 'state'; isStreaming: boolean }
 	| { type: 'notice'; message: string }
+	| { type: 'permission_request'; request: PermissionRequest }
+	| { type: 'permission_resolved'; requestId: string }
 	| { type: 'error'; message: string };
 
 export interface StreamEnvelope {
