@@ -3,9 +3,11 @@
 	import { fade } from 'svelte/transition';
 	import {
 		THINKING_LEVELS,
+		type ContextUsageSnapshot,
 		type McpStatusSnapshot,
 		type ModelOption,
 		type ProjectFileSuggestion,
+		type SessionTokenUsage,
 		type SlashCommand,
 		type ThinkingLevel
 	} from '$lib/contracts';
@@ -42,6 +44,8 @@
 		onClearTransientNotices?: () => void;
 		overlay?: Snippet;
 		mcpStatus?: McpStatusSnapshot;
+		contextUsage?: ContextUsageSnapshot;
+		sessionTokens?: SessionTokenUsage;
 		onMcpToggle?: (serverName: string, enabled: boolean) => Promise<void>;
 		projectName?: string;
 		projectCwd?: string;
@@ -70,6 +74,8 @@
 		onClearTransientNotices,
 		overlay,
 		mcpStatus,
+		contextUsage,
+		sessionTokens,
 		onMcpToggle,
 		projectName,
 		projectCwd,
@@ -434,6 +440,8 @@
 		{#if showStatusPanel}
 			<ComposerStatusPanel
 				status={mcpStatus}
+				{contextUsage}
+				{sessionTokens}
 				onToggle={onMcpToggle}
 				{projectName}
 				{projectCwd}

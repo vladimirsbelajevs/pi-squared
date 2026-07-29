@@ -164,7 +164,11 @@ describe('mapSessionEntry', () => {
 			isStreaming: false,
 			sessionId: 'session-1',
 			sessionName: undefined,
-			sessionManager: { getBranch: () => [] }
+			sessionManager: { getBranch: () => [] },
+			getSessionStats: () => ({
+				tokens: { input: 1200, output: 300, cacheRead: 400, cacheWrite: 100, total: 2000 }
+			}),
+			getContextUsage: () => ({ tokens: 64000, contextWindow: 200000, percent: 32 })
 		} as unknown as AgentSession;
 
 		expect(
@@ -189,7 +193,40 @@ describe('mapSessionEntry', () => {
 			)
 		).toMatchObject({
 			runtimeId: 'runtime-1',
-			mcpStatus: { connectedCount: 1, totalTools: 5 }
+			mcpStatus: { connectedCount: 1, totalTools: 5 },
+			sessionTokens: { input: 1200, output: 300, cacheRead: 400, cacheWrite: 100, total: 2000 },
+			contextUsage: { tokens: 64000, contextWindow: 200000, percent: 32 }
+		});
+	});
+
+	it('keeps context usage unknown after compaction', () => {
+		const session = {
+			model: { provider: 'openai', id: 'gpt-test', contextWindow: 200000 },
+			thinkingLevel: 'medium',
+			isStreaming: false,
+			sessionId: 'session-1',
+			sessionName: undefined,
+			sessionManager: { getBranch: () => [] },
+			getSessionStats: () => ({
+				tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+			}),
+			getContextUsage: () => ({ tokens: null, contextWindow: 200000, percent: null })
+		} as unknown as AgentSession;
+
+		expect(
+			buildSnapshot(
+				'runtime-1',
+				{
+					id: 'project-1',
+					name: 'Project',
+					cwd: '/tmp/project',
+					addedAt: '2026-01-01T00:00:00.000Z',
+					lastOpenedAt: '2026-01-01T00:00:00.000Z'
+				},
+				session
+			)
+		).toMatchObject({
+			contextUsage: { tokens: null, contextWindow: 200000, percent: null }
 		});
 	});
 });

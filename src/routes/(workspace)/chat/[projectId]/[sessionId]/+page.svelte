@@ -111,6 +111,8 @@
 				transientNotices={chat.transientNotices}
 				onClearTransientNotices={() => workspace.clearTransientNotices(chat)}
 				mcpStatus={chat.snapshot.mcpStatus}
+				contextUsage={chat.snapshot.contextUsage}
+				sessionTokens={chat.snapshot.sessionTokens}
 				onMcpToggle={(serverName, enabled) =>
 					workspace.setMcpServerEnabled(chat, serverName, enabled)}
 				onSend={(message) => workspace.sendPrompt(chat, message)}

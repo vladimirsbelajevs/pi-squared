@@ -18,6 +18,7 @@ import type {
 	ModelOption,
 	Project,
 	RuntimeSnapshot,
+	SessionTokenUsage,
 	McpStatusSnapshot,
 	SlashCommand,
 	ThinkingLevel
@@ -87,12 +88,14 @@ function modelOption(model: {
 	id: string;
 	name?: string;
 	reasoning?: boolean;
+	contextWindow?: number;
 }): ModelOption {
 	return {
 		provider: model.provider,
 		id: model.id,
 		name: model.name ?? model.id,
-		reasoning: model.reasoning ?? false
+		reasoning: model.reasoning ?? false,
+		...(model.contextWindow ? { contextWindow: model.contextWindow } : {})
 	};
 }
 
@@ -213,6 +216,9 @@ export function buildSnapshot(
 	mcpStatus?: McpStatusSnapshot
 ): RuntimeSnapshot {
 	const currentModel = session.model;
+	const sessionStats = session.getSessionStats();
+	const sessionTokens: SessionTokenUsage = sessionStats.tokens;
+	const contextUsage = session.getContextUsage();
 	return {
 		runtimeId,
 		project,
@@ -226,6 +232,8 @@ export function buildSnapshot(
 			return item ? [item] : [];
 		}),
 		...(mcpStatus ? { mcpStatus } : {}),
+		sessionTokens,
+		...(contextUsage ? { contextUsage } : {}),
 		modelFallbackMessage
 	};
 }

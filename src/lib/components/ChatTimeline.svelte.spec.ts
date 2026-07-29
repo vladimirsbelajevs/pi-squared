@@ -210,7 +210,7 @@ describe('ChatTimeline', () => {
 
 		await screen.getByRole('group', { name: 'assistant message' }).hover();
 		await expect.element(screen.getByText('GPT-5.6 Terra')).toBeVisible();
-		await expect.element(screen.getByText('Reasoning: medium')).toBeVisible();
+		await expect.element(screen.getByText('medium')).toBeVisible();
 	});
 
 	it('renders persisted assistant text as Markdown', async () => {

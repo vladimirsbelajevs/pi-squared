@@ -51,6 +51,23 @@ export interface ModelOption {
 	id: string;
 	name: string;
 	reasoning: boolean;
+	contextWindow?: number;
+}
+
+/** Cumulative token usage across every entry in a Pi session. */
+export interface SessionTokenUsage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	total: number;
+}
+
+/** Current prompt-context occupancy, which may be unknown just after compaction. */
+export interface ContextUsageSnapshot {
+	tokens: number | null;
+	contextWindow: number;
+	percent: number | null;
 }
 
 export interface HistoricalSession {
@@ -95,6 +112,8 @@ export interface RuntimeSnapshot {
 	isStreaming: boolean;
 	items: ChatItem[];
 	mcpStatus?: McpStatusSnapshot;
+	sessionTokens?: SessionTokenUsage;
+	contextUsage?: ContextUsageSnapshot;
 	modelFallbackMessage?: string;
 }
 

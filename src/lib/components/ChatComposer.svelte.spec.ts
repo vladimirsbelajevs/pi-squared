@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import type { McpStatusSnapshot } from '$lib/contracts';
+import type { ContextUsageSnapshot, McpStatusSnapshot, SessionTokenUsage } from '$lib/contracts';
 import ChatComposer from './ChatComposer.svelte';
 
 const autocompleteApi = vi.hoisted(() => ({
@@ -30,6 +30,20 @@ const mcpStatus: McpStatusSnapshot = {
 	totalResources: 0,
 	connectedCount: 1,
 	disabledCount: 0
+};
+
+const contextUsage: ContextUsageSnapshot = {
+	tokens: 150_800,
+	contextWindow: 200_000,
+	percent: 75.4
+};
+
+const sessionTokens: SessionTokenUsage = {
+	input: 1_200,
+	output: 200_000,
+	cacheRead: 0,
+	cacheWrite: 1_000_000,
+	total: 1_201_200
 };
 
 function props(overrides: Record<string, unknown> = {}) {
@@ -160,6 +174,14 @@ describe('ChatComposer', () => {
 		expect(getComputedStyle(statusContainer as HTMLElement).marginBottom).toBe('-32px');
 		expect(getComputedStyle(composerShell as HTMLElement).position).toBe('relative');
 		expect(getComputedStyle(composerShell as HTMLElement).zIndex).toBe('1');
+	});
+
+	it('passes session and context usage to the status indicator', async () => {
+		const screen = render(ChatComposer, props({ contextUsage, sessionTokens }));
+		const indicator = screen.container.querySelector('.usage-indicator');
+
+		expect(indicator?.textContent).toContain('Session token usage: 1,200 input tokens');
+		await expect.element(screen.getByText('75.4%/200k')).toBeVisible();
 	});
 
 	it('does not render the MCP status row when showStatusPanel is false', () => {

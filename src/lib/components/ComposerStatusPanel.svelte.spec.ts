@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import type { McpStatusSnapshot } from '$lib/contracts';
+import type { ContextUsageSnapshot, McpStatusSnapshot, SessionTokenUsage } from '$lib/contracts';
 import ComposerStatusPanel from './ComposerStatusPanel.svelte';
 
 const status: McpStatusSnapshot = {
@@ -32,7 +32,74 @@ const status: McpStatusSnapshot = {
 	disabledCount: 1
 };
 
+const contextUsage: ContextUsageSnapshot = {
+	tokens: 150_800,
+	contextWindow: 200_000,
+	percent: 75.4
+};
+
+const sessionTokens: SessionTokenUsage = {
+	input: 1_200,
+	output: 200_000,
+	cacheRead: 0,
+	cacheWrite: 1_000_000,
+	total: 1_201_200
+};
+
 describe('ComposerStatusPanel', () => {
+	it('renders Pi-style cumulative usage and context in the right-side project cluster', async () => {
+		const screen = render(ComposerStatusPanel, {
+			contextUsage,
+			sessionTokens,
+			projectName: 'Pi Squared'
+		});
+		const row = screen.container.querySelector('.mcp-status-row');
+		const indicator = screen.container.querySelector('.usage-indicator');
+		const projectCluster = screen.container.querySelector('.thread-project-cluster');
+
+		await expect.element(screen.getByText('↑1.2k')).toBeVisible();
+		await expect.element(screen.getByText('↓200k')).toBeVisible();
+		await expect.element(screen.getByText('W1.0m')).toBeVisible();
+		expect(indicator?.textContent).not.toContain('R0');
+		expect(indicator?.textContent).toContain(
+			'Session token usage: 1,200 input tokens, 200,000 output tokens, 1,000,000 cached tokens written. Context usage: 150,800 of 200,000 tokens (75.4 percent).'
+		);
+		await expect.element(screen.getByText('75.4%/200k')).toBeVisible();
+		expect(row?.lastElementChild).toBe(projectCluster);
+		expect(projectCluster?.textContent).toContain('Pi Squared');
+		expect(projectCluster?.querySelector('.usage-indicator')).toBe(indicator);
+		expect(getComputedStyle(projectCluster as HTMLElement).marginLeft).toBe('auto');
+		expect(row?.classList.contains('tone-muted')).toBe(true);
+	});
+
+	it('renders unknown context without a percentage when tokens or percent are unavailable', async () => {
+		const screen = render(ComposerStatusPanel, {
+			contextUsage: { tokens: null, contextWindow: 200_000, percent: null }
+		});
+
+		await expect.element(screen.getByText('?/200k')).toBeVisible();
+		expect(screen.container.querySelector('.usage-indicator')?.textContent).toContain(
+			'Context usage: unknown of 200,000 tokens.'
+		);
+	});
+
+	it('uses warning and danger tones above the context thresholds', async () => {
+		const screen = render(ComposerStatusPanel, {
+			contextUsage: { tokens: 140_200, contextWindow: 200_000, percent: 70.1 }
+		});
+
+		expect(
+			screen.container.querySelector('.context-usage')?.classList.contains('context-warning')
+		).toBe(true);
+		await screen.rerender({
+			contextUsage: { tokens: 180_200, contextWindow: 200_000, percent: 90.1 }
+		});
+		expect(
+			screen.container.querySelector('.context-usage')?.classList.contains('context-danger')
+		).toBe(true);
+		await expect.element(screen.getByText('90.1%/200k')).toBeVisible();
+	});
+
 	it('renders a noninteractive empty state when status is missing or has no servers', async () => {
 		const screen = render(ComposerStatusPanel, {
 			projectName: 'Pi Squared',

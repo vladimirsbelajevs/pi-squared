@@ -1,17 +1,38 @@
 <script lang="ts">
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fly } from 'svelte/transition';
-	import type { McpServerStatus, McpStatusSnapshot } from '$lib/contracts';
+	import type {
+		ContextUsageSnapshot,
+		McpServerStatus,
+		McpStatusSnapshot,
+		SessionTokenUsage
+	} from '$lib/contracts';
+
+	type UsageEntry = {
+		abbreviation: string;
+		label: string;
+		value: number;
+	};
 
 	type Props = {
 		status?: McpStatusSnapshot;
+		contextUsage?: ContextUsageSnapshot;
+		sessionTokens?: SessionTokenUsage;
 		disabled?: boolean;
 		onToggle?: (serverName: string, enabled: boolean) => Promise<void>;
 		projectName?: string;
 		projectCwd?: string;
 	};
 
-	let { status, disabled = false, onToggle, projectName, projectCwd }: Props = $props();
+	let {
+		status,
+		contextUsage,
+		sessionTokens,
+		disabled = false,
+		onToggle,
+		projectName,
+		projectCwd
+	}: Props = $props();
 
 	const panelId = $props.id();
 	const panelTitleId = `${panelId}-title`;
@@ -21,6 +42,42 @@
 	let toggleError = $state<string>();
 	let servers = $derived(status?.servers ?? []);
 	let enabledCount = $derived(servers.filter((server) => !server.disabled).length);
+	let usageEntries = $derived.by((): UsageEntry[] => {
+		if (!sessionTokens) return [];
+
+		return [
+			{ abbreviation: '↑', label: 'input tokens', value: sessionTokens.input },
+			{ abbreviation: '↓', label: 'output tokens', value: sessionTokens.output },
+			{ abbreviation: 'R', label: 'cached tokens read', value: sessionTokens.cacheRead },
+			{ abbreviation: 'W', label: 'cached tokens written', value: sessionTokens.cacheWrite }
+		].filter((entry) => entry.value !== 0);
+	});
+	let contextText = $derived(
+		contextUsage
+			? `${hasKnownContext(contextUsage) ? `${contextUsage.percent.toFixed(1)}%` : '?'}/${formatTokens(contextUsage.contextWindow)}`
+			: undefined
+	);
+	let contextTone = $derived(
+		hasKnownContext(contextUsage) && contextUsage.percent > 90
+			? 'context-danger'
+			: hasKnownContext(contextUsage) && contextUsage.percent > 70
+				? 'context-warning'
+				: 'context-normal'
+	);
+	let usageLabel = $derived.by(() => {
+		const usage = sessionTokens
+			? usageEntries.length
+				? `Session token usage: ${usageEntries.map((entry) => `${formatFullTokens(entry.value)} ${entry.label}`).join(', ')}.`
+				: 'Session token usage: no tokens used.'
+			: '';
+		const context = !contextUsage
+			? ''
+			: !hasKnownContext(contextUsage)
+				? `Context usage: unknown of ${formatFullTokens(contextUsage.contextWindow)} tokens.`
+				: `Context usage: ${formatFullTokens(contextUsage.tokens)} of ${formatFullTokens(contextUsage.contextWindow)} tokens (${contextUsage.percent.toFixed(1)} percent).`;
+
+		return [usage, context].filter(Boolean).join(' ');
+	});
 	let summaryTone = $derived(
 		status?.connectedCount && status.connectedCount > 0
 			? 'tone-connected'
@@ -47,6 +104,23 @@
 			case 'disabled':
 				return 'Disabled';
 		}
+	}
+
+	function hasKnownContext(
+		context: ContextUsageSnapshot | undefined
+	): context is ContextUsageSnapshot & { tokens: number; percent: number } {
+		return context?.tokens != null && context.percent != null;
+	}
+
+	function formatTokens(tokens: number): string {
+		if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}m`;
+		if (tokens >= 100_000) return `${Math.round(tokens / 1_000)}k`;
+		if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+		return `${tokens}`;
+	}
+
+	function formatFullTokens(tokens: number): string {
+		return new Intl.NumberFormat('en-US').format(tokens);
 	}
 
 	function isPending(serverName: string): boolean {
@@ -101,10 +175,30 @@
 			<span class="mcp-empty">MCP: No servers configured</span>
 		{/if}
 
-		{#if projectName}
-			<div class="thread-project" title={projectCwd}>
-				<span class="project-dot"></span>
-				<span class="project-name">{projectName}</span>
+		{#if usageLabel || projectName}
+			<div class="thread-project-cluster">
+				{#if usageLabel}
+					<div class="usage-indicator">
+						<span class="visually-hidden">{usageLabel}</span>
+						{#each usageEntries as entry (entry.abbreviation)}
+							<span class="token-usage" aria-hidden="true"
+								>{entry.abbreviation}{formatTokens(entry.value)}</span
+							>
+						{/each}
+						{#if contextText}
+							<span class={['context-usage', contextTone]} aria-hidden="true"
+								>{contextText}</span
+							>
+						{/if}
+					</div>
+				{/if}
+
+				{#if projectName}
+					<div class="thread-project" title={projectCwd}>
+						<span class="project-dot"></span>
+						<span class="project-name">{projectName}</span>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -166,6 +260,18 @@
 		width: 100%;
 	}
 
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+
 	.mcp-status-row {
 		display: flex;
 		align-items: center;
@@ -221,13 +327,45 @@
 		flex: none;
 	}
 
+	.usage-indicator {
+		display: flex;
+		align-items: center;
+		min-width: 0;
+		gap: 0.4rem;
+		color: var(--text-muted);
+		font-size: 0.68rem;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+
+	.thread-project-cluster {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		min-width: 0;
+		gap: 1rem;
+		margin-left: auto;
+	}
+
+	.token-usage,
+	.context-usage {
+		font-weight: 650;
+	}
+
+	.context-warning {
+		color: var(--warning);
+	}
+
+	.context-danger {
+		color: var(--danger);
+	}
+
 	.thread-project {
 		display: flex;
 		align-items: center;
 		min-width: 0;
 		max-width: min(65%, 32rem);
 		gap: 0.4rem;
-		margin-left: auto;
 		color: var(--text-muted);
 		font-size: 0.74rem;
 	}
@@ -403,10 +541,21 @@
 
 	@media (max-width: 500px) {
 		.mcp-status-row {
+			flex-wrap: wrap;
 			gap: 0.5rem;
 		}
 
+		.usage-indicator {
+			order: 3;
+			width: 100%;
+		}
+
+		.thread-project-cluster {
+			display: contents;
+		}
+
 		.thread-project {
+			margin-left: auto;
 			max-width: 55%;
 		}
 
