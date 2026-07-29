@@ -129,10 +129,6 @@
 
 					{#if tab.addingProject}
 						<div class="add-project-panel" transition:slide={{ duration: 240 }}>
-							<p>
-								Added projects are trusted local workspaces. Pi can read, edit, and run commands
-								there.
-							</p>
 							<form onsubmit={addProject}>
 								<label>
 									<span>Absolute directory</span>
@@ -288,7 +284,6 @@
 	.add-project-panel form {
 		display: grid;
 		gap: 0.8rem;
-		margin-top: 1rem;
 	}
 
 	.add-project-submit {
