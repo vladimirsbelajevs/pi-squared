@@ -1,6 +1,6 @@
 # Pi Squared
 
-Pi Squared is a local, tab-first web harness for the [Pi SDK](https://pi.dev/docs/latest/sdk).
+Pi Squared is a web UI using [Pi SDK](https://pi.dev/docs/latest/sdk).
 
 - Each chat tab owns an independent persistent Pi session.
 - Projects, models, and reasoning levels are selected when creating a new tab.
@@ -24,13 +24,6 @@ pi install npm:pi-mcp-adapter
 pi install npm:pi-web-access
 ```
 
-When Node is managed by `fnm`, run commands through it:
-
-```sh
-fnm exec --using 22.23.1 npm install
-fnm exec --using 22.23.1 npm run dev
-```
-
 Pi reads models and credentials from its standard locations, including `~/.pi/agent/auth.json` and `~/.pi/agent/models.json`. Configure a provider with Pi before starting a model-backed chat.
 
 ## Local Use
@@ -38,7 +31,7 @@ Pi reads models and credentials from its standard locations, including `~/.pi/ag
 Start the SvelteKit development server:
 
 ```sh
-fnm exec --using 22.23.1 npm run dev
+npm run dev
 ```
 
 Open the printed local URL. Add a project only from a new-chat tab, choose one of the authenticated models, select a reasoning level, and send an opening prompt.
@@ -79,9 +72,9 @@ Only add projects you trust. For untrusted repositories or remote deployment, ru
 ## Verification
 
 ```sh
-fnm exec --using 22.23.1 npm run check
-fnm exec --using 22.23.1 npm run lint
-fnm exec --using 22.23.1 npm run test:unit -- --run
-fnm exec --using 22.23.1 npm run test:e2e
-fnm exec --using 22.23.1 npm run build
+npm run check
+npm run lint
+npm run test:unit -- --run
+npm run test:e2e
+npm run build
 ```

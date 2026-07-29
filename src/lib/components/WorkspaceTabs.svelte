@@ -71,6 +71,7 @@
 		gap: 0.4rem;
 		min-width: 0;
 		overflow-x: auto;
+		overflow-y: hidden;
 		border-bottom: 1px solid var(--border);
 		background: var(--surface-muted);
 		padding: 0.4rem 0.55rem;
