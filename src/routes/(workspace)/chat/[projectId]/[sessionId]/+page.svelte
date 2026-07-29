@@ -130,21 +130,25 @@
 	}
 
 	.thread-project {
-		position: absolute;
+		position: sticky;
 		top: 1.25rem;
 		left: 1.25rem;
+		z-index: 1;
 		display: flex;
+		align-self: flex-start;
 		align-items: center;
+		flex: 0 0 0;
+		min-height: 0;
 		max-width: calc(100% - 2.5rem);
 		gap: 0.4rem;
 		color: var(--text-muted);
-		font-size: 0.7rem;
+		font-size: 1.5rem;
 	}
 
 	.project-dot {
 		flex-shrink: 0;
-		width: 0.42rem;
-		height: 0.42rem;
+		width: 0.5rem;
+		height: 0.5rem;
 		border-radius: 50%;
 		background: var(--success);
 	}
