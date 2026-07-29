@@ -253,7 +253,7 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 			text: 'Reading README.md'
 		}
 	});
-	await expect(page.getByText('1 tool running')).toBeVisible();
+	await expect(page.getByText('1 tool called')).toBeVisible();
 	await expectPinnedToBottom();
 	const scrollHeightBeforeApproval = await page.evaluate(
 		() => document.getElementById('workspace-content')?.scrollHeight

@@ -280,7 +280,7 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByText('Partial response.')).toBeVisible();
 		expect(screen.container.querySelector('.thinking')).toHaveTextContent('Partial reasoning.');
 		await expect.element(screen.getByText('1 tool called')).toBeVisible();
-		expect(screen.container.querySelectorAll('.message-entry-assistant')).toHaveLength(3);
+		expect(screen.container.querySelectorAll('.message-entry-assistant')).toHaveLength(2);
 		expect(screen.container.querySelector('.stopped-row')).toBeNull();
 		expect((screen.container.querySelector('details.tool-group') as HTMLDetailsElement).open).toBe(
 			false
@@ -306,12 +306,11 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		const liveTools = screen.container.querySelector('.live-tool-group');
+		const liveTools = screen.container.querySelector('details.tool-group');
 		const streamingMessage = screen.container.querySelector('article.streaming');
-		expect([...screen.container.querySelectorAll('.live-tool-group, article.streaming')]).toEqual([
-			liveTools,
-			streamingMessage
-		]);
+		expect([...screen.container.querySelectorAll('details.tool-group, article.streaming')]).toEqual(
+			[liveTools, streamingMessage]
+		);
 
 		await screen.rerender({
 			chat: chat({
@@ -345,9 +344,7 @@ describe('ChatTimeline', () => {
 		});
 
 		const persistedTools = screen.container.querySelector('details.tool-group');
-		expect(persistedTools?.closest('.message-entry')?.nextElementSibling?.textContent).toContain(
-			'Streaming response.'
-		);
+		expect(persistedTools?.nextElementSibling?.textContent).toContain('Streaming response.');
 	});
 
 	it('omits conversational headers while retaining their accessible group labels', async () => {
@@ -528,9 +525,9 @@ describe('ChatTimeline', () => {
 		const group = screen.container.querySelector('details.tool-group') as HTMLDetailsElement;
 
 		await expect.element(screen.getByText('2 tools called')).toBeVisible();
-		await expect.element(screen.getByText('1 failed')).toBeVisible();
 		expect(group.open).toBe(false);
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(0);
+		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
 
 		await screen.getByText('2 tools called').click();
 		await vi.waitFor(() => expect(group.open).toBe(true));
@@ -607,11 +604,104 @@ describe('ChatTimeline', () => {
 
 		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(1);
 		await expect.element(screen.getByText('3 tools called')).toBeVisible();
-		expect(screen.container.querySelector('.tool-group-status')).toHaveTextContent('completed');
+		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
 		await expect.element(screen.getByText('The project is ready to run.')).toBeVisible();
 	});
 
-	it('groups unmatched live tools and leaves unmatched historical results visible', async () => {
+	it('keeps tool batches separate across messages, notices, and stopped rows', async () => {
+		const base = chat();
+		const toolCall = (id: string): ChatItem => ({
+			id: `assistant-${id}`,
+			kind: 'message',
+			role: 'assistant',
+			text: '',
+			toolCalls: [{ id, name: 'read', arguments: '{}' }]
+		});
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						toolCall('tool-1'),
+						{
+							id: 'result-1',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'First result'
+						},
+						{ id: 'user-message', kind: 'message', role: 'user', text: 'Continue.' },
+						{ id: 'assistant-text', kind: 'message', role: 'assistant', text: 'Between calls.' },
+						toolCall('tool-2'),
+						{ id: 'notice', kind: 'notice', text: 'Persisted notice' },
+						toolCall('tool-3'),
+						{
+							id: 'assistant-aborted',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							stopReason: 'aborted'
+						},
+						toolCall('tool-4')
+					]
+				}
+			})
+		});
+
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(4);
+		await expect.element(screen.getByText('Persisted notice')).toBeVisible();
+		await expect.element(screen.getByText('Stopped')).toBeVisible();
+	});
+
+	it('upserts active streaming tools into the persisted standalone batch', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				streamText: 'Streaming response.',
+				streamTools: [
+					{ id: 'tool-1', name: 'read', text: 'Reading README.md' },
+					{ id: 'tool-2', name: 'bash', text: 'Running tests' }
+				],
+				snapshot: {
+					...base.snapshot!,
+					items: [
+						{
+							id: 'assistant-tools',
+							kind: 'message',
+							role: 'assistant',
+							text: 'I will inspect the project.',
+							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{"path":"README.md"}' }]
+						},
+						{
+							id: 'tool-result',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'README contents'
+						}
+					]
+				}
+			})
+		});
+		const group = screen.container.querySelector('details.tool-group') as HTMLDetailsElement;
+
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(1);
+		expect(group.closest('.message-assistant')).toBeNull();
+		await expect.element(screen.getByText('I will inspect the project.')).toBeVisible();
+		expect(group.nextElementSibling).toBe(screen.container.querySelector('article.streaming'));
+		await screen.getByText('2 tools called').click();
+		await vi.waitFor(() => expect(group.open).toBe(true));
+		expect(screen.container.querySelectorAll('.tool-detail > span')).toHaveLength(1);
+		const statuses = [
+			...screen.container.querySelectorAll<HTMLElement>('.tool-entry-heading span')
+		];
+		expect(statuses.map((status) => status.textContent?.trim())).toEqual(['completed', 'running']);
+		await screen.getByText('Result').last().click();
+		await expect.element(screen.getByText('Running tests')).toBeVisible();
+	});
+
+	it('renders live-only tools as a standalone row and leaves unmatched historical results visible', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
 			chat: chat({
@@ -635,7 +725,7 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		await expect.element(screen.getByText('2 tools running')).toBeVisible();
+		await expect.element(screen.getByText('2 tools called')).toBeVisible();
 		await expect.element(screen.getByText('Legacy result')).toBeVisible();
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(1);
 	});

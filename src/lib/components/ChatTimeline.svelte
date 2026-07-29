@@ -5,17 +5,17 @@
 	import { renderAssistantMarkdown } from '$lib/markdown';
 
 	type ToolView = {
-		call: ChatToolCall;
+		id: string;
+		name: string;
+		arguments?: string;
 		result?: ChatItem;
 		stream?: StreamingTool;
 	};
 
-	type TimelineEntry = {
-		item: ChatItem;
-		tools: ToolView[];
-		thinking?: string;
-		isStopped?: boolean;
-	};
+	type TimelineEntry =
+		| { id: string; kind: 'item'; item: ChatItem; thinking?: string }
+		| { id: string; kind: 'stopped' }
+		| { id: string; kind: 'tools'; tools: ToolView[]; thinking?: string };
 
 	type Props = { chat: ChatTab; showReasoning?: boolean };
 	let { chat, showReasoning = false }: Props = $props();
@@ -43,27 +43,39 @@
 		];
 		const calledIds = items.flatMap((item) => item.toolCalls?.map((tool) => tool.id) ?? []);
 		const timeline: TimelineEntry[] = [];
-		let activeToolEntry: TimelineEntry | undefined;
+		let activeToolEntry: Extract<TimelineEntry, { kind: 'tools' }> | undefined;
+		let currentToolEntry: Extract<TimelineEntry, { kind: 'tools' }> | undefined;
+
+		function appendThinking(entry: Extract<TimelineEntry, { kind: 'tools' }>, thinking: string) {
+			entry.thinking = [entry.thinking, thinking].filter(Boolean).join('\n\n');
+		}
+
+		function toolView(call: ChatToolCall): ToolView {
+			return {
+				id: call.id,
+				name: call.name,
+				arguments: call.arguments,
+				result: items.find(
+					(candidate) => candidate.role === 'tool' && candidate.toolCallId === call.id
+				),
+				stream: chat.streamTools.find((candidate) => candidate.id === call.id)
+			};
+		}
 
 		for (const item of items) {
 			if (item.role === 'tool' && item.toolCallId && calledIds.includes(item.toolCallId)) {
 				continue;
 			}
 
-			const tools = (item.toolCalls ?? []).map((call) => ({
-				call,
-				result: items.find(
-					(candidate) => candidate.role === 'tool' && candidate.toolCallId === call.id
-				),
-				stream: chat.streamTools.find((candidate) => candidate.id === call.id)
-			}));
+			const tools = (item.toolCalls ?? []).map(toolView);
 			const isEmptyAssistant =
 				item.role === 'assistant' && !item.text && !item.thinking && tools.length === 0;
 
 			if (isEmptyAssistant) {
 				if (item.stopReason === 'aborted') {
-					timeline.push({ item, tools, thinking: item.thinking, isStopped: true });
+					timeline.push({ id: `stopped-${item.id}`, kind: 'stopped' });
 					activeToolEntry = undefined;
+					currentToolEntry = undefined;
 				}
 				continue;
 			}
@@ -72,44 +84,70 @@
 
 			if (isToolOnlyAssistant && activeToolEntry) {
 				activeToolEntry.tools.push(...tools);
+				currentToolEntry = activeToolEntry;
 				if (item.thinking) {
-					activeToolEntry.thinking = [activeToolEntry.thinking, item.thinking]
-						.filter(Boolean)
-						.join('\n\n');
+					appendThinking(activeToolEntry, item.thinking);
 				}
 				continue;
 			}
 
-			const entry = { item, tools, thinking: item.thinking };
-			timeline.push(entry);
-			activeToolEntry = isToolOnlyAssistant ? entry : undefined;
+			if (isToolOnlyAssistant) {
+				const entry: Extract<TimelineEntry, { kind: 'tools' }> = {
+					id: `tools-${item.id}`,
+					kind: 'tools',
+					tools,
+					thinking: item.thinking
+				};
+				timeline.push(entry);
+				activeToolEntry = entry;
+				currentToolEntry = entry;
+				continue;
+			}
+
+			timeline.push({ id: item.id, kind: 'item', item, thinking: item.thinking });
+			activeToolEntry = undefined;
+			currentToolEntry = undefined;
+			if (tools.length) {
+				const entry: Extract<TimelineEntry, { kind: 'tools' }> = {
+					id: `tools-${item.id}`,
+					kind: 'tools',
+					tools
+				};
+				timeline.push(entry);
+				currentToolEntry = entry;
+			}
+		}
+
+		if (chat.streamTools.length) {
+			const entry =
+				currentToolEntry ??
+				({ id: 'tools-live', kind: 'tools', tools: [] } satisfies Extract<
+					TimelineEntry,
+					{ kind: 'tools' }
+				>);
+			if (!currentToolEntry) timeline.push(entry);
+
+			for (const stream of chat.streamTools) {
+				const existing = entry.tools.find((tool) => tool.id === stream.id);
+				if (existing) {
+					existing.stream = stream;
+				} else {
+					entry.tools.push({ id: stream.id, name: stream.name, stream });
+				}
+			}
 		}
 
 		return timeline;
 	});
-	let unmatchedStreamingTools = $derived(
-		chat.streamTools.filter(
-			(stream) => !timeline.some((entry) => entry.tools.some((tool) => tool.call.id === stream.id))
-		)
-	);
 
-	function toolCountLabel(count: number, action = 'called'): string {
-		return `${count} tool${count === 1 ? '' : 's'} ${action}`;
+	function toolCountLabel(count: number): string {
+		return `${count} tool${count === 1 ? '' : 's'} called`;
 	}
 
 	function toolStatus(tool: ToolView): 'pending' | 'running' | 'completed' | 'failed' {
 		if (tool.result) return tool.result.isError ? 'failed' : 'completed';
 		if (tool.stream?.isError) return 'failed';
 		return tool.stream ? 'running' : 'pending';
-	}
-
-	function toolGroupStatus(tools: ToolView[]): string {
-		const failed = tools.filter((tool) => toolStatus(tool) === 'failed').length;
-		if (failed) return `${failed} failed`;
-		const completed = tools.filter((tool) => toolStatus(tool) === 'completed').length;
-		if (completed === tools.length) return 'completed';
-		if (tools.some((tool) => toolStatus(tool) === 'running')) return 'running';
-		return `${completed}/${tools.length} complete`;
 	}
 
 	function formatTimestamp(timestamp: string | undefined): string | undefined {
@@ -155,13 +193,50 @@
 	<p class="copy-error" role="alert">{copyError}</p>
 {/if}
 
-{#each timeline as entry (entry.item.id)}
-	{@const item = entry.item}
-	{#if entry.isStopped}
+{#each timeline as entry (entry.id)}
+	{#if entry.kind === 'stopped'}
 		<p class="stopped-row" role="status">Stopped</p>
-	{:else if item.kind === 'notice'}
-		<p class="timeline-notice">{item.text}</p>
+	{:else if entry.kind === 'tools'}
+		<details
+			class={[
+				'tool-group',
+				entry.tools.some((tool) => toolStatus(tool) === 'failed') && 'tool-group-error'
+			]}
+		>
+			<summary class="tool-group-summary">{toolCountLabel(entry.tools.length)}</summary>
+			{#if showReasoning && entry.thinking}
+				<details class="thinking tool-thinking">
+					<summary>Reasoning</summary>
+					<pre>{entry.thinking}</pre>
+				</details>
+			{/if}
+			<div class="tool-list">
+				{#each entry.tools as tool (tool.id)}
+					<section class:tool-entry-error={toolStatus(tool) === 'failed'} class="tool-entry">
+						<div class="tool-entry-heading">
+							<strong>{tool.name}</strong>
+							<span>{toolStatus(tool)}</span>
+						</div>
+						{#if tool.arguments !== undefined}
+							<div class="tool-detail">
+								<span>Arguments</span>
+								<pre>{tool.arguments}</pre>
+							</div>
+						{/if}
+						{#if tool.result || tool.stream}
+							<details class="tool-detail tool-result">
+								<summary>Result</summary>
+								<pre>{tool.result?.text || tool.stream?.text || 'No output.'}</pre>
+							</details>
+						{/if}
+					</section>
+				{/each}
+			</div>
+		</details>
+	{:else if entry.item.kind === 'notice'}
+		<p class="timeline-notice">{entry.item.text}</p>
 	{:else}
+		{@const item = entry.item}
 		{@const role = item.role ?? 'assistant'}
 		{@const isConversational = role === 'user' || role === 'assistant'}
 		{@const timestamp = formatTimestamp(item.timestamp)}
@@ -192,37 +267,6 @@
 					{:else}
 						<pre class="message-text">{item.text}</pre>
 					{/if}
-				{/if}
-				{#if entry.tools.length}
-					<details
-						class:tool-group-error={entry.tools.some((tool) => toolStatus(tool) === 'failed')}
-						class="tool-group"
-					>
-						<summary class="tool-group-summary">
-							<span>{toolCountLabel(entry.tools.length)}</span>
-							<span class="tool-group-status">{toolGroupStatus(entry.tools)}</span>
-						</summary>
-						<div class="tool-list">
-							{#each entry.tools as tool (tool.call.id)}
-								<section class:tool-entry-error={toolStatus(tool) === 'failed'} class="tool-entry">
-									<div class="tool-entry-heading">
-										<strong>{tool.call.name}</strong>
-										<span>{toolStatus(tool)}</span>
-									</div>
-									<div class="tool-detail">
-										<span>Arguments</span>
-										<pre>{tool.call.arguments}</pre>
-									</div>
-									{#if tool.result || tool.stream}
-										<details class="tool-detail tool-result">
-											<summary>Result</summary>
-											<pre>{tool.result?.text || tool.stream?.text || 'No output.'}</pre>
-										</details>
-									{/if}
-								</section>
-							{/each}
-						</div>
-					</details>
 				{/if}
 			</article>
 			{#if item.role === 'user' || item.role === 'assistant'}
@@ -283,32 +327,6 @@
 		<span>Pi is thinking</span>
 		<span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
 	</div>
-{/if}
-
-{#if unmatchedStreamingTools.length}
-	<details
-		class:tool-group-error={unmatchedStreamingTools.some((tool) => tool.isError)}
-		class="tool-group live-tool-group streaming-tool"
-	>
-		<summary class="tool-group-summary">
-			<span>{toolCountLabel(unmatchedStreamingTools.length, 'running')}</span>
-			<span class="tool-group-status">running</span>
-		</summary>
-		<div class="tool-list">
-			{#each unmatchedStreamingTools as tool (tool.id)}
-				<section class:tool-entry-error={tool.isError} class="tool-entry">
-					<div class="tool-entry-heading">
-						<strong>{tool.name}</strong>
-						<span>{tool.isError ? 'failed' : 'running'}</span>
-					</div>
-					<details class="tool-detail tool-result">
-						<summary>Result</summary>
-						<pre>{tool.text || 'Waiting for output.'}</pre>
-					</details>
-				</section>
-			{/each}
-		</div>
-	</details>
 {/if}
 
 {#if (showReasoning && chat.streamThinking) || chat.streamText}
@@ -564,13 +582,11 @@
 		word-break: break-word;
 	}
 
-	.thinking,
-	.tool-group {
+	.thinking {
 		border-top: 1px solid var(--border);
 	}
 
-	.message-conversational > .thinking:first-child,
-	.message-conversational > .tool-group:first-child {
+	.message-conversational > .thinking:first-child {
 		border-top: 0;
 	}
 
@@ -583,6 +599,14 @@
 
 	.thinking pre {
 		color: var(--text-muted);
+	}
+
+	.tool-group {
+		max-width: 54rem;
+		margin: 0.25rem auto;
+		overflow: hidden;
+		border-radius: 0.55rem;
+		background: var(--surface-muted);
 	}
 
 	.tool-group-summary {
@@ -600,27 +624,7 @@
 		display: none;
 	}
 
-	.tool-group-summary::after {
-		content: '›';
-		color: var(--accent);
-		font-size: 1rem;
-		transition: transform 160ms ease;
-	}
-
-	.tool-group[open] > .tool-group-summary::after {
-		transform: rotate(90deg);
-	}
-
-	.tool-group-status {
-		margin-left: auto;
-		color: var(--accent);
-		font-size: 0.68rem;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-	}
-
-	.tool-group-error > .tool-group-summary,
-	.tool-group-error > .tool-group-summary .tool-group-status {
+	.tool-group-error > .tool-group-summary {
 		color: var(--danger);
 	}
 
@@ -698,14 +702,6 @@
 		transform: rotate(90deg);
 	}
 
-	.live-tool-group {
-		max-width: 54rem;
-		margin: 0 auto 1rem;
-		border: 1px solid var(--accent);
-		border-radius: 0.55rem;
-		background: var(--surface-muted);
-	}
-
 	.timeline-notice {
 		max-width: 54rem;
 		margin: 1rem auto;
@@ -764,10 +760,6 @@
 		border-color: var(--accent);
 	}
 
-	.streaming-tool {
-		border-style: dashed;
-	}
-
 	@keyframes thinking-dot {
 		50% {
 			opacity: 0.35;
@@ -783,7 +775,6 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.thinking-dots i,
-		.tool-group-summary::after,
 		.tool-result summary::before {
 			animation: none;
 			transition: none;
