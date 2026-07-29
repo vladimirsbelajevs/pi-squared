@@ -133,6 +133,69 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByText('GPT-5.6 Terra')).toBeVisible();
 	});
 
+	it('renders persisted assistant text as Markdown', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-markdown',
+							kind: 'message',
+							role: 'assistant',
+							text: '# Summary\n\n**Ready**\n\n- First\n- Second\n\n[Docs](https://example.test)'
+						}
+					]
+				}
+			})
+		});
+
+		const message = screen.container.querySelector('.message-markdown') as HTMLElement;
+		expect(message.querySelector('h1')).toHaveTextContent('Summary');
+		expect(message.querySelector('strong')).toHaveTextContent('Ready');
+		expect(message.querySelectorAll('li')).toHaveLength(2);
+		expect(message.querySelector('a')).toHaveAttribute('href', 'https://example.test');
+	});
+
+	it('renders streaming assistant text as Markdown', async () => {
+		const screen = render(ChatTimeline, {
+			chat: chat({ streamText: '## Streaming\n\n**Partial answer**' })
+		});
+
+		const message = screen.container.querySelector('.streaming .message-markdown') as HTMLElement;
+		expect(message.querySelector('h2')).toHaveTextContent('Streaming');
+		expect(message.querySelector('strong')).toHaveTextContent('Partial answer');
+	});
+
+	it('keeps user message text literal', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'user-literal',
+							kind: 'message',
+							role: 'user',
+							text: '<strong>Do not render</strong>\n# Not a heading'
+						}
+					]
+				}
+			})
+		});
+
+		const message = screen.container.querySelector('.message-user') as HTMLElement;
+		expect(message.querySelector('.message-text')?.textContent).toBe(
+			'<strong>Do not render</strong>\n# Not a heading'
+		);
+		expect(message.querySelector('strong')).toBeNull();
+		expect(message.querySelector('h1')).toBeNull();
+	});
+
 	it('groups tool calls with their results and keeps the group collapsed by default', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
