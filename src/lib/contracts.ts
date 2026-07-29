@@ -81,6 +81,7 @@ export interface ChatItem {
 	toolCalls?: ChatToolCall[];
 	toolCallId?: string;
 	isError?: boolean;
+	stopReason?: 'aborted';
 	label?: string;
 }
 

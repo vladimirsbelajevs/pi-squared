@@ -51,6 +51,27 @@ describe('mapSessionEntry', () => {
 		});
 	});
 
+	it('retains an aborted assistant stop reason', () => {
+		const entry = {
+			type: 'message',
+			id: 'entry-aborted',
+			parentId: null,
+			timestamp: '2026-07-29T00:00:00.000Z',
+			message: {
+				role: 'assistant',
+				content: [],
+				stopReason: 'aborted'
+			}
+		} as unknown as SessionEntry;
+
+		expect(mapSessionEntry(entry)).toMatchObject({
+			id: 'entry-aborted',
+			role: 'assistant',
+			text: '',
+			stopReason: 'aborted'
+		});
+	});
+
 	it('represents model changes as timeline notices', () => {
 		const entry = {
 			type: 'model_change',

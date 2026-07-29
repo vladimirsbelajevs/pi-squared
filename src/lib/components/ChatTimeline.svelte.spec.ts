@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import type { ChatItem } from '$lib/contracts';
 import type { ChatTab } from '$lib/harness/types';
 import ChatTimeline from './ChatTimeline.svelte';
 
@@ -194,6 +195,96 @@ describe('ChatTimeline', () => {
 		expect(message.querySelector('strong')).toHaveTextContent('Ready');
 		expect(message.querySelectorAll('li')).toHaveLength(2);
 		expect(message.querySelector('a')).toHaveAttribute('href', 'https://example.test');
+	});
+
+	it('omits ordinary empty assistant messages but renders empty aborted messages as stopped rows', async () => {
+		const base = chat();
+		const abortedItem: ChatItem = {
+			id: 'assistant-aborted',
+			kind: 'message',
+			role: 'assistant',
+			text: '',
+			stopReason: 'aborted'
+		};
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-empty',
+							kind: 'message',
+							role: 'assistant',
+							text: ''
+						},
+						abortedItem
+					]
+				}
+			})
+		});
+
+		await expect.element(screen.getByText('Stopped')).toBeVisible();
+		expect(screen.container.querySelectorAll('.stopped-row')).toHaveLength(1);
+		expect(screen.container.querySelectorAll('.message-entry-assistant')).toHaveLength(0);
+		expect(screen.container.querySelectorAll('.message-meta-row')).toHaveLength(0);
+	});
+
+	it('renders aborted assistant messages with text, reasoning, or tools normally', async () => {
+		const base = chat();
+		const abortedText: ChatItem = {
+			id: 'assistant-aborted-text',
+			kind: 'message',
+			role: 'assistant',
+			text: 'Partial response.',
+			stopReason: 'aborted'
+		};
+		const abortedReasoning: ChatItem = {
+			id: 'assistant-aborted-reasoning',
+			kind: 'message',
+			role: 'assistant',
+			text: '',
+			thinking: 'Partial reasoning.',
+			stopReason: 'aborted'
+		};
+		const abortedTools: ChatItem = {
+			id: 'assistant-aborted-tools',
+			kind: 'message',
+			role: 'assistant',
+			text: '',
+			toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{}' }],
+			stopReason: 'aborted'
+		};
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						abortedText,
+						abortedReasoning,
+						abortedTools,
+						{
+							id: 'tool-result',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'Partial tool output.'
+						}
+					]
+				}
+			}),
+			showReasoning: true
+		});
+
+		await expect.element(screen.getByText('Partial response.')).toBeVisible();
+		expect(screen.container.querySelector('.thinking')).toHaveTextContent('Partial reasoning.');
+		await expect.element(screen.getByText('1 tool called')).toBeVisible();
+		expect(screen.container.querySelectorAll('.message-entry-assistant')).toHaveLength(3);
+		expect(screen.container.querySelector('.stopped-row')).toBeNull();
+		expect((screen.container.querySelector('details.tool-group') as HTMLDetailsElement).open).toBe(
+			false
+		);
 	});
 
 	it('renders streaming assistant text as Markdown', async () => {

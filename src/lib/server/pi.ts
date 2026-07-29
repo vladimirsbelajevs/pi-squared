@@ -140,7 +140,8 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 							: undefined,
 				thinking: thinkingFromContent(message.content),
 				toolCalls: toolCallsFromContent(message.content),
-				isError: message.stopReason === 'error'
+				isError: message.stopReason === 'error',
+				...(message.stopReason === 'aborted' ? { stopReason: 'aborted' as const } : {})
 			};
 		}
 		if (role === 'toolResult') {

@@ -14,6 +14,7 @@
 		item: ChatItem;
 		tools: ToolView[];
 		thinking?: string;
+		isStopped?: boolean;
 	};
 
 	type Props = { chat: ChatTab; showReasoning?: boolean };
@@ -56,6 +57,17 @@
 				),
 				stream: chat.streamTools.find((candidate) => candidate.id === call.id)
 			}));
+			const isEmptyAssistant =
+				item.role === 'assistant' && !item.text && !item.thinking && tools.length === 0;
+
+			if (isEmptyAssistant) {
+				if (item.stopReason === 'aborted') {
+					timeline.push({ item, tools, thinking: item.thinking, isStopped: true });
+					activeToolEntry = undefined;
+				}
+				continue;
+			}
+
 			const isToolOnlyAssistant = item.role === 'assistant' && !item.text && tools.length > 0;
 
 			if (isToolOnlyAssistant && activeToolEntry) {
@@ -145,7 +157,9 @@
 
 {#each timeline as entry (entry.item.id)}
 	{@const item = entry.item}
-	{#if item.kind === 'notice'}
+	{#if entry.isStopped}
+		<p class="stopped-row" role="status">Stopped</p>
+	{:else if item.kind === 'notice'}
 		<p class="timeline-notice">{item.text}</p>
 	{:else}
 		{@const role = item.role ?? 'assistant'}
@@ -699,6 +713,14 @@
 		font-size: 0.78rem;
 		text-align: center;
 		white-space: pre-wrap;
+	}
+
+	.stopped-row {
+		max-width: 54rem;
+		margin: 0.25rem auto;
+		color: var(--danger);
+		font-size: 0.72rem;
+		text-align: center;
 	}
 
 	.thinking-indicator {
