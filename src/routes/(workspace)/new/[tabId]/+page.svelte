@@ -88,6 +88,7 @@
 						<label class="project-picker">
 							<span>Project</span>
 							<select
+								class="dropdown"
 								value={tab.draft.projectId}
 								onchange={(event) => workspace.selectNewTabProject(tab, event.currentTarget.value)}
 							>
@@ -241,19 +242,6 @@
 	.project-picker select {
 		width: auto;
 		max-width: 18rem;
-		border: 0;
-		border-radius: 0.35rem;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		padding: 0.35rem 1.7rem 0.35rem 0.5rem;
-		font-size: 0.72rem;
-		text-overflow: ellipsis;
-	}
-
-	.project-picker select:hover,
-	.project-picker select:focus {
-		background: var(--surface-strong);
-		color: var(--text);
 	}
 
 	.project-row.missing .project-picker select {

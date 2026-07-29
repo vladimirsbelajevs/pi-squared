@@ -557,6 +557,7 @@
 				<label class="composer-picker">
 					<span>Model</span>
 					<select
+						class="dropdown"
 						value={modelKey}
 						disabled={isStreaming || submitting || !models.length}
 						onchange={(event) => onModelChange(event.currentTarget.value)}
@@ -571,6 +572,7 @@
 				<label class="composer-picker">
 					<span>Reasoning</span>
 					<select
+						class="dropdown"
 						value={thinkingLevel}
 						disabled={isStreaming || submitting || selectedModel?.reasoning === false}
 						onchange={(event) => onThinkingChange(event.currentTarget.value as ThinkingLevel)}
@@ -584,7 +586,7 @@
 				{#if isStreaming}
 					<label class="composer-picker queue-picker">
 						<span>Queue</span>
-						<select value={queueMode} onchange={changeQueueMode}>
+						<select class="dropdown" value={queueMode} onchange={changeQueueMode}>
 							<option value="followUp">follow-up</option>
 							<option value="steer">steer</option>
 						</select>
@@ -895,19 +897,6 @@
 	.composer-picker select {
 		width: auto;
 		max-width: 15rem;
-		border: 0;
-		border-radius: 0.35rem;
-		background: var(--surface-muted);
-		color: var(--text-muted);
-		padding: 0.35rem 1.7rem 0.35rem 0.5rem;
-		font-size: 0.72rem;
-		text-overflow: ellipsis;
-	}
-
-	.composer-picker select:hover:not(:disabled),
-	.composer-picker select:focus {
-		background: var(--surface-strong);
-		color: var(--text);
 	}
 
 	.queue-picker select {

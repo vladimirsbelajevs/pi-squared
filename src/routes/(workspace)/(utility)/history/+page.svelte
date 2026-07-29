@@ -28,7 +28,7 @@
 
 <div class="history-controls">
 	<input bind:value={query} aria-label="Search historical sessions" placeholder="Search sessions" />
-	<select bind:value={projectId} aria-label="Filter sessions by project">
+	<select class="dropdown" bind:value={projectId} aria-label="Filter sessions by project">
 		<option value="">Any project</option>
 		{#each workspace.projects as project (project.id)}
 			<option value={project.id}>{project.name}</option>
