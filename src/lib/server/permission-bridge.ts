@@ -34,7 +34,11 @@ export class PermissionBridge {
 			setHeader: () => undefined,
 			setTitle: () => undefined,
 			custom: async () => {
-				throw new Error('Custom Pi extension dialogs are not supported by the browser harness.');
+				this.publish({
+					type: 'notice',
+					message: 'This extension dialog is only available in the Pi terminal UI.'
+				});
+				return undefined;
 			},
 			pasteToEditor: () => undefined,
 			setEditorText: () => undefined,

@@ -20,7 +20,7 @@ import {
 	resolveModel,
 	resolveSessionPath
 } from '$lib/server/pi';
-import type { AgentSession } from '@earendil-works/pi-coding-agent';
+import type { AgentSession, ExtensionUIContext } from '@earendil-works/pi-coding-agent';
 
 const IDLE_RUNTIME_MS = 30 * 60 * 1000;
 
@@ -39,12 +39,78 @@ const runtimes = new Map<string, RuntimeRecord>();
 const projectCommandCache = new Map<string, { expiresAt: number; commands: SlashCommand[] }>();
 const PROJECT_COMMAND_CACHE_MS = 30_000;
 
+type WebExtensionCommand = { text?: string; notice?: string };
+
 function messageFromError(error: unknown): string {
 	return error instanceof Error ? error.message : 'An unexpected server error occurred.';
 }
 
+/** Avoid terminal-only MCP panels while retaining useful text commands in the web UI. */
+export function resolveWebExtensionCommand(text: string): WebExtensionCommand {
+	const trimmed = text.trim();
+	if (!trimmed.startsWith('/mcp')) return { text };
+
+	const [command, subcommand] = trimmed.split(/\s+/, 2);
+	if (command === '/mcp') {
+		if (!subcommand || subcommand === 'status') {
+			return {
+				text: '/mcp tools',
+				notice: 'The interactive MCP panel is terminal-only. Showing discovered MCP tools instead.'
+			};
+		}
+		if (subcommand === 'setup') {
+			return {
+				notice: 'MCP setup is terminal-only. Edit the project .mcp.json, then reopen the chat.'
+			};
+		}
+		if (!['tools', 'prompts', 'reconnect', 'logout', 'disable', 'enable'].includes(subcommand)) {
+			return {
+				text: '/mcp tools',
+				notice: 'The interactive MCP panel is terminal-only. Showing discovered MCP tools instead.'
+			};
+		}
+	}
+	if (trimmed === '/mcp-auth') return { notice: 'Specify an MCP server: /mcp-auth <server>' };
+	return { text };
+}
+
 function publish(record: RuntimeRecord, event: RuntimeEvent): void {
 	eventBroker.publish(record.id, event);
+}
+
+/**
+ * Bind the SDK session like Pi's RPC mode so extensions receive session_start.
+ * The web harness has no session-tree UI, so extension requests to replace the
+ * current session are explicitly cancelled rather than silently doing nothing.
+ */
+export async function bindRuntimeExtensions(
+	session: AgentSession,
+	uiContext: ExtensionUIContext,
+	onError: (message: string) => void,
+	onShutdown: () => void
+): Promise<void> {
+	await session.bindExtensions({
+		uiContext,
+		mode: 'rpc',
+		commandContextActions: {
+			waitForIdle: () => session.waitForIdle(),
+			newSession: async () => ({ cancelled: true }),
+			fork: async () => ({ cancelled: true }),
+			navigateTree: async () => ({ cancelled: true }),
+			switchSession: async () => ({ cancelled: true }),
+			reload: () => session.reload()
+		},
+		shutdownHandler: onShutdown,
+		onError: (error) => onError(`Extension ${error.event} failed: ${error.error}`)
+	});
+}
+
+export async function shutdownRuntimeSession(session: AgentSession): Promise<void> {
+	try {
+		await session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' });
+	} finally {
+		session.dispose();
+	}
 }
 
 function publishSnapshot(record: RuntimeRecord): RuntimeSnapshot {
@@ -108,7 +174,12 @@ export async function createRuntime(input: {
 
 	const id = randomUUID();
 	const permissions = new PermissionBridge((event) => eventBroker.publish(id, event));
-	created.session.extensionRunner.setUIContext(permissions.extensionUI, 'rpc');
+	await bindRuntimeExtensions(
+		created.session,
+		permissions.extensionUI,
+		(message) => eventBroker.publish(id, { type: 'error', message }),
+		() => void disposeRuntime(id)
+	);
 	const record: RuntimeRecord = {
 		id,
 		project: await markProjectOpened(project.id),
@@ -157,6 +228,10 @@ export function promptRuntime(
 ): { queued: boolean } {
 	const record = getRecord(runtimeId);
 	if (!text.trim()) throw new Error('Messages cannot be empty.');
+	const resolved = resolveWebExtensionCommand(text);
+	if (resolved.notice) publish(record, { type: 'notice', message: resolved.notice });
+	if (!resolved.text) return { queued: false };
+	text = resolved.text;
 	const queued = record.promptActive || record.session.isStreaming;
 	record.promptActive = true;
 
@@ -208,7 +283,7 @@ export async function disposeRuntime(runtimeId: string): Promise<void> {
 	record.permissions.cancelAll();
 	if (record.session.isStreaming) await record.session.abort();
 	record.unsubscribe();
-	record.session.dispose();
+	await shutdownRuntimeSession(record.session);
 }
 
 export async function cleanupIdleRuntimes(): Promise<void> {

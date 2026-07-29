@@ -49,4 +49,17 @@ describe('PermissionBridge', () => {
 		bridge.respond({ requestId: request.request.id, cancelled: true });
 		await expect(selection).resolves.toBeUndefined();
 	});
+
+	it('reports unsupported custom dialogs without rejecting', async () => {
+		const events: RuntimeEvent[] = [];
+		const bridge = new PermissionBridge((event) => events.push(event));
+
+		await expect(bridge.extensionUI.custom(() => ({}) as never)).resolves.toBeUndefined();
+		expect(events).toEqual([
+			{
+				type: 'notice',
+				message: 'This extension dialog is only available in the Pi terminal UI.'
+			}
+		]);
+	});
 });
