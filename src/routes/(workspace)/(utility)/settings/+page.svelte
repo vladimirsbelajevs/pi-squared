@@ -1,13 +1,14 @@
 <script lang="ts">
+	import Switch from '$lib/components/Switch.svelte';
 	import { THEME_LABELS, workspace } from '$lib/harness/workspace.svelte';
 	import type { Theme } from '$lib/harness/types';
 
-	function handleShowReasoningChange(event: Event): void {
-		workspace.setShowReasoning((event.currentTarget as HTMLInputElement).checked);
+	function handleShowReasoningChange(checked: boolean): void {
+		workspace.setShowReasoning(checked);
 	}
 
-	function handleShowModelChangesChange(event: Event): void {
-		workspace.setShowModelChanges((event.currentTarget as HTMLInputElement).checked);
+	function handleShowModelChangesChange(checked: boolean): void {
+		workspace.setShowModelChanges(checked);
 	}
 </script>
 
@@ -31,24 +32,30 @@
 
 <section class="settings-card" aria-labelledby="chat-display-heading">
 	<h2 id="chat-display-heading">Chat display</h2>
-	<label class="display-preference">
-		<input type="checkbox" checked={workspace.showReasoning} onchange={handleShowReasoningChange} />
-		<span>
-			<strong>Show model reasoning</strong>
-			<small>Display-only; it does not alter model reasoning level.</small>
-		</span>
-	</label>
-	<label class="display-preference">
-		<input
-			type="checkbox"
-			checked={workspace.showModelChanges}
-			onchange={handleShowModelChangesChange}
-		/>
-		<span>
-			<strong>Display model changes in chat</strong>
-			<small>Show notices when the model or reasoning level changes.</small>
-		</span>
-	</label>
+	<div class="display-preferences">
+		<div class="display-preference">
+			<div class="display-copy">
+				<strong>Show model reasoning</strong>
+				<small>Display-only; it does not alter model reasoning level.</small>
+			</div>
+			<Switch
+				checked={workspace.showReasoning}
+				label="Show model reasoning"
+				onchange={handleShowReasoningChange}
+			/>
+		</div>
+		<div class="display-preference">
+			<div class="display-copy">
+				<strong>Display model changes in chat</strong>
+				<small>Show notices when the model or reasoning level changes.</small>
+			</div>
+			<Switch
+				checked={workspace.showModelChanges}
+				label="Display model changes in chat"
+				onchange={handleShowModelChangesChange}
+			/>
+		</div>
+	</div>
 </section>
 
 <style>
@@ -69,6 +76,10 @@
 		width: min(100%, 38rem);
 		gap: 1rem;
 		margin: 0 auto;
+	}
+
+	.settings-card + .settings-card {
+		padding-top: 2rem;
 	}
 
 	.settings-card h2 {
@@ -141,40 +152,26 @@
 		background: linear-gradient(135deg, #111 50%, #f6f3ec 50%);
 	}
 
+	.display-preferences {
+		display: grid;
+		gap: 1rem;
+	}
+
 	.display-preference {
 		display: flex;
-		align-items: flex-start;
-		gap: 0.65rem;
-		border: 1px solid var(--border);
-		border-radius: 0.4rem;
-		background: var(--surface-muted);
-		padding: 0.75rem;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
 		color: var(--text);
-		cursor: pointer;
 	}
 
-	.display-preference:hover {
-		border-color: var(--accent);
-	}
-
-	.display-preference input {
-		width: 1rem;
-		height: 1rem;
-		margin: 0.15rem 0 0;
-		accent-color: var(--accent);
-	}
-
-	.display-preference input:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 3px;
-	}
-
-	.display-preference span {
+	.display-copy {
 		display: grid;
 		gap: 0.2rem;
+		min-width: 0;
 	}
 
-	.display-preference small {
+	.display-copy small {
 		color: var(--text-muted);
 		font-size: 0.82rem;
 	}

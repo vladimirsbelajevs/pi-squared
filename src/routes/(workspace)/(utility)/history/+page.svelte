@@ -27,7 +27,12 @@
 <h1 class="visually-hidden">Sessions</h1>
 
 <div class="history-controls">
-	<input bind:value={query} aria-label="Search historical sessions" placeholder="Search sessions" />
+	<input
+		class="input"
+		bind:value={query}
+		aria-label="Search historical sessions"
+		placeholder="Search sessions"
+	/>
 	<select class="dropdown" bind:value={projectId} aria-label="Filter sessions by project">
 		<option value="">Any project</option>
 		{#each workspace.projects as project (project.id)}
@@ -71,6 +76,11 @@
 		grid-template-columns: minmax(0, 1fr) 12rem;
 		gap: 0.75rem;
 		margin: 0 0 1rem;
+	}
+
+	.history-controls .input,
+	.history-controls .dropdown {
+		height: 2.5rem;
 	}
 
 	.session-list {

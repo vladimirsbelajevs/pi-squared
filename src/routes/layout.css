@@ -279,12 +279,12 @@ textarea {
 	padding: 0.7rem 0.75rem;
 }
 
-.dropdown {
+.dropdown,
+.input {
 	border: 1px solid var(--border);
 	border-radius: 0.35rem;
 	background: var(--surface-muted);
 	color: var(--text-muted);
-	padding: 0.35rem 1.7rem 0.35rem 0.5rem;
 	font-size: 0.72rem;
 	text-overflow: ellipsis;
 	transition:
@@ -293,8 +293,18 @@ textarea {
 		color 180ms ease;
 }
 
+.dropdown {
+	padding: 0.35rem 1.7rem 0.35rem 0.5rem;
+}
+
+.input {
+	padding: 0.35rem 0.5rem;
+}
+
 .dropdown:hover:not(:disabled),
-.dropdown:focus {
+.dropdown:focus,
+.input:hover:not(:disabled),
+.input:focus {
 	border-color: var(--border-strong);
 	background: var(--surface-strong);
 	color: var(--text);
