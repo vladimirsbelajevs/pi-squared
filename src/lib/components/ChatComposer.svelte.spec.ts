@@ -102,9 +102,33 @@ describe('ChatComposer', () => {
 		);
 		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
 
-		await screen.getByRole('button', { name: 'Clear all notices' }).click();
+		screen.getByRole('button', { name: 'Clear all notices' }).element().click();
 		expect(onClearTransientNotices).toHaveBeenCalledOnce();
 		await expect.element(textbox).toHaveFocus();
+	});
+
+	it('floats transient notices above the composer grid without adding a grid row', async () => {
+		const screen = render(
+			ChatComposer,
+			props({
+				showStatusPanel: false,
+				transientNotices: [{ id: 'notice-1', message: 'Language server status: Indexing' }]
+			})
+		);
+		const stack = screen.container.querySelector<HTMLElement>('.composer-stack');
+		const popup = screen.getByRole('status', { name: 'Session notices' }).element();
+		const composerShell = screen.container.querySelector<HTMLElement>('.composer-shell');
+
+		expect(stack).not.toBeNull();
+		expect(composerShell).not.toBeNull();
+		expect(popup.parentElement).toBe(stack);
+		expect(getComputedStyle(popup).position).toBe('absolute');
+		expect(getComputedStyle(popup).left).toBe('0px');
+		expect(getComputedStyle(popup).right).toBe('0px');
+		expect(getComputedStyle(popup).zIndex).toBe('4');
+		expect(stack?.getBoundingClientRect().height).toBe(
+			composerShell?.getBoundingClientRect().height
+		);
 	});
 
 	it('renders the MCP status row by default and enables controls when status is available', async () => {

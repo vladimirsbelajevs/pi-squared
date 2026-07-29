@@ -615,7 +615,13 @@
 	}
 
 	.composer-stack :global(.transient-notice-popup) {
-		margin-bottom: 0;
+		position: absolute;
+		z-index: 4;
+		right: 0;
+		bottom: calc(100% + 0.5rem);
+		left: 0;
+		width: auto;
+		margin: 0;
 	}
 
 	.composer-stack > :global(.mcp-status) {
