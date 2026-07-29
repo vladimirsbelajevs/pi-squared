@@ -10,7 +10,19 @@ Pi Squared is a local, tab-first web harness for the [Pi SDK](https://pi.dev/doc
 ## Requirements
 
 - Node.js `>=22.19.0`
+- Pi CLI harness installed
 - Pi provider credentials configured for the local user
+
+You must have those extensions for PI installed:
+
+```sh
+pi install npm:@gotgenes/pi-permission-system
+pi install npm:pi-subagents
+pi install npm:@narumitw/pi-plan-mode
+pi install npm:@narumitw/pi-lsp
+pi install npm:pi-mcp-adapter
+pi install npm:pi-web-access
+```
 
 When Node is managed by `fnm`, run commands through it:
 
