@@ -4,6 +4,7 @@ import type {
 	PermissionResponse,
 	Project,
 	ProjectFileSuggestion,
+	PromptRuntimeResult,
 	RuntimeSnapshot,
 	SlashCommand,
 	StreamEnvelope,
@@ -97,7 +98,7 @@ export function disposeRuntime(runtimeId: string): Promise<void> {
 export function promptRuntime(
 	runtimeId: string,
 	input: { text: string; streamingBehavior: 'steer' | 'followUp' }
-): Promise<{ queued: boolean }> {
+): Promise<PromptRuntimeResult> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/prompt`, {
 		method: 'POST',
 		body: JSON.stringify(input)

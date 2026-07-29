@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest';
-import { userEvent } from 'vitest/browser';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { ChatTab } from '$lib/harness/types';
 import ChatTimeline from './ChatTimeline.svelte';
@@ -34,6 +33,7 @@ function chat(overrides: Partial<ChatTab> = {}): ChatTab {
 		streamTools: [],
 		transientNotices: [],
 		permissionRequests: [],
+		pendingUserMessages: [],
 		...overrides
 	};
 }
@@ -43,6 +43,44 @@ describe('ChatTimeline', () => {
 		const screen = render(ChatTimeline, { chat: chat() });
 
 		await expect.element(screen.getByRole('status')).toHaveTextContent('Pi is thinking');
+	});
+
+	it('renders pending user messages immediately and replaces them with their authoritative entry', async () => {
+		const base = chat();
+		const pendingMessage = {
+			id: 'pending-user-1',
+			text: 'Send this before Pi persists it.',
+			timestamp: '2026-07-29T12:00:00.000Z',
+			knownUserItemIds: []
+		};
+		const screen = render(ChatTimeline, {
+			chat: chat({ pendingUserMessages: [pendingMessage] })
+		});
+
+		await expect.element(screen.getByText(pendingMessage.text)).toBeVisible();
+		expect(screen.container.querySelectorAll('.message-entry-user')).toHaveLength(1);
+
+		await screen.rerender({
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'authoritative-user-1',
+							kind: 'message',
+							role: 'user',
+							text: pendingMessage.text,
+							timestamp: pendingMessage.timestamp
+						}
+					]
+				},
+				pendingUserMessages: []
+			})
+		});
+
+		expect(screen.container.querySelectorAll('.message-entry-user')).toHaveLength(1);
+		await expect.element(screen.getByText(pendingMessage.text)).toBeVisible();
 	});
 
 	it('hides the thinking status once text, tools, or approval is visible', async () => {
@@ -121,15 +159,14 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		const messages = screen.container.querySelectorAll('.message-entry');
 		expect(screen.container.querySelectorAll('.message-meta-row')).toHaveLength(2);
 		expect(screen.container.querySelectorAll('.message-meta-content')).toHaveLength(0);
 
-		await userEvent.hover(messages[0] as HTMLElement);
+		await screen.getByRole('group', { name: 'user message' }).hover();
 		await expect.element(screen.getByRole('button', { name: 'Copy message' })).toBeVisible();
 		expect(screen.container.querySelectorAll('.message-meta-content time')).toHaveLength(1);
 
-		await userEvent.hover(messages[1] as HTMLElement);
+		await screen.getByRole('group', { name: 'assistant message' }).hover();
 		await expect.element(screen.getByText('GPT-5.6 Terra')).toBeVisible();
 	});
 
@@ -352,16 +389,17 @@ describe('ChatTimeline', () => {
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(0);
 
 		await screen.getByText('2 tools called').click();
+		await vi.waitFor(() => expect(group.open).toBe(true));
 		expect(group.open).toBe(true);
 		const result = screen.container.querySelector('.tool-result') as HTMLDetailsElement;
 		const results = screen.container.querySelectorAll('.tool-result');
 		expect(result.open).toBe(false);
 		expect((results[1] as HTMLDetailsElement).open).toBe(false);
 		await screen.getByText('Result').first().click();
+		await vi.waitFor(() => expect(result.open).toBe(true));
 		expect(result.open).toBe(true);
 		expect((results[1] as HTMLDetailsElement).open).toBe(false);
 		await expect.element(screen.getByText('README contents')).toBeVisible();
-		await userEvent.hover(screen.container.querySelector('.message-entry') as HTMLElement);
 		expect(screen.container.querySelectorAll('.copy-action')).toHaveLength(0);
 	});
 

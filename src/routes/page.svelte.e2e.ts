@@ -187,7 +187,7 @@ test('starting a chat does not recreate its draft tab', async ({ page }) => {
 		await route.fulfill({ json: { snapshot } });
 	});
 	await page.route('**/api/runtimes/runtime-1/prompt', (route) =>
-		route.fulfill({ json: { queued: true } })
+		route.fulfill({ json: { queued: true, userMessageText: 'Start this chat' } })
 	);
 
 	await page.goto('/new/draft-tab');
@@ -196,6 +196,7 @@ test('starting a chat does not recreate its draft tab', async ({ page }) => {
 	await message.press('Enter');
 
 	await expect(page).toHaveURL(/\/chat\/project-1\/session-1$/);
+	await expect(page.getByText('Start this chat')).toBeVisible();
 	await expect(page.getByText('MCP: No servers configured')).toBeVisible();
 	await expect(page.getByRole('tab', { name: 'New chat' })).toHaveCount(1);
 });

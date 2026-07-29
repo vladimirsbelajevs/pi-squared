@@ -22,6 +22,7 @@ import {
 	setRuntimeModel,
 	setRuntimeThinking
 } from '$lib/harness/api';
+import { reconcilePendingUserMessages } from '$lib/harness/pending-user-messages';
 import {
 	modelKey,
 	type ChatTab,
@@ -286,7 +287,8 @@ export class HarnessWorkspace {
 				streamThinking: '',
 				streamTools: [],
 				transientNotices: [],
-				permissionRequests: []
+				permissionRequests: [],
+				pendingUserMessages: []
 			} satisfies ChatTab);
 		if (!existing) {
 			this.tabs.push(chat);
@@ -312,8 +314,22 @@ export class HarnessWorkspace {
 		const message = text.trim();
 		if (!message || !chat.runtimeId) return false;
 		chat.error = '';
+		const knownUserItemIds = this.#userItemIds(chat.snapshot);
 		try {
-			await promptRuntime(chat.runtimeId, { text: message, streamingBehavior: chat.queueMode });
+			const result = await promptRuntime(chat.runtimeId, {
+				text: message,
+				streamingBehavior: chat.queueMode
+			});
+			if (result.userMessageText !== undefined) {
+				chat.pendingUserMessages.push({
+					id: `pending-${randomId()}`,
+					text: result.userMessageText,
+					timestamp: new Date().toISOString(),
+					knownUserItemIds
+				});
+				// An entry can arrive over SSE before the prompt response does.
+				this.#reconcilePendingUserMessages(chat);
+			}
 			this.persist();
 			return true;
 		} catch (error) {
@@ -595,6 +611,7 @@ export class HarnessWorkspace {
 
 	#applySnapshot(chat: ChatTab, snapshot: RuntimeSnapshot): void {
 		chat.snapshot = snapshot;
+		this.#reconcilePendingUserMessages(chat);
 		chat.runtimeId = snapshot.runtimeId;
 		chat.title = this.#chatTitle(snapshot);
 		chat.hydrating = false;
@@ -619,8 +636,21 @@ export class HarnessWorkspace {
 			streamThinking: '',
 			streamTools: [],
 			transientNotices: [],
-			permissionRequests: []
+			permissionRequests: [],
+			pendingUserMessages: []
 		};
+	}
+
+	#userItemIds(snapshot: RuntimeSnapshot | undefined): string[] {
+		return snapshot?.items.filter((item) => item.role === 'user').map((item) => item.id) ?? [];
+	}
+
+	#reconcilePendingUserMessages(chat: ChatTab): void {
+		if (!chat.snapshot || !chat.pendingUserMessages.length) return;
+		chat.pendingUserMessages = reconcilePendingUserMessages(
+			chat.pendingUserMessages,
+			chat.snapshot.items
+		);
 	}
 
 	#chatTitle(snapshot: RuntimeSnapshot): string {
@@ -792,7 +822,8 @@ export class HarnessWorkspace {
 			streamThinking: '',
 			streamTools: [],
 			transientNotices: [],
-			permissionRequests: []
+			permissionRequests: [],
+			pendingUserMessages: []
 		};
 	}
 

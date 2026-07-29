@@ -55,6 +55,16 @@ export interface PendingPermission extends PermissionRequest {
 	error?: string;
 }
 
+/** A submitted user message that has not appeared in an authoritative runtime snapshot yet. */
+export interface PendingUserMessage {
+	/** UI-only ID, kept separate from Pi's authoritative entry IDs. */
+	id: string;
+	text: string;
+	timestamp: string;
+	/** User entry IDs already observed when this prompt was submitted. */
+	knownUserItemIds: string[];
+}
+
 export interface ChatTab {
 	id: string;
 	kind: 'chat';
@@ -71,6 +81,8 @@ export interface ChatTab {
 	streamTools: StreamingTool[];
 	transientNotices: TransientNotice[];
 	permissionRequests: PendingPermission[];
+	/** Runtime-only optimistic messages. Never persisted in StoredWorkspaceV1. */
+	pendingUserMessages: PendingUserMessage[];
 	error?: string;
 }
 

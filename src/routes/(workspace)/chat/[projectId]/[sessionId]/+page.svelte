@@ -58,7 +58,11 @@
 	<section class="chat-view" role="tabpanel">
 		<div
 			class="chat-scroll"
-			{@attach scrollForNewContent(chat.id, chat.snapshot.items.length, chat.snapshot.isStreaming)}
+			{@attach scrollForNewContent(
+				chat.id,
+				chat.snapshot.items.length + chat.pendingUserMessages.length,
+				chat.snapshot.isStreaming
+			)}
 		>
 			<ChatTimeline {chat} showReasoning={workspace.showReasoning} />
 		</div>

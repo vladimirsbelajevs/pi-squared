@@ -97,6 +97,13 @@ export interface RuntimeSnapshot {
 	modelFallbackMessage?: string;
 }
 
+/** Result returned after a prompt has been accepted by a runtime. */
+export interface PromptRuntimeResult {
+	queued: boolean;
+	/** The effective text submitted to Pi, omitted when a command needs no prompt. */
+	userMessageText?: string;
+}
+
 export interface PermissionRequest {
 	id: string;
 	method: 'select' | 'confirm' | 'input';

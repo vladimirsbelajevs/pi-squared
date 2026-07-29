@@ -30,7 +30,16 @@
 			chat.permissionRequests.length === 0
 	);
 	let timeline = $derived.by(() => {
-		const items = chat.snapshot?.items ?? [];
+		const items: ChatItem[] = [
+			...(chat.snapshot?.items ?? []),
+			...chat.pendingUserMessages.map((message) => ({
+				id: message.id,
+				kind: 'message' as const,
+				role: 'user' as const,
+				text: message.text,
+				timestamp: message.timestamp
+			}))
+		];
 		const calledIds = items.flatMap((item) => item.toolCalls?.map((tool) => tool.id) ?? []);
 		const timeline: TimelineEntry[] = [];
 		let activeToolEntry: TimelineEntry | undefined;

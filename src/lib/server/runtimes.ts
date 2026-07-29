@@ -3,6 +3,7 @@ import type {
 	ModelOption,
 	McpStatusSnapshot,
 	PermissionResponse,
+	PromptRuntimeResult,
 	Project,
 	RuntimeEvent,
 	RuntimeSnapshot,
@@ -276,7 +277,7 @@ export function promptRuntime(
 	runtimeId: string,
 	text: string,
 	streamingBehavior?: 'steer' | 'followUp'
-): { queued: boolean } {
+): PromptRuntimeResult {
 	const record = getRecord(runtimeId);
 	if (!text.trim()) throw new Error('Messages cannot be empty.');
 	if (record.mcpToggle) throw new Error('Wait for the MCP server change to finish.');
@@ -296,7 +297,7 @@ export function promptRuntime(
 			publishSnapshot(record);
 		});
 
-	return { queued };
+	return { queued, userMessageText: text };
 }
 
 export async function setRuntimeModel(
