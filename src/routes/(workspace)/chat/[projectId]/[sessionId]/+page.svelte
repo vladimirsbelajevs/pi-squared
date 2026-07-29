@@ -56,6 +56,11 @@
 	</section>
 {:else}
 	<section class="chat-view" role="tabpanel">
+		<div class="thread-project" title={chat.snapshot.project.cwd}>
+			<span class="project-dot"></span>
+			<span class="project-name">{chat.snapshot.project.name}</span>
+		</div>
+
 		<div
 			class="chat-scroll"
 			{@attach scrollForNewContent(chat.id, chat.snapshot.items.length, chat.snapshot.isStreaming)}
@@ -72,9 +77,6 @@
 					onCancel={(request) => workspace.cancelPermission(chat, request)}
 				/>
 			{/each}
-			<div class="thread-project" title={chat.snapshot.project.cwd}>
-				<span class="project-dot"></span>{chat.snapshot.project.name}
-			</div>
 			<ChatComposer
 				bind:draft={chat.draft}
 				projectId={chat.snapshot.project.id}
@@ -106,6 +108,7 @@
 
 <style>
 	.chat-view {
+		position: relative;
 		display: flex;
 		min-height: 100%;
 		flex-direction: column;
@@ -127,20 +130,29 @@
 	}
 
 	.thread-project {
+		position: absolute;
+		top: 1.25rem;
+		left: 1.25rem;
 		display: flex;
 		align-items: center;
-		max-width: 54rem;
+		max-width: calc(100% - 2.5rem);
 		gap: 0.4rem;
-		margin: 0 auto 0.45rem;
 		color: var(--text-muted);
 		font-size: 0.7rem;
 	}
 
 	.project-dot {
+		flex-shrink: 0;
 		width: 0.42rem;
 		height: 0.42rem;
 		border-radius: 50%;
 		background: var(--success);
+	}
+
+	.project-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.route-state {
@@ -161,6 +173,12 @@
 	@media (max-width: 700px) {
 		.thread-composer-dock {
 			padding-inline: 0.75rem;
+		}
+
+		.thread-project {
+			top: 0.75rem;
+			left: 0.75rem;
+			max-width: calc(100% - 1.5rem);
 		}
 	}
 </style>
