@@ -156,6 +156,145 @@ test('restores each tab scroll position without animating to the bottom', async 
 		.toBe(180);
 });
 
+test('keeps a bottom-pinned chat stable while response content streams', async ({ page }) => {
+	const project = {
+		id: 'project-1',
+		name: 'Test project',
+		cwd: '/tmp/test-project',
+		addedAt: '2026-01-01T00:00:00.000Z',
+		lastOpenedAt: '2026-01-01T00:00:00.000Z'
+	};
+	const model = { provider: 'test', id: 'model-1', name: 'Test model', reasoning: true };
+	const snapshot = {
+		runtimeId: 'runtime-1',
+		project,
+		sessionId: 'session-1',
+		model,
+		thinkingLevel: 'medium',
+		isStreaming: true,
+		items: []
+	};
+
+	await page.addInitScript(() => {
+		class MockEventSource {
+			onmessage: ((event: MessageEvent<string>) => void) | null = null;
+
+			constructor() {
+				(window as typeof window & { activeEventSource?: MockEventSource }).activeEventSource =
+					this;
+			}
+
+			close(): void {}
+		}
+
+		Object.defineProperty(window, 'EventSource', { configurable: true, value: MockEventSource });
+	});
+	await page.addInitScript(() => localStorage.clear());
+	await page.route('**/api/projects', (route) => route.fulfill({ json: { projects: [project] } }));
+	await page.route('**/api/models', (route) => route.fulfill({ json: { models: [model] } }));
+	await page.route('**/api/sessions', (route) => route.fulfill({ json: { sessions: [] } }));
+	await page.route('**/api/runtimes', async (route) => {
+		if (route.request().method() !== 'POST') return route.fallback();
+		await route.fulfill({ json: { snapshot } });
+	});
+
+	await page.goto('/chat/project-1/session-1');
+	await expect(page.getByRole('textbox', { name: 'Message Pi' })).toBeVisible();
+	await page.evaluate(() => {
+		const container = document.getElementById('workspace-content');
+		if (!container) throw new Error('Workspace scroll container is missing.');
+		container.style.paddingBottom = '1200px';
+		container.scrollTop = container.scrollHeight;
+	});
+
+	async function emit(event: unknown): Promise<void> {
+		await page.evaluate((event) => {
+			const source = (
+				window as typeof window & {
+					activeEventSource?: { onmessage: ((event: MessageEvent<string>) => void) | null };
+				}
+			).activeEventSource;
+			source?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(event) }));
+		}, event);
+	}
+
+	async function expectPinnedToBottom(): Promise<void> {
+		await expect
+			.poll(() =>
+				page.evaluate(() => {
+					const container = document.getElementById('workspace-content');
+					return (
+						!!container &&
+						container.scrollHeight - container.scrollTop - container.clientHeight <= 1
+					);
+				})
+			)
+			.toBe(true);
+	}
+
+	await emit({
+		id: 1,
+		runtimeId: 'runtime-1',
+		event: {
+			type: 'assistant_delta',
+			text: Array.from({ length: 40 }, (_, index) => `Streaming line ${index + 1}.`).join('\n\n')
+		}
+	});
+	await expect(page.getByText('Streaming line 1.')).toBeVisible();
+	await expectPinnedToBottom();
+
+	await emit({
+		id: 2,
+		runtimeId: 'runtime-1',
+		event: {
+			type: 'tool_update',
+			toolCallId: 'tool-1',
+			toolName: 'read',
+			text: 'Reading README.md'
+		}
+	});
+	await expect(page.getByText('1 tool running')).toBeVisible();
+	await expectPinnedToBottom();
+	const scrollHeightBeforeApproval = await page.evaluate(
+		() => document.getElementById('workspace-content')?.scrollHeight
+	);
+	await emit({
+		id: 3,
+		runtimeId: 'runtime-1',
+		event: {
+			type: 'permission_request',
+			request: { id: 'permission-1', method: 'confirm', title: 'Approve the file change?' }
+		}
+	});
+	const approval = page.getByRole('alert');
+	await expect(approval).toBeVisible();
+	await expect(approval).toContainText('Approve the file change?');
+	expect(
+		await approval.evaluate((node) => getComputedStyle(node.parentElement as HTMLElement).position)
+	).toBe('absolute');
+	await expect
+		.poll(() => page.evaluate(() => document.getElementById('workspace-content')?.scrollHeight))
+		.toBe(scrollHeightBeforeApproval);
+
+	await page.evaluate(() => {
+		const container = document.getElementById('workspace-content');
+		if (!container) throw new Error('Workspace scroll container is missing.');
+		container.scrollTop = 0;
+	});
+	await emit({
+		id: 4,
+		runtimeId: 'runtime-1',
+		event: {
+			type: 'assistant_delta',
+			text: Array.from({ length: 40 }, (_, index) => `Additional line ${index + 1}.`).join('\n\n')
+		}
+	});
+	await expect(page.getByText('Additional line 1.')).toBeVisible();
+	await expect
+		.poll(() => page.evaluate(() => document.getElementById('workspace-content')?.scrollTop))
+		.toBe(0);
+});
+
 test('starting a chat does not recreate its draft tab', async ({ page }) => {
 	const project = {
 		id: 'project-1',

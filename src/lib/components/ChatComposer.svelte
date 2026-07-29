@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import {
 		THINKING_LEVELS,
@@ -40,6 +40,7 @@
 		error?: string;
 		transientNotices?: TransientNotice[];
 		onClearTransientNotices?: () => void;
+		overlay?: Snippet;
 		mcpStatus?: McpStatusSnapshot;
 		onMcpToggle?: (serverName: string, enabled: boolean) => Promise<void>;
 		projectName?: string;
@@ -67,6 +68,7 @@
 		error,
 		transientNotices = [],
 		onClearTransientNotices,
+		overlay,
 		mcpStatus,
 		onMcpToggle,
 		projectName,
@@ -421,8 +423,13 @@
 <form class="chat-composer" aria-busy={submitting} onsubmit={submitMessage}>
 	<label class="visually-hidden" for={inputId}>Message Pi</label>
 	<div class="composer-stack">
-		{#if transientNotices.length}
-			<TransientNoticePopup notices={transientNotices} onClear={clearTransientNotices} />
+		{#if transientNotices.length || overlay}
+			<div class="composer-popups">
+				{#if transientNotices.length}
+					<TransientNoticePopup notices={transientNotices} onClear={clearTransientNotices} />
+				{/if}
+				{@render overlay?.()}
+			</div>
 		{/if}
 		{#if showStatusPanel}
 			<ComposerStatusPanel
@@ -614,13 +621,20 @@
 		gap: 1rem;
 	}
 
-	.composer-stack :global(.transient-notice-popup) {
+	.composer-popups {
 		position: absolute;
 		z-index: 4;
 		right: 0;
 		bottom: calc(100% + 0.5rem);
 		left: 0;
-		width: auto;
+		display: grid;
+		max-height: min(28rem, 45dvh);
+		gap: 0.5rem;
+		overflow-y: auto;
+	}
+
+	.composer-popups :global(.transient-notice-popup),
+	.composer-popups :global(.permission-request) {
 		margin: 0;
 	}
 
@@ -906,6 +920,10 @@
 	}
 
 	@media (max-width: 700px) {
+		.composer-popups {
+			max-height: min(22rem, 38dvh);
+		}
+
 		.autocomplete-menu {
 			left: 0;
 			width: 100%;

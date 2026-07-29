@@ -116,16 +116,18 @@ describe('ChatComposer', () => {
 			})
 		);
 		const stack = screen.container.querySelector<HTMLElement>('.composer-stack');
+		const popups = screen.container.querySelector<HTMLElement>('.composer-popups');
 		const popup = screen.getByRole('status', { name: 'Session notices' }).element();
 		const composerShell = screen.container.querySelector<HTMLElement>('.composer-shell');
 
 		expect(stack).not.toBeNull();
+		expect(popups).not.toBeNull();
 		expect(composerShell).not.toBeNull();
-		expect(popup.parentElement).toBe(stack);
-		expect(getComputedStyle(popup).position).toBe('absolute');
-		expect(getComputedStyle(popup).left).toBe('0px');
-		expect(getComputedStyle(popup).right).toBe('0px');
-		expect(getComputedStyle(popup).zIndex).toBe('4');
+		expect(popup.parentElement).toBe(popups);
+		expect(getComputedStyle(popups as HTMLElement).position).toBe('absolute');
+		expect(getComputedStyle(popups as HTMLElement).left).toBe('0px');
+		expect(getComputedStyle(popups as HTMLElement).right).toBe('0px');
+		expect(getComputedStyle(popups as HTMLElement).zIndex).toBe('4');
 		expect(stack?.getBoundingClientRect().height).toBe(
 			composerShell?.getBoundingClientRect().height
 		);

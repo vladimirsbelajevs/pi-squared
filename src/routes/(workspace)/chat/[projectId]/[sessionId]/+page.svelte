@@ -12,9 +12,21 @@
 	let projectId = $derived(page.params.projectId ?? '');
 	let sessionId = $derived(page.params.sessionId ?? '');
 	let chat = $derived(workspace.findChat(projectId, sessionId));
+	let scrollContainer: HTMLElement | undefined;
 	let observedChatId: string | undefined;
-	let previousItemCount = 0;
-	let wasStreaming = false;
+	let observedContentKey: string | undefined;
+	let scrollAfterUpdate = false;
+	let contentKey = $derived.by(() => {
+		if (!chat?.snapshot) return undefined;
+		return JSON.stringify({
+			items: chat.snapshot.items.length,
+			isStreaming: chat.snapshot.isStreaming,
+			pendingMessages: chat.pendingUserMessages.map((message) => [message.id, message.text]),
+			streamText: chat.streamText,
+			streamThinking: workspace.showReasoning ? chat.streamThinking : '',
+			streamTools: chat.streamTools.map((tool) => [tool.id, tool.text, tool.isError])
+		});
+	});
 
 	function ensureChatForRoute(): void {
 		const projectId = page.params.projectId;
@@ -23,28 +35,42 @@
 	}
 
 	afterNavigate(ensureChatForRoute);
-	onMount(ensureChatForRoute);
+	onMount(() => {
+		scrollContainer = document.getElementById('workspace-content') ?? undefined;
+		ensureChatForRoute();
+	});
 
-	function scrollForNewContent(chatId: string, itemCount: number, isStreaming: boolean) {
-		return (node: HTMLDivElement) => {
-			if (!node.isConnected) return;
-			if (chatId !== observedChatId) {
-				observedChatId = chatId;
-				previousItemCount = itemCount;
-				wasStreaming = isStreaming;
-				return;
-			}
-			const shouldScroll = itemCount > previousItemCount || (!wasStreaming && isStreaming);
-			previousItemCount = itemCount;
-			wasStreaming = isStreaming;
-			if (!shouldScroll) return;
-			const scrollContainer = document.getElementById('workspace-content');
-			scrollContainer?.scrollTo({
-				top: scrollContainer.scrollHeight,
-				behavior: 'smooth'
-			});
-		};
-	}
+	$effect.pre(() => {
+		scrollAfterUpdate = false;
+		if (!chat?.snapshot || !contentKey) return;
+		if (chat.id !== observedChatId) {
+			observedChatId = chat.id;
+			observedContentKey = contentKey;
+			return;
+		}
+		if (contentKey === observedContentKey) return;
+		observedContentKey = contentKey;
+		if (!scrollContainer) return;
+		const isPinnedToBottom =
+			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 24;
+		scrollAfterUpdate = isPinnedToBottom;
+	});
+
+	$effect(() => {
+		const activeChat = chat;
+		const currentContentKey = contentKey;
+		if (
+			!scrollAfterUpdate ||
+			!activeChat?.snapshot ||
+			!currentContentKey ||
+			activeChat.id !== observedChatId ||
+			currentContentKey !== observedContentKey ||
+			!scrollContainer
+		)
+			return;
+		scrollAfterUpdate = false;
+		scrollContainer.scrollTop = scrollContainer.scrollHeight;
+	});
 </script>
 
 {#if !chat || chat.hydrating}
@@ -56,26 +82,11 @@
 	</section>
 {:else}
 	<section class="chat-view" role="tabpanel">
-		<div
-			class="chat-scroll"
-			{@attach scrollForNewContent(
-				chat.id,
-				chat.snapshot.items.length + chat.pendingUserMessages.length,
-				chat.snapshot.isStreaming
-			)}
-		>
+		<div class="chat-scroll">
 			<ChatTimeline {chat} showReasoning={workspace.showReasoning} />
 		</div>
 
 		<div class="thread-composer-dock" in:fly={{ y: 24, duration: 800, delay: 200 }}>
-			{#each chat.permissionRequests as request (request.id)}
-				<PermissionApproval
-					{request}
-					onSelect={(request, value) => workspace.respondToPermission(chat, request, value)}
-					onConfirm={(request, confirmed) => workspace.confirmPermission(chat, request, confirmed)}
-					onCancel={(request) => workspace.cancelPermission(chat, request)}
-				/>
-			{/each}
 			<ChatComposer
 				bind:draft={chat.draft}
 				projectId={chat.snapshot.project.id}
@@ -105,7 +116,19 @@
 					chat.queueMode = mode;
 					workspace.persist();
 				}}
-			/>
+			>
+				{#snippet overlay()}
+					{#each chat.permissionRequests as request (request.id)}
+						<PermissionApproval
+							{request}
+							onSelect={(request, value) => workspace.respondToPermission(chat, request, value)}
+							onConfirm={(request, confirmed) =>
+								workspace.confirmPermission(chat, request, confirmed)}
+							onCancel={(request) => workspace.cancelPermission(chat, request)}
+						/>
+					{/each}
+				{/snippet}
+			</ChatComposer>
 		</div>
 	</section>
 {/if}
