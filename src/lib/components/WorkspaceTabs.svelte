@@ -103,7 +103,11 @@
 
 	.utility-tab.active,
 	.chat-tab-wrap.active {
+		height: calc(1.875rem + 0.4rem + 1px);
+		margin-bottom: calc(-0.4rem - 1px);
 		border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+		border-bottom-right-radius: 0;
+		border-bottom-left-radius: 0;
 		background: color-mix(in srgb, var(--surface-strong) 88%, var(--accent) 12%);
 		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 	}
