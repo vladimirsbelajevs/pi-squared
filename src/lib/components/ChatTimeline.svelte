@@ -271,25 +271,6 @@
 	</div>
 {/if}
 
-{#if (showReasoning && chat.streamThinking) || chat.streamText}
-	<article
-		class="message message-assistant streaming"
-		role="group"
-		aria-label="assistant message, streaming"
-	>
-		{#if showReasoning && chat.streamThinking}
-			<details class="thinking" open>
-				<summary>Reasoning</summary>
-				<pre>{chat.streamThinking}</pre>
-			</details>
-		{/if}
-		{#if chat.streamText}
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
-			<div class="message-markdown">{@html renderAssistantMarkdown(chat.streamText)}</div>
-		{/if}
-	</article>
-{/if}
-
 {#if unmatchedStreamingTools.length}
 	<details
 		class:tool-group-error={unmatchedStreamingTools.some((tool) => tool.isError)}
@@ -314,6 +295,25 @@
 			{/each}
 		</div>
 	</details>
+{/if}
+
+{#if (showReasoning && chat.streamThinking) || chat.streamText}
+	<article
+		class="message message-assistant streaming"
+		role="group"
+		aria-label="assistant message, streaming"
+	>
+		{#if showReasoning && chat.streamThinking}
+			<details class="thinking" open>
+				<summary>Reasoning</summary>
+				<pre>{chat.streamThinking}</pre>
+			</details>
+		{/if}
+		{#if chat.streamText}
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
+			<div class="message-markdown">{@html renderAssistantMarkdown(chat.streamText)}</div>
+		{/if}
+	</article>
 {/if}
 
 <style>

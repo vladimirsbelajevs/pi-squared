@@ -206,6 +206,59 @@ describe('ChatTimeline', () => {
 		expect(message.querySelector('strong')).toHaveTextContent('Partial answer');
 	});
 
+	it('keeps live tool calls above the streaming response', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				streamText: 'Streaming response.',
+				streamTools: [{ id: 'tool-1', name: 'read', text: 'Reading README.md' }]
+			})
+		});
+
+		const liveTools = screen.container.querySelector('.live-tool-group');
+		const streamingMessage = screen.container.querySelector('article.streaming');
+		expect([...screen.container.querySelectorAll('.live-tool-group, article.streaming')]).toEqual([
+			liveTools,
+			streamingMessage
+		]);
+
+		await screen.rerender({
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-tools',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{}' }]
+						},
+						{
+							id: 'tool-result',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'README contents'
+						},
+						{
+							id: 'assistant-response',
+							kind: 'message',
+							role: 'assistant',
+							text: 'Streaming response.'
+						}
+					]
+				}
+			})
+		});
+
+		const persistedTools = screen.container.querySelector('details.tool-group');
+		expect(persistedTools?.closest('.message-entry')?.nextElementSibling?.textContent).toContain(
+			'Streaming response.'
+		);
+	});
+
 	it('omits conversational headers while retaining their accessible group labels', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
