@@ -636,8 +636,6 @@
 		max-width: 54rem;
 		margin: 0.25rem auto;
 		overflow: hidden;
-		border-radius: 0.55rem;
-		background: var(--surface-muted);
 	}
 
 	.tool-group-summary {
