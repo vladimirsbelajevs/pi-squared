@@ -140,6 +140,23 @@ test('persists the model reasoning display preference', async ({ page }) => {
 	await expect(showReasoning).toBeChecked();
 });
 
+test('persists the model-change display preference', async ({ page }) => {
+	await page.goto('/settings');
+
+	const displayModelChanges = page.getByRole('checkbox', {
+		name: 'Display model changes in chat'
+	});
+	await expect(displayModelChanges).not.toBeChecked();
+	await displayModelChanges.check();
+	await expect(displayModelChanges).toBeChecked();
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem('pi-squared:show-model-changes')))
+		.toBe('true');
+
+	await page.reload();
+	await expect(displayModelChanges).toBeChecked();
+});
+
 test('opens a historical session without reselecting its tab', async ({ page }) => {
 	const project = {
 		id: 'project-1',

@@ -85,7 +85,11 @@
 {:else}
 	<section class="chat-view" role="tabpanel">
 		<div class="chat-scroll">
-			<ChatTimeline {chat} showReasoning={workspace.showReasoning} />
+			<ChatTimeline
+				{chat}
+				showReasoning={workspace.showReasoning}
+				showModelChanges={workspace.showModelChanges}
+			/>
 		</div>
 
 		<div class="thread-composer-dock" in:fly={{ y: 24, duration: 800, delay: 200 }}>

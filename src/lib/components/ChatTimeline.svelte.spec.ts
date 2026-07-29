@@ -104,7 +104,7 @@ describe('ChatTimeline', () => {
 		}
 	});
 
-	it('does not render transient notices but keeps persisted snapshot notices', async () => {
+	it('hides persisted model-change notices by default while keeping other notices visible', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
 			chat: chat({
@@ -116,6 +116,26 @@ describe('ChatTimeline', () => {
 							id: 'model-change',
 							kind: 'notice',
 							text: 'Model changed to openai/gpt-5.6'
+						},
+						{
+							id: 'reasoning-change',
+							kind: 'notice',
+							text: 'Reasoning changed to high'
+						},
+						{
+							id: 'compaction',
+							kind: 'notice',
+							text: 'Context compacted: Summary'
+						},
+						{
+							id: 'branch-summary',
+							kind: 'notice',
+							text: 'Branch summary: Summary'
+						},
+						{
+							id: 'session-name',
+							kind: 'notice',
+							text: 'Session named “My chat”'
 						}
 					]
 				},
@@ -125,11 +145,31 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		await expect.element(screen.getByText('Model changed to openai/gpt-5.6')).toBeVisible();
+		expect(screen.container.textContent).not.toContain('Model changed to openai/gpt-5.6');
+		expect(screen.container.textContent).not.toContain('Reasoning changed to high');
+		await expect.element(screen.getByText('Context compacted: Summary')).toBeVisible();
+		await expect.element(screen.getByText('Branch summary: Summary')).toBeVisible();
+		await expect.element(screen.getByText('Session named “My chat”')).toBeVisible();
 		expect(screen.container.textContent).not.toContain(
 			'The interactive MCP panel is terminal-only.'
 		);
-		expect(screen.container.querySelectorAll('.timeline-notice')).toHaveLength(1);
+		expect(screen.container.querySelectorAll('.timeline-notice')).toHaveLength(3);
+
+		await screen.rerender({
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{ id: 'model-change', kind: 'notice', text: 'Model changed to openai/gpt-5.6' },
+						{ id: 'reasoning-change', kind: 'notice', text: 'Reasoning changed to high' }
+					]
+				}
+			}),
+			showModelChanges: true
+		});
+		await expect.element(screen.getByText('Model changed to openai/gpt-5.6')).toBeVisible();
+		await expect.element(screen.getByText('Reasoning changed to high')).toBeVisible();
 	});
 
 	it('renders metadata and copy controls for user and assistant messages', async () => {

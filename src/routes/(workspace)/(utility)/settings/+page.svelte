@@ -5,6 +5,10 @@
 	function handleShowReasoningChange(event: Event): void {
 		workspace.setShowReasoning((event.currentTarget as HTMLInputElement).checked);
 	}
+
+	function handleShowModelChangesChange(event: Event): void {
+		workspace.setShowModelChanges((event.currentTarget as HTMLInputElement).checked);
+	}
 </script>
 
 <h1 class="visually-hidden">Settings</h1>
@@ -32,6 +36,17 @@
 		<span>
 			<strong>Show model reasoning</strong>
 			<small>Display-only; it does not alter model reasoning level.</small>
+		</span>
+	</label>
+	<label class="display-preference">
+		<input
+			type="checkbox"
+			checked={workspace.showModelChanges}
+			onchange={handleShowModelChangesChange}
+		/>
+		<span>
+			<strong>Display model changes in chat</strong>
+			<small>Show notices when the model or reasoning level changes.</small>
 		</span>
 	</label>
 </section>

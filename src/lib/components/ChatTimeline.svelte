@@ -17,8 +17,8 @@
 		| { id: string; kind: 'stopped' }
 		| { id: string; kind: 'tools'; tools: ToolView[]; thinking?: string };
 
-	type Props = { chat: ChatTab; showReasoning?: boolean };
-	let { chat, showReasoning = false }: Props = $props();
+	type Props = { chat: ChatTab; showReasoning?: boolean; showModelChanges?: boolean };
+	let { chat, showReasoning = false, showModelChanges = false }: Props = $props();
 	let copiedMessageId = $state<string>();
 	let copyError = $state<string>();
 	let copiedMessageTimer: ReturnType<typeof setTimeout> | undefined;
@@ -32,7 +32,13 @@
 	);
 	let timeline = $derived.by(() => {
 		const items: ChatItem[] = [
-			...(chat.snapshot?.items ?? []),
+			...(chat.snapshot?.items ?? []).filter(
+				(item) =>
+					showModelChanges ||
+					item.kind !== 'notice' ||
+					(!item.text.startsWith('Model changed to ') &&
+						!item.text.startsWith('Reasoning changed to '))
+			),
 			...chat.pendingUserMessages.map((message) => ({
 				id: message.id,
 				kind: 'message' as const,
