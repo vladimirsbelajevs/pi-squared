@@ -74,7 +74,7 @@
 </script>
 
 <svelte:head>
-	<title>Pi Squared</title>
+	<title>Pi²</title>
 	<meta name="description" content="A local, tab-first coding harness for the Pi SDK." />
 </svelte:head>
 

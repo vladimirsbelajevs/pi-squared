@@ -60,7 +60,7 @@
 			<div class="new-chat-center">
 				{#if introReady}
 					<header class="new-chat-intro" in:fly={{ y: -24, duration: 800 }}>
-						<h1>What do you want to build?</h1>
+						<h1>Pi²</h1>
 					</header>
 
 					<div class="composer-wrap" in:fly={{ y: 24, duration: 800, delay: 200 }}>

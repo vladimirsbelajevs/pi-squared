@@ -10,7 +10,7 @@ test('renders the tab-first harness shell', async ({ page }) => {
 	await expect(page.getByRole('textbox', { name: 'Search historical sessions' })).toBeVisible();
 	await page.getByRole('button', { name: 'New chat tab' }).click();
 	await expect(page).toHaveURL(/\/new\/.+$/);
-	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Pi²' })).toBeVisible();
 	await expect(page.getByRole('textbox', { name: 'Message Pi' })).toBeVisible();
 	await expect(page.getByRole('combobox', { name: 'Model' })).toBeVisible();
 	await expect(page.getByRole('combobox', { name: 'Reasoning' })).toBeVisible();
@@ -57,7 +57,7 @@ test('restores the saved active tab from root', async ({ page }) => {
 	await page.goto('/');
 
 	await expect(page).toHaveURL(/\/new\/saved-tab$/);
-	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Pi²' })).toBeVisible();
 });
 
 test('falls back to history when the saved active tab is invalid', async ({ page }) => {
@@ -122,7 +122,7 @@ test('restores a deep-linked new-chat draft route', async ({ page }) => {
 
 	await expect(page).toHaveURL(/\/new\/routed-draft$/);
 	await expect(page.getByRole('tab', { name: 'New chat' })).toBeVisible();
-	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Pi²' })).toBeVisible();
 });
 
 test('persists the model reasoning display preference', async ({ page }) => {
@@ -241,7 +241,7 @@ test('closes an active tab without reopening it', async ({ page }) => {
 
 test('restores each tab scroll position without animating to the bottom', async ({ page }) => {
 	await page.goto('/new/scroll-position');
-	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Pi²' })).toBeVisible();
 
 	await page.evaluate(() => {
 		const container = document.getElementById('workspace-content');
