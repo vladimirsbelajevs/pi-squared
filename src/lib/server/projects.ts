@@ -106,6 +106,21 @@ export async function getProject(projectId: string): Promise<Project | undefined
 	return (await readDocument()).projects.find((project) => project.id === projectId);
 }
 
+/**
+ * Resolve a registered project again before accessing its filesystem. The registry is
+ * user-editable on disk, so its stored path cannot be trusted as canonical indefinitely.
+ */
+export async function resolveProject(projectId: string): Promise<Project> {
+	const project = await getProject(projectId);
+	if (!project) throw new Error('Project not found.');
+
+	try {
+		return { ...project, cwd: await canonicalizeDirectory(project.cwd) };
+	} catch {
+		throw new Error('Project directory is unavailable.');
+	}
+}
+
 export async function addProject(input: { cwd: string; name?: string }): Promise<Project> {
 	return serialize(async () => {
 		const cwd = await canonicalizeDirectory(input.cwd);

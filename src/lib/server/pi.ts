@@ -14,6 +14,7 @@ import type {
 	ModelOption,
 	Project,
 	RuntimeSnapshot,
+	SlashCommand,
 	ThinkingLevel
 } from '$lib/contracts';
 
@@ -227,13 +228,15 @@ export async function createPiSession(options: {
 	sessionPath?: string;
 	model?: { provider: string; id: string };
 	thinkingLevel?: ThinkingLevel;
+	ephemeral?: boolean;
 }): Promise<{ session: AgentSession; modelFallbackMessage?: string }> {
 	const modelRuntime = await getModelRuntime();
 	const settingsManager = SettingsManager.create(options.project.cwd, undefined, {
 		projectTrusted: true
 	});
-	const sessionManager =
-		options.mode === 'resume' && options.sessionPath
+	const sessionManager = options.ephemeral
+		? SessionManager.inMemory(options.project.cwd)
+		: options.mode === 'resume' && options.sessionPath
 			? SessionManager.open(options.sessionPath, undefined, options.project.cwd)
 			: SessionManager.create(options.project.cwd);
 	const model = options.model
@@ -248,6 +251,45 @@ export async function createPiSession(options: {
 		sessionManager,
 		settingsManager
 	});
+}
+
+export function listSessionSlashCommands(session: AgentSession): SlashCommand[] {
+	const commands = new Map<string, SlashCommand>();
+
+	for (const command of session.extensionRunner.getRegisteredCommands()) {
+		commands.set(command.invocationName, {
+			name: command.invocationName,
+			description: command.description,
+			source: 'extension'
+		});
+	}
+
+	for (const template of session.promptTemplates) {
+		if (commands.has(template.name)) continue;
+		commands.set(template.name, {
+			name: template.name,
+			description: template.description,
+			source: 'prompt'
+		});
+	}
+
+	for (const skill of session.resourceLoader.getSkills().skills) {
+		const name = `skill:${skill.name}`;
+		if (commands.has(name)) continue;
+		commands.set(name, { name, description: skill.description, source: 'skill' });
+	}
+
+	return [...commands.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Load project resources without creating a persisted session solely for completion. */
+export async function listProjectSlashCommands(project: Project): Promise<SlashCommand[]> {
+	const { session } = await createPiSession({ project, mode: 'new', ephemeral: true });
+	try {
+		return listSessionSlashCommands(session);
+	} finally {
+		session.dispose();
+	}
 }
 
 export async function listHistoricalSessions(project: Project): Promise<HistoricalSession[]> {

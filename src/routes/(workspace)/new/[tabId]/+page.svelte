@@ -64,6 +64,7 @@
 					<div class="composer-wrap" in:fly={{ y: 24, duration: 800, delay: 200 }}>
 						<ChatComposer
 							bind:draft={tab.draft.prompt}
+							projectId={tab.draft.projectId}
 							models={workspace.models}
 							modelKey={tab.draft.modelKey}
 							thinkingLevel={tab.draft.thinkingLevel}

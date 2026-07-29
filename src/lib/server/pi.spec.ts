@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { SessionEntry } from '@earendil-works/pi-coding-agent';
-import { mapSessionEntry, normalizePiEvent } from './pi.js';
+import type { AgentSession, SessionEntry } from '@earendil-works/pi-coding-agent';
+import { listSessionSlashCommands, mapSessionEntry, normalizePiEvent } from './pi.js';
 
 describe('mapSessionEntry', () => {
 	it('keeps assistant text, reasoning, and tool calls browser-safe', () => {
@@ -103,5 +103,31 @@ describe('mapSessionEntry', () => {
 				assistantMessageEvent: { type: 'thinking_delta', delta: 'Inspecting files.' }
 			} as never)
 		).toEqual({ type: 'assistant_delta', thinking: 'Inspecting files.' });
+	});
+
+	it('lists only prompt-executable extensions, templates, and skills', () => {
+		const session = {
+			extensionRunner: {
+				getRegisteredCommands: () => [
+					{ invocationName: 'review', description: 'Run the extension review command' }
+				]
+			},
+			promptTemplates: [
+				{ name: 'plan', description: 'Create a plan' },
+				{ name: 'review', description: 'Template review command' }
+			],
+			resourceLoader: {
+				getSkills: () => ({
+					skills: [{ name: 'testing', description: 'Testing workflow' }],
+					diagnostics: []
+				})
+			}
+		} as unknown as AgentSession;
+
+		expect(listSessionSlashCommands(session)).toEqual([
+			{ name: 'plan', description: 'Create a plan', source: 'prompt' },
+			{ name: 'review', description: 'Run the extension review command', source: 'extension' },
+			{ name: 'skill:testing', description: 'Testing workflow', source: 'skill' }
+		]);
 	});
 });

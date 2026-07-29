@@ -77,6 +77,8 @@
 			</div>
 			<ChatComposer
 				bind:draft={chat.draft}
+				projectId={chat.snapshot.project.id}
+				runtimeId={chat.snapshot.runtimeId}
 				models={workspace.models}
 				modelKey={chat.snapshot.model
 					? `${chat.snapshot.model.provider}::${chat.snapshot.model.id}`

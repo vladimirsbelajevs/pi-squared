@@ -3,6 +3,14 @@ import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import ChatComposer from './ChatComposer.svelte';
 
+const autocompleteApi = vi.hoisted(() => ({
+	listProjectSlashCommands: vi.fn(),
+	listRuntimeSlashCommands: vi.fn(),
+	searchProjectFiles: vi.fn()
+}));
+
+vi.mock('$lib/harness/api', () => autocompleteApi);
+
 const models = [
 	{ provider: 'openai', id: 'gpt-test', name: 'GPT Test', reasoning: true },
 	{ provider: 'example', id: 'plain-test', name: 'Plain Test', reasoning: false }
@@ -87,5 +95,48 @@ describe('ChatComposer', () => {
 		await textbox.fill('Queue this follow-up');
 		await userEvent.keyboard('{Enter}');
 		await vi.waitFor(() => expect(onSend).toHaveBeenCalledWith('Queue this follow-up'));
+	});
+
+	it('inserts a slash command with Enter instead of submitting', async () => {
+		autocompleteApi.listProjectSlashCommands.mockResolvedValue({
+			commands: [
+				{ name: 'review', description: 'Review current changes', source: 'prompt' },
+				{ name: 'refactor', description: 'Refactor selected code', source: 'skill' }
+			]
+		});
+		const onSend = vi.fn().mockResolvedValue(true);
+		const screen = render(ChatComposer, props({ projectId: 'project-1', onSend }));
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await userEvent.click(textbox);
+		await vi.waitFor(() => expect(autocompleteApi.listProjectSlashCommands).toHaveBeenCalledOnce());
+		await textbox.fill('/rev');
+		await expect.element(screen.getByRole('listbox')).toBeVisible();
+		await userEvent.keyboard('{Enter}');
+
+		await expect.element(textbox).toHaveValue('/review ');
+		expect(onSend).not.toHaveBeenCalled();
+	});
+
+	it('inserts an @ file path with Tab', async () => {
+		autocompleteApi.searchProjectFiles.mockResolvedValue({ files: [{ path: 'src/lib/chat.ts' }] });
+		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await userEvent.click(textbox);
+		await textbox.fill('Inspect @cha');
+		await vi.waitFor(
+			() =>
+				expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledWith(
+					'project-1',
+					'cha',
+					expect.any(AbortSignal)
+				),
+			{ timeout: 1000 }
+		);
+		await expect.element(screen.getByRole('listbox')).toBeVisible();
+		await userEvent.keyboard('{Tab}');
+
+		await expect.element(textbox).toHaveValue('Inspect @src/lib/chat.ts ');
 	});
 });

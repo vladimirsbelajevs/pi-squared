@@ -3,7 +3,9 @@ import type {
 	ModelOption,
 	PermissionResponse,
 	Project,
+	ProjectFileSuggestion,
 	RuntimeSnapshot,
+	SlashCommand,
 	StreamEnvelope,
 	ThinkingLevel
 } from '$lib/contracts';
@@ -51,6 +53,22 @@ export function addProject(input: { cwd: string; name: string }): Promise<{ proj
 	return request('/api/projects', { method: 'POST', body: JSON.stringify(input) });
 }
 
+export function listProjectSlashCommands(
+	projectId: string,
+	signal?: AbortSignal
+): Promise<{ commands: SlashCommand[] }> {
+	return request(`/api/projects/${encodeURIComponent(projectId)}/commands`, { signal });
+}
+
+export function searchProjectFiles(
+	projectId: string,
+	query: string,
+	signal?: AbortSignal
+): Promise<{ files: ProjectFileSuggestion[] }> {
+	const parameters = new URLSearchParams({ q: query });
+	return request(`/api/projects/${encodeURIComponent(projectId)}/files?${parameters}`, { signal });
+}
+
 export function createRuntime(input: {
 	mode: 'new' | 'resume';
 	projectId: string;
@@ -63,6 +81,13 @@ export function createRuntime(input: {
 
 export function getRuntime(runtimeId: string): Promise<{ snapshot: RuntimeSnapshot }> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}`);
+}
+
+export function listRuntimeSlashCommands(
+	runtimeId: string,
+	signal?: AbortSignal
+): Promise<{ commands: SlashCommand[] }> {
+	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/commands`, { signal });
 }
 
 export function disposeRuntime(runtimeId: string): Promise<void> {

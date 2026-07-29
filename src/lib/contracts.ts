@@ -10,6 +10,20 @@ export interface Project {
 	lastOpenedAt: string;
 }
 
+export type SlashCommandSource = 'extension' | 'prompt' | 'skill';
+
+/** A slash command that AgentSession.prompt() can execute. */
+export interface SlashCommand {
+	name: string;
+	description?: string;
+	source: SlashCommandSource;
+}
+
+/** A project-relative file path suitable for an @ mention. */
+export interface ProjectFileSuggestion {
+	path: string;
+}
+
 export interface ModelOption {
 	provider: string;
 	id: string;

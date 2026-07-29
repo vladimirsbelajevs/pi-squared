@@ -5,14 +5,17 @@ import type {
 	Project,
 	RuntimeEvent,
 	RuntimeSnapshot,
+	SlashCommand,
 	ThinkingLevel
 } from '$lib/contracts';
 import { eventBroker } from '$lib/server/event-broker';
 import { PermissionBridge } from '$lib/server/permission-bridge';
-import { getProject, markProjectOpened } from '$lib/server/projects';
+import { getProject, markProjectOpened, resolveProject } from '$lib/server/projects';
 import {
 	buildSnapshot,
 	createPiSession,
+	listProjectSlashCommands,
+	listSessionSlashCommands,
 	normalizePiEvent,
 	resolveModel,
 	resolveSessionPath
@@ -33,6 +36,8 @@ interface RuntimeRecord {
 }
 
 const runtimes = new Map<string, RuntimeRecord>();
+const projectCommandCache = new Map<string, { expiresAt: number; commands: SlashCommand[] }>();
+const PROJECT_COMMAND_CACHE_MS = 30_000;
 
 function messageFromError(error: unknown): string {
 	return error instanceof Error ? error.message : 'An unexpected server error occurred.';
@@ -126,6 +131,23 @@ export function respondToPermissionRequest(runtimeId: string, response: Permissi
 export function getRuntimeSnapshot(runtimeId: string): RuntimeSnapshot {
 	const record = getRecord(runtimeId);
 	return buildSnapshot(record.id, record.project, record.session, record.modelFallbackMessage);
+}
+
+export function listRuntimeSlashCommands(runtimeId: string): SlashCommand[] {
+	return listSessionSlashCommands(getRecord(runtimeId).session);
+}
+
+export async function listProjectRuntimeSlashCommands(projectId: string): Promise<SlashCommand[]> {
+	const project = await resolveProject(projectId);
+	const cached = projectCommandCache.get(project.id);
+	if (cached && cached.expiresAt > Date.now()) return cached.commands;
+
+	const commands = await listProjectSlashCommands(project);
+	projectCommandCache.set(project.id, {
+		commands,
+		expiresAt: Date.now() + PROJECT_COMMAND_CACHE_MS
+	});
+	return commands;
 }
 
 export function promptRuntime(
