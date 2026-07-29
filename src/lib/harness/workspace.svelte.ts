@@ -36,7 +36,7 @@ import {
 	type Theme,
 	type WorkspaceTab
 } from '$lib/harness/types';
-import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 const STORAGE_KEY = 'pi-squared:workspace:v1';
 const LEGACY_OPEN_CHATS_KEY = 'pi-squared:open-chats';
@@ -324,7 +324,7 @@ export class HarnessWorkspace {
 				chat.pendingUserMessages.push({
 					id: `pending-${randomId()}`,
 					text: result.userMessageText,
-					timestamp: new Date().toISOString(),
+					timestamp: new SvelteDate().toISOString(),
 					knownUserItemIds
 				});
 				// An entry can arrive over SSE before the prompt response does.
