@@ -456,6 +456,12 @@
 		background: color-mix(in srgb, var(--accent-strong) 12%, var(--surface));
 	}
 
+	.message-assistant {
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+	}
+
 	.message-tool,
 	.message-bash {
 		background: var(--surface-muted);
