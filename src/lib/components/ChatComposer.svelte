@@ -605,6 +605,8 @@
 
 	.composer-stack {
 		display: grid;
+		position: relative;
+		isolation: isolate;
 		gap: 1rem;
 	}
 
@@ -612,7 +614,13 @@
 		margin-bottom: 0;
 	}
 
+	.composer-stack > :global(.mcp-status) {
+		margin-bottom: -2rem;
+	}
+
 	.composer-shell {
+		position: relative;
+		z-index: 1;
 		border: 1px solid var(--border);
 		border-radius: 0.8rem;
 		background: var(--surface);

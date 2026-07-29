@@ -55,14 +55,27 @@ describe('ComposerStatusPanel', () => {
 	it('pluralizes enabled servers and expands to show every server status and tool count', async () => {
 		const screen = render(ComposerStatusPanel, {
 			status,
+			projectName: 'Pi Squared',
 			onToggle: vi.fn().mockResolvedValue(undefined)
 		});
 		const summary = screen.getByRole('button', { name: 'MCP: 2 servers enabled' });
+		const row = screen.container.querySelector('.mcp-status-row');
+		const summaryElement = screen.container.querySelector('.mcp-summary');
+
+		expect(row?.classList.contains('tone-connected')).toBe(true);
+		expect(row?.querySelector('.thread-project')?.textContent).toContain('Pi Squared');
+		expect(getComputedStyle(row as HTMLElement).borderBottomLeftRadius).toBe('0px');
+		expect(getComputedStyle(row as HTMLElement).borderBottomRightRadius).toBe('0px');
+		expect(summaryElement?.tagName).toBe('BUTTON');
+		expect(getComputedStyle(summaryElement as HTMLElement).borderTopWidth).toBe('0px');
+		expect(getComputedStyle(summaryElement as HTMLElement).paddingTop).toBe('0px');
 
 		await expect.element(summary).toHaveAttribute('aria-expanded', 'false');
 		await summary.click();
 		await expect.element(summary).toHaveAttribute('aria-expanded', 'true');
-		await expect.element(screen.getByRole('region', { name: 'MCP servers' })).toBeVisible();
+		const panel = screen.getByRole('region', { name: 'MCP servers' });
+		await expect.element(panel).toBeVisible();
+		expect(getComputedStyle(panel.element()).position).toBe('absolute');
 		await expect.element(screen.getByText('Filesystem')).toBeVisible();
 		await expect.element(screen.getByText('Connected')).toBeVisible();
 		await expect.element(screen.getByText('4 tools')).toBeVisible();
@@ -98,6 +111,7 @@ describe('ComposerStatusPanel', () => {
 	it('requests the inverse enabled state when a switch is clicked', async () => {
 		const onToggle = vi.fn().mockResolvedValue(undefined);
 		const screen = render(ComposerStatusPanel, { status, onToggle });
+		screen.container.style.marginTop = '24rem';
 		await screen.getByRole('button', { name: 'MCP: 2 servers enabled' }).click();
 		await screen.getByRole('switch', { name: 'Disable GitHub' }).click();
 
@@ -113,6 +127,7 @@ describe('ComposerStatusPanel', () => {
 				})
 		);
 		const screen = render(ComposerStatusPanel, { status, onToggle });
+		screen.container.style.marginTop = '24rem';
 		await screen.getByRole('button', { name: 'MCP: 2 servers enabled' }).click();
 		const githubSwitch = screen.getByRole('switch', { name: 'Disable GitHub' });
 		const filesystemSwitch = screen.getByRole('switch', { name: 'Disable Filesystem' });
@@ -130,6 +145,7 @@ describe('ComposerStatusPanel', () => {
 			status,
 			onToggle: vi.fn().mockRejectedValue(new Error('Connection refused'))
 		});
+		screen.container.style.marginTop = '24rem';
 		await screen.getByRole('button', { name: 'MCP: 2 servers enabled' }).click();
 		await screen.getByRole('switch', { name: 'Disable GitHub' }).click();
 

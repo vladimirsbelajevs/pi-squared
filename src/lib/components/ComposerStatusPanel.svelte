@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { MediaQuery } from 'svelte/reactivity';
+	import { fly } from 'svelte/transition';
 	import type { McpServerStatus, McpStatusSnapshot } from '$lib/contracts';
 
 	type Props = {
@@ -13,6 +15,7 @@
 
 	const panelId = $props.id();
 	const panelTitleId = `${panelId}-title`;
+	const reducedMotion = new MediaQuery('prefers-reduced-motion: reduce', false);
 	let expanded = $state(false);
 	let pendingServerNames = $state.raw<string[]>([]);
 	let toggleError = $state<string>();
@@ -25,6 +28,7 @@
 				? 'tone-warning'
 				: 'tone-muted'
 	);
+	let panelTransition = $derived({ y: 8, duration: reducedMotion.current ? 0 : 160 });
 
 	function stateLabel(server: McpServerStatus): string {
 		if (server.disabled) return 'Disabled';
@@ -71,10 +75,10 @@
 </script>
 
 <div class="mcp-status">
-	<div class="mcp-status-row">
+	<div class={['mcp-status-row', summaryTone]}>
 		{#if servers.length}
 			<button
-				class={['mcp-summary', summaryTone]}
+				class="mcp-summary"
 				type="button"
 				aria-expanded={expanded}
 				aria-controls={panelId}
@@ -106,7 +110,12 @@
 	</div>
 
 	{#if expanded && servers.length}
-		<section id={panelId} class="mcp-panel" aria-labelledby={panelTitleId}>
+		<section
+			id={panelId}
+			class="mcp-panel"
+			aria-labelledby={panelTitleId}
+			transition:fly|global={panelTransition}
+		>
 			<div class="mcp-panel-header">
 				<h2 id={panelTitleId}>MCP servers</h2>
 				<span>{status?.totalTools ?? 0} {(status?.totalTools ?? 0) === 1 ? 'tool' : 'tools'}</span>
@@ -153,48 +162,45 @@
 <style>
 	.mcp-status {
 		display: grid;
+		position: relative;
 		width: 100%;
-		gap: 0.45rem;
 	}
 
 	.mcp-status-row {
 		display: flex;
 		align-items: center;
+		min-height: 2.25rem;
 		min-width: 0;
 		gap: 1rem;
+		border: 1px solid var(--border);
+		border-radius: 0.65rem 0.65rem 0 0;
+		background: var(--surface-muted);
+		padding: 0.48rem 0.6rem 1.2rem;
+		color: var(--text-muted);
 	}
 
 	.mcp-summary {
 		display: flex;
 		align-items: center;
 		gap: 0.45rem;
-		border: 1px solid var(--border);
-		border-radius: 0.55rem;
-		background: var(--surface-muted);
-		padding: 0.48rem 0.6rem;
-		color: var(--text-muted);
+		appearance: none;
+		border: 0;
+		background: transparent;
+		padding: 0;
+		color: inherit;
+		font: inherit;
 		font-size: 0.74rem;
 		font-weight: 650;
 		text-align: left;
-		transition:
-			border-color 140ms ease,
-			background 140ms ease,
-			color 140ms ease;
+		cursor: pointer;
 	}
 
 	.mcp-empty {
 		display: flex;
 		align-items: center;
-		min-height: 2.25rem;
-		color: var(--text-muted);
-		padding: 0.48rem 0.6rem;
+		color: inherit;
 		font-size: 0.74rem;
 		font-weight: 650;
-	}
-
-	.mcp-summary:hover:not(:disabled) {
-		border-color: var(--border-strong);
-		background: var(--surface-strong);
 	}
 
 	.mcp-summary:focus-visible,
@@ -240,25 +246,31 @@
 		white-space: nowrap;
 	}
 
-	.tone-connected {
+	.mcp-status-row.tone-connected {
 		border-color: color-mix(in srgb, var(--success) 52%, var(--border));
 		background: color-mix(in srgb, var(--success) 9%, var(--surface));
 		color: var(--success);
 	}
 
-	.tone-warning {
+	.mcp-status-row.tone-warning {
 		border-color: color-mix(in srgb, var(--warning) 52%, var(--border));
 		background: color-mix(in srgb, var(--warning) 8%, var(--surface));
 		color: var(--warning);
 	}
 
-	.tone-muted {
+	.mcp-status-row.tone-muted {
+		border-color: var(--border);
+		background: var(--surface-muted);
 		color: var(--text-muted);
 	}
 
 	.mcp-panel {
+		position: absolute;
+		z-index: 2;
+		right: 0;
+		bottom: calc(100% + 0.45rem);
+		left: 0;
 		display: flex;
-		width: 100%;
 		max-height: min(21.75rem, 45dvh);
 		flex-direction: column;
 		overflow: hidden;
@@ -404,8 +416,13 @@
 		}
 	}
 
+	@media (max-width: 700px) {
+		.mcp-panel {
+			max-height: min(17rem, 38dvh);
+		}
+	}
+
 	@media (prefers-reduced-motion: reduce) {
-		.mcp-summary,
 		.server-switch {
 			transition: none;
 		}

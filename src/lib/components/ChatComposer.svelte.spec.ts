@@ -128,6 +128,12 @@ describe('ChatComposer', () => {
 		const project = withStatus.container.querySelector('.thread-project');
 		expect(project?.getAttribute('title')).toBe('/workspace/pi-squared');
 		expect(project?.textContent).toContain('Pi Squared');
+		const statusContainer = withStatus.container.querySelector('.composer-stack > .mcp-status');
+		const composerShell = withStatus.container.querySelector('.composer-shell');
+		expect(statusContainer).not.toBeNull();
+		expect(getComputedStyle(statusContainer as HTMLElement).marginBottom).toBe('-32px');
+		expect(getComputedStyle(composerShell as HTMLElement).position).toBe('relative');
+		expect(getComputedStyle(composerShell as HTMLElement).zIndex).toBe('1');
 	});
 
 	it('shows only a stop action while streaming and queues with Enter', async () => {
