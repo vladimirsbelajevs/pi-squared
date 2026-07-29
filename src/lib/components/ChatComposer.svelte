@@ -36,6 +36,7 @@
 		isStreaming?: boolean;
 		disabled?: boolean;
 		autoFocus?: boolean;
+		showStatusPanel?: boolean;
 		error?: string;
 		transientNotices?: TransientNotice[];
 		onClearTransientNotices?: () => void;
@@ -62,6 +63,7 @@
 		isStreaming = false,
 		disabled = false,
 		autoFocus = false,
+		showStatusPanel = true,
 		error,
 		transientNotices = [],
 		onClearTransientNotices,
@@ -422,13 +424,15 @@
 		{#if transientNotices.length}
 			<TransientNoticePopup notices={transientNotices} onClear={clearTransientNotices} />
 		{/if}
-		<ComposerStatusPanel
-			status={mcpStatus}
-			onToggle={onMcpToggle}
-			{projectName}
-			{projectCwd}
-			disabled={isStreaming || submitting}
-		/>
+		{#if showStatusPanel}
+			<ComposerStatusPanel
+				status={mcpStatus}
+				onToggle={onMcpToggle}
+				{projectName}
+				{projectCwd}
+				disabled={isStreaming || submitting}
+			/>
+		{/if}
 		<div class="composer-shell">
 			<div class="input-row">
 				<div class="textarea-wrap">

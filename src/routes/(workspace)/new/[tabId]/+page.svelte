@@ -65,6 +65,7 @@
 						<ChatComposer
 							bind:draft={tab.draft.prompt}
 							projectId={tab.draft.projectId}
+							showStatusPanel={false}
 							models={workspace.models}
 							modelKey={tab.draft.modelKey}
 							thinkingLevel={tab.draft.thinkingLevel}

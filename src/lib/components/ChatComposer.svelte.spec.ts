@@ -107,7 +107,7 @@ describe('ChatComposer', () => {
 		await expect.element(textbox).toHaveFocus();
 	});
 
-	it('always renders the MCP status row and enables controls when status is available', async () => {
+	it('renders the MCP status row by default and enables controls when status is available', async () => {
 		const withoutStatus = render(ChatComposer, props());
 		await expect.element(withoutStatus.getByText('MCP: No servers configured')).toBeVisible();
 		expect(withoutStatus.container.querySelector('.mcp-summary')).toBeNull();
@@ -134,6 +134,12 @@ describe('ChatComposer', () => {
 		expect(getComputedStyle(statusContainer as HTMLElement).marginBottom).toBe('-32px');
 		expect(getComputedStyle(composerShell as HTMLElement).position).toBe('relative');
 		expect(getComputedStyle(composerShell as HTMLElement).zIndex).toBe('1');
+	});
+
+	it('does not render the MCP status row when showStatusPanel is false', () => {
+		const screen = render(ChatComposer, props({ showStatusPanel: false, mcpStatus }));
+
+		expect(screen.container.querySelector('.mcp-status')).toBeNull();
 	});
 
 	it('shows only a stop action while streaming and queues with Enter', async () => {

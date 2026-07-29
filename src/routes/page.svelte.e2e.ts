@@ -17,6 +17,7 @@ test('renders the tab-first harness shell', async ({ page }) => {
 	await expect(page.getByRole('combobox', { name: 'Project' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Add project' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Start chat' })).toHaveCount(0);
+	await expect(page.getByText('MCP: No servers configured')).toHaveCount(0);
 
 	await page.getByRole('tab', { name: 'Historical sessions and harness settings' }).click();
 	await expect(page).toHaveURL(/\/history$/);
@@ -163,5 +164,6 @@ test('starting a chat does not recreate its draft tab', async ({ page }) => {
 	await message.press('Enter');
 
 	await expect(page).toHaveURL(/\/chat\/project-1\/session-1$/);
+	await expect(page.getByText('MCP: No servers configured')).toBeVisible();
 	await expect(page.getByRole('tab', { name: 'New chat' })).toHaveCount(1);
 });
