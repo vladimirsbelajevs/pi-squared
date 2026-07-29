@@ -166,9 +166,11 @@ describe('ChatTimeline', () => {
 		await screen.getByRole('group', { name: 'user message' }).hover();
 		await expect.element(screen.getByRole('button', { name: 'Copy message' })).toBeVisible();
 		expect(screen.container.querySelectorAll('.message-meta-content time')).toHaveLength(1);
+		expect(screen.container.textContent).not.toContain('Reasoning: medium');
 
 		await screen.getByRole('group', { name: 'assistant message' }).hover();
 		await expect.element(screen.getByText('GPT-5.6 Terra')).toBeVisible();
+		await expect.element(screen.getByText('Reasoning: medium')).toBeVisible();
 	});
 
 	it('renders persisted assistant text as Markdown', async () => {

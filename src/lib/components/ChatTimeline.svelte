@@ -295,6 +295,10 @@
 							{#if item.role === 'assistant' && modelName(item)}
 								<span>{modelName(item)}</span>
 							{/if}
+							{#if item.role === 'assistant' && chat.snapshot?.thinkingLevel}
+								<span>-</span>
+								<span>{chat.snapshot.thinkingLevel}</span>
+							{/if}
 							{#if timestamp && item.timestamp}
 								<time datetime={item.timestamp} title={formatTimestampTitle(item.timestamp)}
 									>{timestamp}</time
@@ -413,7 +417,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 0.55rem;
+		gap: 0.30rem;
 		color: var(--text-muted);
 		font-size: 0.72rem;
 		white-space: nowrap;
