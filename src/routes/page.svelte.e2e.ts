@@ -30,6 +30,93 @@ test('renders the tab-first harness shell', async ({ page }) => {
 		.toBe('everforest-dark-medium');
 });
 
+test('restores the saved active tab from root', async ({ page }) => {
+	await page.addInitScript(() => {
+		localStorage.setItem(
+			'pi-squared:workspace:v1',
+			JSON.stringify({
+				version: 1,
+				activeTabId: 'saved-tab',
+				tabs: [
+					{
+						kind: 'new',
+						id: 'saved-tab',
+						title: 'New chat',
+						draft: {
+							projectId: '',
+							modelKey: '',
+							thinkingLevel: 'medium',
+							prompt: 'Saved draft'
+						}
+					}
+				]
+			})
+		);
+	});
+
+	await page.goto('/');
+
+	await expect(page).toHaveURL(/\/new\/saved-tab$/);
+	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
+});
+
+test('falls back to history when the saved active tab is invalid', async ({ page }) => {
+	await page.addInitScript(() => {
+		localStorage.setItem(
+			'pi-squared:workspace:v1',
+			JSON.stringify({
+				version: 1,
+				activeTabId: 'missing-tab',
+				tabs: [
+					{
+						kind: 'new',
+						id: 'saved-tab',
+						title: 'New chat',
+						draft: { projectId: '', modelKey: '', thinkingLevel: 'medium', prompt: '' }
+					}
+				]
+			})
+		);
+	});
+
+	await page.goto('/');
+
+	await expect(page).toHaveURL(/\/history$/);
+});
+
+test('persists the selected tab and restores it from root', async ({ page }) => {
+	await page.goto('/history');
+	await page.getByRole('button', { name: 'New chat tab' }).click();
+	await expect(page).toHaveURL(/\/new\/.+$/);
+	const href = new URL(page.url()).pathname;
+	const activeTabId = href.split('/').at(-1);
+
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					JSON.parse(localStorage.getItem('pi-squared:workspace:v1') ?? '{}').activeTabId as
+						string | undefined
+			)
+		)
+		.toBe(activeTabId);
+
+	await page.goto('/settings');
+	await expect(page).toHaveURL(/\/settings$/);
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() =>
+					JSON.parse(localStorage.getItem('pi-squared:workspace:v1') ?? '{}').activeTabId as
+						string | undefined
+			)
+		)
+		.toBe(activeTabId);
+
+	await page.goto('/');
+	await expect(page).toHaveURL(new RegExp(`${href}$`));
+});
+
 test('restores a deep-linked new-chat draft route', async ({ page }) => {
 	await page.goto('/new/routed-draft');
 

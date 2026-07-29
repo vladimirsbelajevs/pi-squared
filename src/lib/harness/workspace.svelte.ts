@@ -36,6 +36,7 @@ import {
 	type Theme,
 	type WorkspaceTab
 } from '$lib/harness/types';
+import { resolve } from '$app/paths';
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 const STORAGE_KEY = 'pi-squared:workspace:v1';
@@ -93,6 +94,7 @@ export class HarnessWorkspace {
 	models = $state<ModelOption[]>([]);
 	sessions = $state<HistoricalSession[]>([]);
 	tabs = $state<WorkspaceTab[]>([]);
+	activeTabId = $state<string | undefined>();
 	theme = $state<Theme>('graphite');
 	showReasoning = $state(false);
 	initializing = $state(true);
@@ -138,15 +140,27 @@ export class HarnessWorkspace {
 	}
 
 	newHref(tabId: string): string {
-		return `/new/${encodeURIComponent(tabId)}`;
+		return resolve(`/new/${encodeURIComponent(tabId)}`);
 	}
 
 	chatHref(projectId: string, sessionId: string): string {
-		return `/chat/${encodeURIComponent(projectId)}/${encodeURIComponent(sessionId)}`;
+		return resolve(`/chat/${encodeURIComponent(projectId)}/${encodeURIComponent(sessionId)}`);
 	}
 
 	hrefForTab(tab: WorkspaceTab): string {
 		return tab.kind === 'new' ? this.newHref(tab.id) : this.chatHref(tab.projectId, tab.sessionId);
+	}
+
+	activeTabHref(): string | undefined {
+		const tab = this.tabs.find((candidate) => candidate.id === this.activeTabId);
+		return tab ? this.hrefForTab(tab) : undefined;
+	}
+
+	rememberTabForPathname(pathname: string): void {
+		const tab = this.tabs.find((candidate) => this.hrefForTab(candidate) === pathname);
+		if (!tab || tab.id === this.activeTabId) return;
+		this.activeTabId = tab.id;
+		this.persist();
 	}
 
 	createNewTab(tabId = randomId()): NewTab {
@@ -441,7 +455,11 @@ export class HarnessWorkspace {
 	}
 
 	async closeTab(tab: WorkspaceTab): Promise<void> {
+		const index = this.tabs.findIndex((candidate) => candidate.id === tab.id);
 		this.tabs = this.tabs.filter((candidate) => candidate.id !== tab.id);
+		if (this.activeTabId === tab.id) {
+			this.activeTabId = this.tabs[index]?.id ?? this.tabs[index - 1]?.id;
+		}
 		this.persist();
 		if (tab.kind === 'chat' && tab.runtimeId) {
 			try {
@@ -686,7 +704,11 @@ export class HarnessWorkspace {
 			tabs.push(tab.kind === 'new' ? this.#fromStoredNew(tab) : this.#fromStoredChat(tab));
 		}
 		this.tabs = tabs;
-		if (tabs.length !== restored.tabs.length) this.persist();
+		this.activeTabId = tabs.some((tab) => tab.id === restored.activeTabId)
+			? restored.activeTabId
+			: undefined;
+		if (tabs.length !== restored.tabs.length || this.activeTabId !== restored.activeTabId)
+			this.persist();
 	}
 
 	#readStoredWorkspace(): StoredWorkspaceV1 | undefined {
@@ -699,6 +721,7 @@ export class HarnessWorkspace {
 					return {
 						version: 1,
 						lastEventId: typeof parsed.lastEventId === 'number' ? parsed.lastEventId : undefined,
+						activeTabId: typeof parsed.activeTabId === 'string' ? parsed.activeTabId : undefined,
 						tabs
 					};
 				}
@@ -831,6 +854,9 @@ export class HarnessWorkspace {
 		const document: StoredWorkspaceV1 = {
 			version: 1,
 			lastEventId: this.#lastEventId,
+			activeTabId: this.tabs.some((tab) => tab.id === this.activeTabId)
+				? this.activeTabId
+				: undefined,
 			tabs: this.tabs.map((tab) => {
 				if (tab.kind === 'new') {
 					return { kind: 'new', id: tab.id, title: tab.title, draft: tab.draft };

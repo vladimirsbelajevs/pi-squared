@@ -31,7 +31,9 @@
 	function ensureChatForRoute(): void {
 		const projectId = page.params.projectId;
 		const sessionId = page.params.sessionId;
-		if (projectId && sessionId) void workspace.ensureChat(projectId, sessionId);
+		if (!projectId || !sessionId) return;
+		void workspace.ensureChat(projectId, sessionId);
+		workspace.rememberTabForPathname(page.url.pathname);
 	}
 
 	afterNavigate(ensureChatForRoute);

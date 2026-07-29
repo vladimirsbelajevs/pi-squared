@@ -34,6 +34,7 @@
 
 	function createNewTab(): void {
 		const tab = workspace.createNewTab();
+		workspace.rememberTabForPathname(workspace.hrefForTab(tab));
 		void goto(resolve(`/new/${encodeURIComponent(tab.id)}`));
 	}
 

@@ -13,7 +13,9 @@
 
 	function ensureNewTabForRoute(): void {
 		const id = page.params.tabId;
-		if (id) workspace.ensureNewTab(id);
+		if (!id) return;
+		workspace.ensureNewTab(id);
+		workspace.rememberTabForPathname(page.url.pathname);
 	}
 
 	afterNavigate(ensureNewTabForRoute);

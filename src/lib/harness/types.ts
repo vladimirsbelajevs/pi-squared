@@ -91,6 +91,7 @@ export type WorkspaceTab = NewTab | ChatTab;
 export interface StoredWorkspaceV1 {
 	version: 1;
 	lastEventId?: number;
+	activeTabId?: string;
 	tabs: Array<StoredNewTab | StoredChatTab>;
 }
 
