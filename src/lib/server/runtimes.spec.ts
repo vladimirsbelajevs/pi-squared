@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentSession, ExtensionUIContext } from '@earendil-works/pi-coding-agent';
+import {
+	createEventBus,
+	type AgentSession,
+	type ExtensionUIContext
+} from '@earendil-works/pi-coding-agent';
 import {
 	bindRuntimeExtensions,
 	resolveWebExtensionCommand,
-	shutdownRuntimeSession
+	shutdownRuntimeSession,
+	subscribeToMcpStatus
 } from './runtimes.js';
+import { MCP_STATUS_EVENT } from './mcp-status.js';
 
 describe('runtime extension binding', () => {
 	it('routes MCP panel commands to web-safe text behavior', () => {
@@ -29,6 +35,42 @@ describe('runtime extension binding', () => {
 		expect(resolveWebExtensionCommand('/mcp reconnect svelte')).toEqual({
 			text: '/mcp reconnect svelte'
 		});
+	});
+
+	it('forwards valid MCP extension-bus snapshots and ignores malformed data', () => {
+		const events = createEventBus();
+		const onStatus = vi.fn();
+		const unsubscribe = subscribeToMcpStatus(events, onStatus);
+
+		events.emit(MCP_STATUS_EVENT, {
+			version: 1,
+			servers: [{ name: 'svelte', status: 'connected', toolCount: 5, disabled: false }],
+			totalTools: 5,
+			totalResources: 0,
+			connectedCount: 1,
+			disabledCount: 0
+		});
+		events.emit(MCP_STATUS_EVENT, { version: 1, servers: [] });
+
+		expect(onStatus).toHaveBeenCalledOnce();
+		expect(onStatus).toHaveBeenCalledWith({
+			servers: [{ name: 'svelte', state: 'connected', toolCount: 5, disabled: false }],
+			totalTools: 5,
+			totalResources: 0,
+			connectedCount: 1,
+			disabledCount: 0
+		});
+
+		unsubscribe();
+		events.emit(MCP_STATUS_EVENT, {
+			version: 1,
+			servers: [],
+			totalTools: 0,
+			totalResources: 0,
+			connectedCount: 0,
+			disabledCount: 0
+		});
+		expect(onStatus).toHaveBeenCalledOnce();
 	});
 
 	it('uses Pi RPC lifecycle bindings and surfaces extension failures', async () => {

@@ -3,6 +3,7 @@
 	import { fade } from 'svelte/transition';
 	import {
 		THINKING_LEVELS,
+		type McpStatusSnapshot,
 		type ModelOption,
 		type ProjectFileSuggestion,
 		type SlashCommand,
@@ -21,6 +22,7 @@
 		type ChatAutocompleteToken
 	} from './chat-autocomplete';
 	import type { TransientNotice } from '$lib/harness/types';
+	import ComposerStatusPanel from './ComposerStatusPanel.svelte';
 	import TransientNoticePopup from './TransientNoticePopup.svelte';
 
 	type QueueMode = 'followUp' | 'steer';
@@ -37,6 +39,10 @@
 		error?: string;
 		transientNotices?: TransientNotice[];
 		onClearTransientNotices?: () => void;
+		mcpStatus?: McpStatusSnapshot;
+		onMcpToggle?: (serverName: string, enabled: boolean) => Promise<void>;
+		projectName?: string;
+		projectCwd?: string;
 		projectId?: string;
 		runtimeId?: string;
 		onSend: (message: string) => Promise<boolean>;
@@ -59,6 +65,10 @@
 		error,
 		transientNotices = [],
 		onClearTransientNotices,
+		mcpStatus,
+		onMcpToggle,
+		projectName,
+		projectCwd,
 		projectId,
 		runtimeId,
 		onSend,
@@ -412,6 +422,13 @@
 		{#if transientNotices.length}
 			<TransientNoticePopup notices={transientNotices} onClear={clearTransientNotices} />
 		{/if}
+		<ComposerStatusPanel
+			status={mcpStatus}
+			onToggle={onMcpToggle}
+			{projectName}
+			{projectCwd}
+			disabled={isStreaming || submitting}
+		/>
 		<div class="composer-shell">
 			<div class="input-row">
 				<div class="textarea-wrap">

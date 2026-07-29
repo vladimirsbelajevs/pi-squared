@@ -18,6 +18,7 @@ import {
 	openEventStream,
 	promptRuntime,
 	respondToPermission,
+	setRuntimeMcpServerEnabled,
 	setRuntimeModel,
 	setRuntimeThinking
 } from '$lib/harness/api';
@@ -328,6 +329,12 @@ export class HarnessWorkspace {
 		}
 	}
 
+	async setMcpServerEnabled(chat: ChatTab, serverName: string, enabled: boolean): Promise<void> {
+		if (!chat.runtimeId) throw new Error('Chat tab is no longer active.');
+		const response = await setRuntimeMcpServerEnabled(chat.runtimeId, { serverName, enabled });
+		this.#applySnapshot(chat, response.snapshot);
+	}
+
 	clearTransientNotices(chat: ChatTab): void {
 		chat.transientNotices = [];
 	}
@@ -525,6 +532,10 @@ export class HarnessWorkspace {
 		}
 		if (event.type === 'state') {
 			if (chat.snapshot) chat.snapshot.isStreaming = event.isStreaming;
+			return;
+		}
+		if (event.type === 'mcp_status') {
+			if (chat.snapshot) chat.snapshot.mcpStatus = event.mcpStatus;
 			return;
 		}
 		if (event.type === 'notice') {

@@ -1,10 +1,14 @@
 import {
 	createAgentSession,
+	createEventBus,
+	DefaultResourceLoader,
+	getAgentDir,
 	ModelRuntime,
 	SessionManager,
 	SettingsManager,
 	type AgentSession,
 	type AgentSessionEvent,
+	type EventBus,
 	type SessionEntry
 } from '@earendil-works/pi-coding-agent';
 import type {
@@ -14,6 +18,7 @@ import type {
 	ModelOption,
 	Project,
 	RuntimeSnapshot,
+	McpStatusSnapshot,
 	SlashCommand,
 	ThinkingLevel
 } from '$lib/contracts';
@@ -203,7 +208,8 @@ export function buildSnapshot(
 	runtimeId: string,
 	project: Project,
 	session: AgentSession,
-	modelFallbackMessage?: string
+	modelFallbackMessage?: string,
+	mcpStatus?: McpStatusSnapshot
 ): RuntimeSnapshot {
 	const currentModel = session.model;
 	return {
@@ -218,6 +224,7 @@ export function buildSnapshot(
 			const item = mapSessionEntry(entry);
 			return item ? [item] : [];
 		}),
+		...(mcpStatus ? { mcpStatus } : {}),
 		modelFallbackMessage
 	};
 }
@@ -229,11 +236,19 @@ export async function createPiSession(options: {
 	model?: { provider: string; id: string };
 	thinkingLevel?: ThinkingLevel;
 	ephemeral?: boolean;
-}): Promise<{ session: AgentSession; modelFallbackMessage?: string }> {
+}): Promise<{ session: AgentSession; extensionEvents: EventBus; modelFallbackMessage?: string }> {
 	const modelRuntime = await getModelRuntime();
 	const settingsManager = SettingsManager.create(options.project.cwd, undefined, {
 		projectTrusted: true
 	});
+	const extensionEvents = createEventBus();
+	const resourceLoader = new DefaultResourceLoader({
+		cwd: options.project.cwd,
+		agentDir: getAgentDir(),
+		settingsManager,
+		eventBus: extensionEvents
+	});
+	await resourceLoader.reload();
 	const sessionManager = options.ephemeral
 		? SessionManager.inMemory(options.project.cwd)
 		: options.mode === 'resume' && options.sessionPath
@@ -243,14 +258,16 @@ export async function createPiSession(options: {
 		? await resolveModel(options.model.provider, options.model.id)
 		: undefined;
 
-	return createAgentSession({
+	const created = await createAgentSession({
 		cwd: options.project.cwd,
 		model,
 		thinkingLevel: options.thinkingLevel,
 		modelRuntime,
 		sessionManager,
-		settingsManager
+		settingsManager,
+		resourceLoader
 	});
+	return { ...created, extensionEvents };
 }
 
 export function listSessionSlashCommands(session: AgentSession): SlashCommand[] {

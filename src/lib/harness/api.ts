@@ -138,6 +138,16 @@ export function setRuntimeThinking(
 	});
 }
 
+export function setRuntimeMcpServerEnabled(
+	runtimeId: string,
+	input: { serverName: string; enabled: boolean }
+): Promise<{ snapshot: RuntimeSnapshot }> {
+	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/mcp`, {
+		method: 'POST',
+		body: JSON.stringify(input)
+	});
+}
+
 export function openEventStream(
 	lastEventId: number | undefined,
 	onEvent: (event: StreamEnvelope) => void

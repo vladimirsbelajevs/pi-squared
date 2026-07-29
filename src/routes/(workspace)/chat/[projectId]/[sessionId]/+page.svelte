@@ -56,11 +56,6 @@
 	</section>
 {:else}
 	<section class="chat-view" role="tabpanel">
-		<div class="thread-project" title={chat.snapshot.project.cwd}>
-			<span class="project-dot"></span>
-			<span class="project-name">{chat.snapshot.project.name}</span>
-		</div>
-
 		<div
 			class="chat-scroll"
 			{@attach scrollForNewContent(chat.id, chat.snapshot.items.length, chat.snapshot.isStreaming)}
@@ -80,6 +75,8 @@
 			<ChatComposer
 				bind:draft={chat.draft}
 				projectId={chat.snapshot.project.id}
+				projectName={chat.snapshot.project.name}
+				projectCwd={chat.snapshot.project.cwd}
 				runtimeId={chat.snapshot.runtimeId}
 				models={workspace.models}
 				modelKey={chat.snapshot.model
@@ -92,6 +89,9 @@
 				error={chat.error}
 				transientNotices={chat.transientNotices}
 				onClearTransientNotices={() => workspace.clearTransientNotices(chat)}
+				mcpStatus={chat.snapshot.mcpStatus}
+				onMcpToggle={(serverName, enabled) =>
+					workspace.setMcpServerEnabled(chat, serverName, enabled)}
 				onSend={(message) => workspace.sendPrompt(chat, message)}
 				onDraftChange={() => workspace.schedulePersist()}
 				onStop={() => workspace.stopChat(chat)}
@@ -129,36 +129,6 @@
 		background: linear-gradient(180deg, transparent, var(--canvas) 28%, var(--canvas));
 	}
 
-	.thread-project {
-		position: sticky;
-		top: 1.25rem;
-		left: 1.25rem;
-		z-index: 1;
-		display: flex;
-		align-self: flex-start;
-		align-items: center;
-		flex: 0 0 0;
-		min-height: 0;
-		max-width: calc(100% - 2.5rem);
-		gap: 0.4rem;
-		color: var(--text-muted);
-		font-size: 1.5rem;
-	}
-
-	.project-dot {
-		flex-shrink: 0;
-		width: 0.5rem;
-		height: 0.5rem;
-		border-radius: 50%;
-		background: var(--success);
-	}
-
-	.project-name {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
 	.route-state {
 		display: grid;
 		place-content: center;
@@ -177,12 +147,6 @@
 	@media (max-width: 700px) {
 		.thread-composer-dock {
 			padding-inline: 0.75rem;
-		}
-
-		.thread-project {
-			top: 0.75rem;
-			left: 0.75rem;
-			max-width: calc(100% - 1.5rem);
 		}
 	}
 </style>

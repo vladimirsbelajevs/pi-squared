@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import type { McpStatusSnapshot } from '$lib/contracts';
 import ChatComposer from './ChatComposer.svelte';
 
 const autocompleteApi = vi.hoisted(() => ({
@@ -15,6 +16,21 @@ const models = [
 	{ provider: 'openai', id: 'gpt-test', name: 'GPT Test', reasoning: true },
 	{ provider: 'example', id: 'plain-test', name: 'Plain Test', reasoning: false }
 ];
+
+const mcpStatus: McpStatusSnapshot = {
+	servers: [
+		{
+			name: 'Filesystem',
+			state: 'connected',
+			toolCount: 3,
+			disabled: false
+		}
+	],
+	totalTools: 3,
+	totalResources: 0,
+	connectedCount: 1,
+	disabledCount: 0
+};
 
 function props(overrides: Record<string, unknown> = {}) {
 	return {
@@ -89,6 +105,29 @@ describe('ChatComposer', () => {
 		await screen.getByRole('button', { name: 'Clear all notices' }).click();
 		expect(onClearTransientNotices).toHaveBeenCalledOnce();
 		await expect.element(textbox).toHaveFocus();
+	});
+
+	it('always renders the MCP status row and enables controls when status is available', async () => {
+		const withoutStatus = render(ChatComposer, props());
+		await expect.element(withoutStatus.getByText('MCP: No servers configured')).toBeVisible();
+		expect(withoutStatus.container.querySelector('.mcp-summary')).toBeNull();
+
+		const onMcpToggle = vi.fn().mockResolvedValue(undefined);
+		const withStatus = render(
+			ChatComposer,
+			props({
+				mcpStatus,
+				onMcpToggle,
+				projectName: 'Pi Squared',
+				projectCwd: '/workspace/pi-squared'
+			})
+		);
+		await expect
+			.element(withStatus.getByRole('button', { name: 'MCP: 1 server enabled' }))
+			.toBeVisible();
+		const project = withStatus.container.querySelector('.thread-project');
+		expect(project?.getAttribute('title')).toBe('/workspace/pi-squared');
+		expect(project?.textContent).toContain('Pi Squared');
 	});
 
 	it('shows only a stop action while streaming and queues with Enter', async () => {

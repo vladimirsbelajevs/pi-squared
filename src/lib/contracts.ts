@@ -24,6 +24,28 @@ export interface ProjectFileSuggestion {
 	path: string;
 }
 
+export type McpServerState =
+	'connected' | 'cached' | 'failed' | 'needs-auth' | 'not-connected' | 'disabled';
+
+/** A browser-safe view of a configured MCP server. */
+export interface McpServerStatus {
+	name: string;
+	state: McpServerState;
+	toolCount: number;
+	resourceCount?: number;
+	failedAgoSeconds?: number;
+	disabled: boolean;
+}
+
+/** A browser-safe snapshot emitted by pi-mcp-adapter over Pi's extension event bus. */
+export interface McpStatusSnapshot {
+	servers: McpServerStatus[];
+	totalTools: number;
+	totalResources: number;
+	connectedCount: number;
+	disabledCount: number;
+}
+
 export interface ModelOption {
 	provider: string;
 	id: string;
@@ -71,6 +93,7 @@ export interface RuntimeSnapshot {
 	thinkingLevel: ThinkingLevel;
 	isStreaming: boolean;
 	items: ChatItem[];
+	mcpStatus?: McpStatusSnapshot;
 	modelFallbackMessage?: string;
 }
 
@@ -99,6 +122,7 @@ export type RuntimeEvent =
 			isError?: boolean;
 	  }
 	| { type: 'state'; isStreaming: boolean }
+	| { type: 'mcp_status'; mcpStatus: McpStatusSnapshot }
 	| { type: 'notice'; message: string }
 	| { type: 'permission_request'; request: PermissionRequest }
 	| { type: 'permission_resolved'; requestId: string }

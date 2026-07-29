@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
 	ModelOption,
+	McpStatusSnapshot,
 	PermissionResponse,
 	Project,
 	RuntimeEvent,
@@ -20,7 +21,8 @@ import {
 	resolveModel,
 	resolveSessionPath
 } from '$lib/server/pi';
-import type { AgentSession, ExtensionUIContext } from '@earendil-works/pi-coding-agent';
+import { MCP_STATUS_EVENT, parseMcpStatusSnapshot } from '$lib/server/mcp-status';
+import type { AgentSession, EventBus, ExtensionUIContext } from '@earendil-works/pi-coding-agent';
 
 const IDLE_RUNTIME_MS = 30 * 60 * 1000;
 
@@ -33,6 +35,10 @@ interface RuntimeRecord {
 	lastAccessedAt: number;
 	promptActive: boolean;
 	permissions: PermissionBridge;
+	mcpStatus?: McpStatusSnapshot;
+	unsubscribeMcpStatus: () => void;
+	mcpToggle?: Promise<void>;
+	suppressMcpReloadNotice?: boolean;
 }
 
 const runtimes = new Map<string, RuntimeRecord>();
@@ -72,6 +78,16 @@ export function resolveWebExtensionCommand(text: string): WebExtensionCommand {
 	}
 	if (trimmed === '/mcp-auth') return { notice: 'Specify an MCP server: /mcp-auth <server>' };
 	return { text };
+}
+
+export function subscribeToMcpStatus(
+	events: EventBus,
+	onStatus: (status: McpStatusSnapshot) => void
+): () => void {
+	return events.on(MCP_STATUS_EVENT, (value) => {
+		const status = parseMcpStatusSnapshot(value);
+		if (status) onStatus(status);
+	});
 }
 
 function publish(record: RuntimeRecord, event: RuntimeEvent): void {
@@ -118,7 +134,8 @@ function publishSnapshot(record: RuntimeRecord): RuntimeSnapshot {
 		record.id,
 		record.project,
 		record.session,
-		record.modelFallbackMessage
+		record.modelFallbackMessage,
+		record.mcpStatus
 	);
 	publish(record, { type: 'snapshot', snapshot });
 	return snapshot;
@@ -173,13 +190,17 @@ export async function createRuntime(input: {
 	});
 
 	const id = randomUUID();
-	const permissions = new PermissionBridge((event) => eventBroker.publish(id, event));
-	await bindRuntimeExtensions(
-		created.session,
-		permissions.extensionUI,
-		(message) => eventBroker.publish(id, { type: 'error', message }),
-		() => void disposeRuntime(id)
-	);
+	const recordRef: { current?: RuntimeRecord } = {};
+	const permissions = new PermissionBridge((event) => {
+		if (
+			recordRef.current?.suppressMcpReloadNotice &&
+			event.type === 'notice' &&
+			event.message.includes('run /reload to apply')
+		) {
+			return;
+		}
+		eventBroker.publish(id, event);
+	});
 	const record: RuntimeRecord = {
 		id,
 		project: await markProjectOpened(project.id),
@@ -188,11 +209,35 @@ export async function createRuntime(input: {
 		modelFallbackMessage: created.modelFallbackMessage,
 		lastAccessedAt: Date.now(),
 		promptActive: false,
-		permissions
+		permissions,
+		unsubscribeMcpStatus: () => undefined
 	};
+	recordRef.current = record;
+	record.unsubscribeMcpStatus = subscribeToMcpStatus(created.extensionEvents, (snapshot) => {
+		record.mcpStatus = snapshot;
+		publish(record, { type: 'mcp_status', mcpStatus: snapshot });
+	});
+	try {
+		await bindRuntimeExtensions(
+			created.session,
+			permissions.extensionUI,
+			(message) => eventBroker.publish(id, { type: 'error', message }),
+			() => void disposeRuntime(id)
+		);
+	} catch (error) {
+		record.unsubscribeMcpStatus();
+		await shutdownRuntimeSession(created.session);
+		throw error;
+	}
 	record.unsubscribe = attachSessionEvents(record);
 	runtimes.set(record.id, record);
-	return buildSnapshot(record.id, record.project, record.session, record.modelFallbackMessage);
+	return buildSnapshot(
+		record.id,
+		record.project,
+		record.session,
+		record.modelFallbackMessage,
+		record.mcpStatus
+	);
 }
 
 export function respondToPermissionRequest(runtimeId: string, response: PermissionResponse): void {
@@ -201,7 +246,13 @@ export function respondToPermissionRequest(runtimeId: string, response: Permissi
 
 export function getRuntimeSnapshot(runtimeId: string): RuntimeSnapshot {
 	const record = getRecord(runtimeId);
-	return buildSnapshot(record.id, record.project, record.session, record.modelFallbackMessage);
+	return buildSnapshot(
+		record.id,
+		record.project,
+		record.session,
+		record.modelFallbackMessage,
+		record.mcpStatus
+	);
 }
 
 export function listRuntimeSlashCommands(runtimeId: string): SlashCommand[] {
@@ -228,6 +279,7 @@ export function promptRuntime(
 ): { queued: boolean } {
 	const record = getRecord(runtimeId);
 	if (!text.trim()) throw new Error('Messages cannot be empty.');
+	if (record.mcpToggle) throw new Error('Wait for the MCP server change to finish.');
 	const resolved = resolveWebExtensionCommand(text);
 	if (resolved.notice) publish(record, { type: 'notice', message: resolved.notice });
 	if (!resolved.text) return { queued: false };
@@ -269,6 +321,42 @@ export function setRuntimeThinkingLevel(
 	return publishSnapshot(record);
 }
 
+/** Persist an adapter-compatible project override, then reload extensions to apply it. */
+export async function setRuntimeMcpServerEnabled(
+	runtimeId: string,
+	serverName: string,
+	enabled: boolean
+): Promise<RuntimeSnapshot> {
+	const record = getRecord(runtimeId);
+	const previousToggle = record.mcpToggle ?? Promise.resolve();
+	const toggle = previousToggle.then(async () => {
+		if (record.session.isStreaming || record.promptActive) {
+			throw new Error('Wait for the current response before changing MCP servers.');
+		}
+		const server = record.mcpStatus?.servers.find((candidate) => candidate.name === serverName);
+		if (!server) throw new Error('MCP server not found in this chat.');
+		if (server.disabled === !enabled) return publishSnapshot(record);
+
+		record.suppressMcpReloadNotice = true;
+		try {
+			await record.session.prompt(`/mcp ${enabled ? 'enable' : 'disable'} ${serverName}`);
+			await record.session.reload();
+			return publishSnapshot(record);
+		} finally {
+			record.suppressMcpReloadNotice = false;
+		}
+	});
+	const pending = toggle.then(
+		() => undefined,
+		() => undefined
+	);
+	record.mcpToggle = pending;
+	void pending.finally(() => {
+		if (record.mcpToggle === pending) record.mcpToggle = undefined;
+	});
+	return toggle;
+}
+
 export async function abortRuntime(runtimeId: string): Promise<void> {
 	const record = getRecord(runtimeId);
 	record.permissions.cancelAll();
@@ -283,6 +371,7 @@ export async function disposeRuntime(runtimeId: string): Promise<void> {
 	record.permissions.cancelAll();
 	if (record.session.isStreaming) await record.session.abort();
 	record.unsubscribe();
+	record.unsubscribeMcpStatus();
 	await shutdownRuntimeSession(record.session);
 }
 

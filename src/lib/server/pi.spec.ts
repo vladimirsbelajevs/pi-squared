@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentSession, SessionEntry } from '@earendil-works/pi-coding-agent';
-import { listSessionSlashCommands, mapSessionEntry, normalizePiEvent } from './pi.js';
+import {
+	buildSnapshot,
+	listSessionSlashCommands,
+	mapSessionEntry,
+	normalizePiEvent
+} from './pi.js';
 
 describe('mapSessionEntry', () => {
 	it('keeps assistant text, reasoning, and tool calls browser-safe', () => {
@@ -129,5 +134,41 @@ describe('mapSessionEntry', () => {
 			{ name: 'review', description: 'Run the extension review command', source: 'extension' },
 			{ name: 'skill:testing', description: 'Testing workflow', source: 'skill' }
 		]);
+	});
+
+	it('includes the latest MCP status snapshot when one is available', () => {
+		const session = {
+			model: undefined,
+			thinkingLevel: 'medium',
+			isStreaming: false,
+			sessionId: 'session-1',
+			sessionName: undefined,
+			sessionManager: { getBranch: () => [] }
+		} as unknown as AgentSession;
+
+		expect(
+			buildSnapshot(
+				'runtime-1',
+				{
+					id: 'project-1',
+					name: 'Project',
+					cwd: '/tmp/project',
+					addedAt: '2026-01-01T00:00:00.000Z',
+					lastOpenedAt: '2026-01-01T00:00:00.000Z'
+				},
+				session,
+				undefined,
+				{
+					servers: [{ name: 'svelte', state: 'connected', toolCount: 5, disabled: false }],
+					totalTools: 5,
+					totalResources: 0,
+					connectedCount: 1,
+					disabledCount: 0
+				}
+			)
+		).toMatchObject({
+			runtimeId: 'runtime-1',
+			mcpStatus: { connectedCount: 1, totalTools: 5 }
+		});
 	});
 });
