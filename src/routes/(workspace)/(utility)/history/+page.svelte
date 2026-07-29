@@ -96,7 +96,7 @@
 		border-radius: 0.45rem;
 		background: var(--surface);
 		color: var(--text);
-		padding: 1rem;
+		padding: 0.4rem;
 		text-align: left;
 		text-decoration: none;
 	}
