@@ -169,6 +169,115 @@ describe('ChatTimeline', () => {
 		expect(message.querySelector('strong')).toHaveTextContent('Partial answer');
 	});
 
+	it('omits conversational headers while retaining their accessible group labels', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{ id: 'user-1', kind: 'message', role: 'user', text: 'Inspect this.' },
+						{ id: 'assistant-1', kind: 'message', role: 'assistant', text: 'Ready.' },
+						{
+							id: 'assistant-tools',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{}' }]
+						}
+					]
+				}
+			})
+		});
+
+		await expect.element(screen.getByRole('group', { name: 'user message' })).toBeVisible();
+		await expect
+			.element(screen.getByRole('group', { name: 'assistant message' }).first())
+			.toBeVisible();
+		expect(screen.container.querySelectorAll('.message-user header')).toHaveLength(0);
+		expect(screen.container.querySelectorAll('.message-assistant header')).toHaveLength(0);
+	});
+
+	it('keeps headers for tool, bash, and custom messages', () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'tool-1',
+							kind: 'message',
+							role: 'tool',
+							label: 'Tool output',
+							text: 'Result'
+						},
+						{
+							id: 'bash-1',
+							kind: 'message',
+							role: 'bash',
+							label: 'npm test',
+							text: 'Passed'
+						},
+						{ id: 'custom-1', kind: 'message', role: 'custom', text: 'Custom content' }
+					]
+				}
+			})
+		});
+
+		expect(
+			Array.from(screen.container.querySelectorAll<HTMLElement>('.message header')).map((header) =>
+				(header as HTMLElement).textContent?.trim()
+			)
+		).toEqual(['Tool output', 'npm test', 'custom']);
+	});
+
+	it('hides persisted reasoning by default and renders it when enabled', async () => {
+		const base = chat();
+		const chatWithReasoning = chat({
+			snapshot: {
+				...base.snapshot!,
+				isStreaming: false,
+				items: [
+					{
+						id: 'assistant-1',
+						kind: 'message',
+						role: 'assistant',
+						text: 'Answer',
+						thinking: 'Historical reasoning'
+					}
+				]
+			}
+		});
+		const screen = render(ChatTimeline, { chat: chatWithReasoning });
+
+		expect(screen.container.querySelectorAll('.thinking')).toHaveLength(0);
+		await screen.rerender({ chat: chatWithReasoning, showReasoning: true });
+		expect(screen.container.querySelector('.thinking')?.textContent).toContain(
+			'Historical reasoning'
+		);
+	});
+
+	it('hides reasoning-only stream deltas until reasoning display is enabled', async () => {
+		const screen = render(ChatTimeline, { chat: chat({ streamThinking: 'Streaming reasoning' }) });
+
+		expect(screen.container.querySelector('.streaming')).toBeNull();
+		await expect.element(screen.getByRole('status')).toHaveTextContent('Pi is thinking');
+
+		await screen.rerender({
+			chat: chat({ streamThinking: 'Streaming reasoning' }),
+			showReasoning: true
+		});
+		await expect
+			.element(screen.getByRole('group', { name: 'assistant message, streaming' }))
+			.toBeVisible();
+		expect(screen.container.querySelector('.streaming .thinking')?.textContent).toContain(
+			'Streaming reasoning'
+		);
+	});
+
 	it('keeps user message text literal', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {

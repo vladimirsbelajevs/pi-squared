@@ -43,6 +43,7 @@ const LAST_PROJECT_KEY = 'pi-squared:last-project';
 const LAST_MODEL_KEY = 'pi-squared:last-model';
 const LAST_THINKING_LEVEL_KEY = 'pi-squared:last-thinking-level';
 const THEME_KEY = 'pi-squared:theme';
+const SHOW_REASONING_KEY = 'pi-squared:show-reasoning';
 
 export const THEME_LABELS: Record<Theme, string> = {
 	graphite: 'Graphite',
@@ -92,6 +93,7 @@ export class HarnessWorkspace {
 	sessions = $state<HistoricalSession[]>([]);
 	tabs = $state<WorkspaceTab[]>([]);
 	theme = $state<Theme>('graphite');
+	showReasoning = $state(false);
 	initializing = $state(true);
 	error = $state('');
 
@@ -440,6 +442,11 @@ export class HarnessWorkspace {
 		document.documentElement.dataset.theme = theme;
 	}
 
+	setShowReasoning(show: boolean): void {
+		this.showReasoning = show;
+		localStorage.setItem(SHOW_REASONING_KEY, String(show));
+	}
+
 	async refreshRuntime(chat: ChatTab): Promise<void> {
 		await this.#hydrateChat(chat);
 	}
@@ -468,6 +475,7 @@ export class HarnessWorkspace {
 
 	async #initialize(): Promise<void> {
 		this.#restoreTheme();
+		this.#restoreShowReasoning();
 		try {
 			const [projects, models, sessions] = await Promise.all([
 				listProjects(),
@@ -624,6 +632,10 @@ export class HarnessWorkspace {
 	#restoreTheme(): void {
 		const stored = localStorage.getItem(THEME_KEY);
 		if (isTheme(stored)) this.applyTheme(stored);
+	}
+
+	#restoreShowReasoning(): void {
+		this.showReasoning = localStorage.getItem(SHOW_REASONING_KEY) === 'true';
 	}
 
 	#restoreTabs(): void {

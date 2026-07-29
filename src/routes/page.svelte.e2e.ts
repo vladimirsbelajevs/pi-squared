@@ -38,6 +38,21 @@ test('restores a deep-linked new-chat draft route', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'What do you want to build?' })).toBeVisible();
 });
 
+test('persists the model reasoning display preference', async ({ page }) => {
+	await page.goto('/settings');
+
+	const showReasoning = page.getByRole('checkbox', { name: 'Show model reasoning' });
+	await expect(showReasoning).not.toBeChecked();
+	await showReasoning.check();
+	await expect(showReasoning).toBeChecked();
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem('pi-squared:show-reasoning')))
+		.toBe('true');
+
+	await page.reload();
+	await expect(showReasoning).toBeChecked();
+});
+
 test('opens a historical session without reselecting its tab', async ({ page }) => {
 	const project = {
 		id: 'project-1',
@@ -67,7 +82,13 @@ test('opens a historical session without reselecting its tab', async ({ page }) 
 		isStreaming: false,
 		items: [
 			{ id: 'user-1', kind: 'message', role: 'user', text: session.firstMessage },
-			{ id: 'assistant-1', kind: 'message', role: 'assistant', text: 'Project summary' }
+			{
+				id: 'assistant-1',
+				kind: 'message',
+				role: 'assistant',
+				text: 'Project summary',
+				thinking: 'I inspected the project history.'
+			}
 		]
 	};
 
@@ -85,11 +106,22 @@ test('opens a historical session without reselecting its tab', async ({ page }) 
 
 	await expect(page).toHaveURL(/\/chat\/project-1\/session-1$/);
 	await expect(page.getByText('Project summary')).toBeVisible();
+	await expect(page.getByText('I inspected the project history.')).toHaveCount(0);
 	await expect(page.getByText('Opening session…')).toHaveCount(0);
 	await expect(page.getByRole('tab', { name: 'Historical chat' })).toHaveAttribute(
 		'aria-selected',
 		'true'
 	);
+
+	await page.getByRole('tab', { name: 'Historical sessions and harness settings' }).click();
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('checkbox', { name: 'Show model reasoning' }).check();
+	await page.getByRole('tab', { name: 'Historical chat' }).click();
+	await page
+		.getByRole('group', { name: 'assistant message' })
+		.getByText('Reasoning', { exact: true })
+		.click();
+	await expect(page.getByText('I inspected the project history.')).toBeVisible();
 });
 
 test('closes an active tab without reopening it', async ({ page }) => {

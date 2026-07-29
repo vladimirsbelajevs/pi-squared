@@ -60,7 +60,7 @@
 			class="chat-scroll"
 			{@attach scrollForNewContent(chat.id, chat.snapshot.items.length, chat.snapshot.isStreaming)}
 		>
-			<ChatTimeline {chat} />
+			<ChatTimeline {chat} showReasoning={workspace.showReasoning} />
 		</div>
 
 		<div class="thread-composer-dock" in:fly={{ y: 24, duration: 800, delay: 200 }}>

@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { THEME_LABELS, workspace } from '$lib/harness/workspace.svelte';
 	import type { Theme } from '$lib/harness/types';
+
+	function handleShowReasoningChange(event: Event): void {
+		workspace.setShowReasoning((event.currentTarget as HTMLInputElement).checked);
+	}
 </script>
 
 <h1 class="visually-hidden">Settings</h1>
@@ -19,6 +23,17 @@
 			</button>
 		{/each}
 	</div>
+</section>
+
+<section class="settings-card" aria-labelledby="chat-display-heading">
+	<h2 id="chat-display-heading">Chat display</h2>
+	<label class="display-preference">
+		<input type="checkbox" checked={workspace.showReasoning} onchange={handleShowReasoningChange} />
+		<span>
+			<strong>Show model reasoning</strong>
+			<small>Display-only; it does not alter model reasoning level.</small>
+		</span>
+	</label>
 </section>
 
 <style>
@@ -109,5 +124,43 @@
 
 	.theme-system span {
 		background: linear-gradient(135deg, #111 50%, #f6f3ec 50%);
+	}
+
+	.display-preference {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.65rem;
+		border: 1px solid var(--border);
+		border-radius: 0.4rem;
+		background: var(--surface-muted);
+		padding: 0.75rem;
+		color: var(--text);
+		cursor: pointer;
+	}
+
+	.display-preference:hover {
+		border-color: var(--accent);
+	}
+
+	.display-preference input {
+		width: 1rem;
+		height: 1rem;
+		margin: 0.15rem 0 0;
+		accent-color: var(--accent);
+	}
+
+	.display-preference input:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
+	}
+
+	.display-preference span {
+		display: grid;
+		gap: 0.2rem;
+	}
+
+	.display-preference small {
+		color: var(--text-muted);
+		font-size: 0.82rem;
 	}
 </style>

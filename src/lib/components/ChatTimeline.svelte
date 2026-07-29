@@ -16,15 +16,15 @@
 		thinking?: string;
 	};
 
-	type Props = { chat: ChatTab };
-	let { chat }: Props = $props();
+	type Props = { chat: ChatTab; showReasoning?: boolean };
+	let { chat, showReasoning = false }: Props = $props();
 	let copiedMessageId = $state<string>();
 	let copyError = $state<string>();
 	let copiedMessageTimer: ReturnType<typeof setTimeout> | undefined;
 	let hoveredMessageId = $state<string>();
 	let waitingForResponse = $derived(
 		chat.snapshot?.isStreaming === true &&
-			!chat.streamThinking &&
+			(!showReasoning || !chat.streamThinking) &&
 			!chat.streamText &&
 			chat.streamTools.length === 0 &&
 			chat.permissionRequests.length === 0
@@ -139,20 +139,24 @@
 	{#if item.kind === 'notice'}
 		<p class="timeline-notice">{item.text}</p>
 	{:else}
+		{@const role = item.role ?? 'assistant'}
+		{@const isConversational = role === 'user' || role === 'assistant'}
 		{@const timestamp = formatTimestamp(item.timestamp)}
 		{@const showMessageMeta = hoveredMessageId === item.id}
 		<div
-			class={`message-entry message-entry-${item.role ?? 'assistant'}`}
+			class={`message-entry message-entry-${role}`}
 			role="group"
-			aria-label={`${item.role ?? 'assistant'} message`}
+			aria-label={`${role} message`}
 			onmouseenter={() => (hoveredMessageId = item.id)}
 			onmouseleave={() => {
 				if (hoveredMessageId === item.id) hoveredMessageId = undefined;
 			}}
 		>
-			<article class={`message message-${item.role ?? 'assistant'}`}>
-				<header>{item.label || item.role || 'message'}</header>
-				{#if entry.thinking}
+			<article class={['message', `message-${role}`, isConversational && 'message-conversational']}>
+				{#if !isConversational}
+					<header>{item.label || role}</header>
+				{/if}
+				{#if showReasoning && entry.thinking}
 					<details class="thinking">
 						<summary>Reasoning</summary>
 						<pre>{entry.thinking}</pre>
@@ -258,10 +262,13 @@
 	</div>
 {/if}
 
-{#if chat.streamThinking || chat.streamText}
-	<article class="message message-assistant streaming">
-		<header>Pi <span>streaming</span></header>
-		{#if chat.streamThinking}
+{#if (showReasoning && chat.streamThinking) || chat.streamText}
+	<article
+		class="message message-assistant streaming"
+		role="group"
+		aria-label="assistant message, streaming"
+	>
+		{#if showReasoning && chat.streamThinking}
 			<details class="thinking" open>
 				<summary>Reasoning</summary>
 				<pre>{chat.streamThinking}</pre>
@@ -337,10 +344,6 @@
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-	}
-
-	.message header span {
-		color: var(--accent);
 	}
 
 	.message-meta-row {
@@ -541,6 +544,11 @@
 	.thinking,
 	.tool-group {
 		border-top: 1px solid var(--border);
+	}
+
+	.message-conversational > .thinking:first-child,
+	.message-conversational > .tool-group:first-child {
+		border-top: 0;
 	}
 
 	.thinking summary {
