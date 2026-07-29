@@ -753,15 +753,12 @@
 	.thinking-indicator {
 		display: flex;
 		align-items: center;
-		width: fit-content;
-		max-width: 54rem;
+		box-sizing: border-box;
+		width: min(54rem, 100%);
 		gap: 0.5rem;
 		margin: 1rem auto;
-		border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 		color: var(--text-muted);
-		padding: 0.45rem 0.75rem;
+		padding: 0.45rem 0.8rem;
 		font-size: 0.78rem;
 	}
 
