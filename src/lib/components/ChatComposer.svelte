@@ -20,6 +20,8 @@
 		rankSlashCommands,
 		type ChatAutocompleteToken
 	} from './chat-autocomplete';
+	import type { TransientNotice } from '$lib/harness/types';
+	import TransientNoticePopup from './TransientNoticePopup.svelte';
 
 	type QueueMode = 'followUp' | 'steer';
 
@@ -33,6 +35,8 @@
 		disabled?: boolean;
 		autoFocus?: boolean;
 		error?: string;
+		transientNotices?: TransientNotice[];
+		onClearTransientNotices?: () => void;
 		projectId?: string;
 		runtimeId?: string;
 		onSend: (message: string) => Promise<boolean>;
@@ -53,6 +57,8 @@
 		disabled = false,
 		autoFocus = false,
 		error,
+		transientNotices = [],
+		onClearTransientNotices,
 		projectId,
 		runtimeId,
 		onSend,
@@ -169,6 +175,12 @@
 	function updateDraft(value: string): void {
 		draft = value;
 		onDraftChange?.(value);
+	}
+
+	async function clearTransientNotices(): Promise<void> {
+		onClearTransientNotices?.();
+		await tick();
+		textarea?.focus();
 	}
 
 	function handleDraftInput(event: Event): void {
@@ -396,147 +408,155 @@
 
 <form class="chat-composer" aria-busy={submitting} onsubmit={submitMessage}>
 	<label class="visually-hidden" for={inputId}>Message Pi</label>
-	<div class="composer-shell">
-		<div class="input-row">
-			<div class="textarea-wrap">
-				{#if !draft}
-					<div class="animated-placeholder" aria-hidden="true">
-						<span>Ask Pi to</span>
-						<span class="placeholder-slot">
-							{#key placeholder}
-								<span transition:fade={placeholderTransition}>“{placeholder}”</span>
-							{/key}
-						</span>
-					</div>
-				{/if}
-				<textarea
-					id={inputId}
-					{@attach captureTextarea}
-					bind:value={draft}
-					rows="1"
-					aria-autocomplete="list"
-					aria-controls={menuOpen ? autocompleteListboxId : undefined}
-					aria-activedescendant={activeDescendant}
-					aria-haspopup="listbox"
-					oninput={handleDraftInput}
-					onkeydown={handleKeydown}
-					onfocus={handleFocus}
-					onblur={handleBlur}
-					onselect={handleSelectionChange}
-					onclick={handleSelectionChange}
-					oncompositionstart={handleCompositionStart}
-					oncompositionend={handleCompositionEnd}></textarea>
+	<div class="composer-stack">
+		{#if transientNotices.length}
+			<TransientNoticePopup notices={transientNotices} onClear={clearTransientNotices} />
+		{/if}
+		<div class="composer-shell">
+			<div class="input-row">
+				<div class="textarea-wrap">
+					{#if !draft}
+						<div class="animated-placeholder" aria-hidden="true">
+							<span>Ask Pi to</span>
+							<span class="placeholder-slot">
+								{#key placeholder}
+									<span transition:fade={placeholderTransition}>“{placeholder}”</span>
+								{/key}
+							</span>
+						</div>
+					{/if}
+					<textarea
+						id={inputId}
+						{@attach captureTextarea}
+						bind:value={draft}
+						rows="1"
+						aria-autocomplete="list"
+						aria-controls={menuOpen ? autocompleteListboxId : undefined}
+						aria-activedescendant={activeDescendant}
+						aria-haspopup="listbox"
+						oninput={handleDraftInput}
+						onkeydown={handleKeydown}
+						onfocus={handleFocus}
+						onblur={handleBlur}
+						onselect={handleSelectionChange}
+						onclick={handleSelectionChange}
+						oncompositionstart={handleCompositionStart}
+						oncompositionend={handleCompositionEnd}></textarea>
 
-				{#if menuOpen}
-					<div
-						id={autocompleteListboxId}
-						class="autocomplete-menu"
-						role="listbox"
-						aria-label="Autocomplete suggestions"
-					>
-						{#each autocompleteSuggestions as suggestion, index (suggestion.kind === 'command' ? suggestion.command.name : suggestion.file.path)}
-							<button
-								id={autocompleteOptionId(index)}
-								type="button"
-								role="option"
-								tabindex={-1}
-								class={['autocomplete-option', { selected: index === normalizedAutocompleteIndex }]}
-								aria-selected={index === normalizedAutocompleteIndex}
-								onmousedown={(event) => event.preventDefault()}
-								onclick={() => void selectAutocompleteSuggestion(suggestion)}
-							>
-								{#if suggestion.kind === 'command'}
-									<span class="autocomplete-primary">/{suggestion.command.name}</span>
-									{#if suggestion.command.description}
-										<span class="autocomplete-description">{suggestion.command.description}</span>
+					{#if menuOpen}
+						<div
+							id={autocompleteListboxId}
+							class="autocomplete-menu"
+							role="listbox"
+							aria-label="Autocomplete suggestions"
+						>
+							{#each autocompleteSuggestions as suggestion, index (suggestion.kind === 'command' ? suggestion.command.name : suggestion.file.path)}
+								<button
+									id={autocompleteOptionId(index)}
+									type="button"
+									role="option"
+									tabindex={-1}
+									class={[
+										'autocomplete-option',
+										{ selected: index === normalizedAutocompleteIndex }
+									]}
+									aria-selected={index === normalizedAutocompleteIndex}
+									onmousedown={(event) => event.preventDefault()}
+									onclick={() => void selectAutocompleteSuggestion(suggestion)}
+								>
+									{#if suggestion.kind === 'command'}
+										<span class="autocomplete-primary">/{suggestion.command.name}</span>
+										{#if suggestion.command.description}
+											<span class="autocomplete-description">{suggestion.command.description}</span>
+										{/if}
+									{:else}
+										<span class="autocomplete-primary">@{suggestion.file.path}</span>
+										<span class="autocomplete-description">Project file</span>
 									{/if}
-								{:else}
-									<span class="autocomplete-primary">@{suggestion.file.path}</span>
-									<span class="autocomplete-description">Project file</span>
-								{/if}
-							</button>
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<div class="composer-actions">
+					{#if isStreaming}
+						<button
+							class="stop-action"
+							type="button"
+							aria-label="Stop response"
+							disabled={!onStop}
+							onclick={() => onStop?.()}
+						>
+							<span aria-hidden="true"></span>
+						</button>
+					{:else}
+						<button
+							class="send-action"
+							type="submit"
+							disabled={submitDisabled}
+							aria-label="Send message"
+						>
+							<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+								<path
+									d="M10 15.5V4.5"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+								/>
+								<path
+									d="M5.75 8.75L10 4.5L14.25 8.75"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						</button>
+					{/if}
+				</div>
+			</div>
+
+			<div class="composer-footer">
+				<label class="composer-picker">
+					<span>Model</span>
+					<select
+						value={modelKey}
+						disabled={isStreaming || submitting || !models.length}
+						onchange={(event) => onModelChange(event.currentTarget.value)}
+					>
+						<option value="" disabled>No model selected</option>
+						{#each models as model (keyForModel(model))}
+							<option value={keyForModel(model)}>{model.name} · {model.provider}</option>
 						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<div class="composer-actions">
-				{#if isStreaming}
-					<button
-						class="stop-action"
-						type="button"
-						aria-label="Stop response"
-						disabled={!onStop}
-						onclick={() => onStop?.()}
-					>
-						<span aria-hidden="true"></span>
-					</button>
-				{:else}
-					<button
-						class="send-action"
-						type="submit"
-						disabled={submitDisabled}
-						aria-label="Send message"
-					>
-						<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-							<path
-								d="M10 15.5V4.5"
-								stroke="currentColor"
-								stroke-width="1.8"
-								stroke-linecap="round"
-							/>
-							<path
-								d="M5.75 8.75L10 4.5L14.25 8.75"
-								stroke="currentColor"
-								stroke-width="1.8"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						</svg>
-					</button>
-				{/if}
-			</div>
-		</div>
-
-		<div class="composer-footer">
-			<label class="composer-picker">
-				<span>Model</span>
-				<select
-					value={modelKey}
-					disabled={isStreaming || submitting || !models.length}
-					onchange={(event) => onModelChange(event.currentTarget.value)}
-				>
-					<option value="" disabled>No model selected</option>
-					{#each models as model (keyForModel(model))}
-						<option value={keyForModel(model)}>{model.name} · {model.provider}</option>
-					{/each}
-				</select>
-			</label>
-
-			<label class="composer-picker">
-				<span>Reasoning</span>
-				<select
-					value={thinkingLevel}
-					disabled={isStreaming || submitting || selectedModel?.reasoning === false}
-					onchange={(event) => onThinkingChange(event.currentTarget.value as ThinkingLevel)}
-				>
-					{#each THINKING_LEVELS as level (level)}
-						<option value={level}>{level}</option>
-					{/each}
-				</select>
-			</label>
-
-			{#if isStreaming}
-				<label class="composer-picker queue-picker">
-					<span>Queue</span>
-					<select value={queueMode} onchange={changeQueueMode}>
-						<option value="followUp">follow-up</option>
-						<option value="steer">steer</option>
 					</select>
 				</label>
-			{/if}
 
-			<span class="keyboard-hint">Enter to send · Shift Enter for a new line</span>
+				<label class="composer-picker">
+					<span>Reasoning</span>
+					<select
+						value={thinkingLevel}
+						disabled={isStreaming || submitting || selectedModel?.reasoning === false}
+						onchange={(event) => onThinkingChange(event.currentTarget.value as ThinkingLevel)}
+					>
+						{#each THINKING_LEVELS as level (level)}
+							<option value={level}>{level}</option>
+						{/each}
+					</select>
+				</label>
+
+				{#if isStreaming}
+					<label class="composer-picker queue-picker">
+						<span>Queue</span>
+						<select value={queueMode} onchange={changeQueueMode}>
+							<option value="followUp">follow-up</option>
+							<option value="steer">steer</option>
+						</select>
+					</label>
+				{/if}
+
+				<span class="keyboard-hint">Enter to send · Shift Enter for a new line</span>
+			</div>
 		</div>
 	</div>
 
@@ -564,6 +584,15 @@
 		display: grid;
 		gap: 0.55rem;
 		width: 100%;
+	}
+
+	.composer-stack {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.composer-stack :global(.transient-notice-popup) {
+		margin-bottom: 0;
 	}
 
 	.composer-shell {

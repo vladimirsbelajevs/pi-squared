@@ -88,6 +88,8 @@
 				isStreaming={chat.snapshot.isStreaming}
 				autoFocus
 				error={chat.error}
+				transientNotices={chat.transientNotices}
+				onClearTransientNotices={() => workspace.clearTransientNotices(chat)}
 				onSend={(message) => workspace.sendPrompt(chat, message)}
 				onDraftChange={() => workspace.schedulePersist()}
 				onStop={() => workspace.stopChat(chat)}

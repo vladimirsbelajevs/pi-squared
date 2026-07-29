@@ -75,6 +75,22 @@ describe('ChatComposer', () => {
 		expect(onDraftChange).toHaveBeenLastCalledWith('');
 	});
 
+	it('clears transient notices and returns focus to the message textbox', async () => {
+		const onClearTransientNotices = vi.fn();
+		const screen = render(
+			ChatComposer,
+			props({
+				transientNotices: [{ id: 'notice-1', message: 'Language server status:\nIndexing' }],
+				onClearTransientNotices
+			})
+		);
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await screen.getByRole('button', { name: 'Clear all notices' }).click();
+		expect(onClearTransientNotices).toHaveBeenCalledOnce();
+		await expect.element(textbox).toHaveFocus();
+	});
+
 	it('shows only a stop action while streaming and queues with Enter', async () => {
 		const onStop = vi.fn();
 		const onSend = vi.fn().mockResolvedValue(true);

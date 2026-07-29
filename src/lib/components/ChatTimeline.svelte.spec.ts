@@ -65,16 +65,32 @@ describe('ChatTimeline', () => {
 		}
 	});
 
-	it('renders multiline transient notices', async () => {
-		const message = 'Language server status:\n  Indexing workspace';
+	it('does not render transient notices but keeps persisted snapshot notices', async () => {
+		const base = chat();
 		const screen = render(ChatTimeline, {
-			chat: chat({ transientNotices: [{ id: 'notice-1', message }] })
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'model-change',
+							kind: 'notice',
+							text: 'Model changed to openai/gpt-5.6'
+						}
+					]
+				},
+				transientNotices: [
+					{ id: 'mcp-notice', message: 'The interactive MCP panel is terminal-only.' }
+				]
+			})
 		});
 
-		await expect.element(screen.getByText(message)).toBeVisible();
-		const notice = screen.container.querySelector('.timeline-notice');
-		expect(notice).not.toBeNull();
-		expect(notice?.textContent).toBe(message);
+		await expect.element(screen.getByText('Model changed to openai/gpt-5.6')).toBeVisible();
+		expect(screen.container.textContent).not.toContain(
+			'The interactive MCP panel is terminal-only.'
+		);
+		expect(screen.container.querySelectorAll('.timeline-notice')).toHaveLength(1);
 	});
 
 	it('renders metadata and copy controls for user and assistant messages', async () => {

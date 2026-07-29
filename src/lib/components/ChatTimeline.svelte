@@ -133,10 +133,6 @@
 	<p class="copy-error" role="alert">{copyError}</p>
 {/if}
 
-{#each chat.transientNotices as notice (notice.id)}
-	<p class="timeline-notice">{notice.message}</p>
-{/each}
-
 {#each timeline as entry (entry.item.id)}
 	{@const item = entry.item}
 	{#if item.kind === 'notice'}

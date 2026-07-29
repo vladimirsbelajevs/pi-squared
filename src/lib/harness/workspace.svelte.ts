@@ -328,6 +328,10 @@ export class HarnessWorkspace {
 		}
 	}
 
+	clearTransientNotices(chat: ChatTab): void {
+		chat.transientNotices = [];
+	}
+
 	async respondToPermission(
 		chat: ChatTab,
 		request: PendingPermission,
