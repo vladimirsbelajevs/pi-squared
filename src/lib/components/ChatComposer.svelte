@@ -658,21 +658,14 @@
 		border: 1px solid var(--border);
 		border-radius: 0.8rem;
 		background: var(--surface);
-		box-shadow:
-			0 14px 32px var(--shadow),
-			inset 0 1px 0 color-mix(in srgb, var(--text) 7%, transparent);
 		transition:
 			border-color 180ms ease,
-			box-shadow 180ms ease,
 			background 180ms ease;
 	}
 
 	.composer-shell:focus-within {
 		border-color: var(--border-strong);
 		background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
-		box-shadow:
-			0 18px 40px var(--shadow),
-			0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 	}
 
 	.input-row {
