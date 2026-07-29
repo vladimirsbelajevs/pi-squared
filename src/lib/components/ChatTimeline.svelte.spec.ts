@@ -524,12 +524,12 @@ describe('ChatTimeline', () => {
 		});
 		const group = screen.container.querySelector('details.tool-group') as HTMLDetailsElement;
 
-		await expect.element(screen.getByText('2 tools called')).toBeVisible();
+		await expect.element(screen.getByText('2 tools called · 1 completed · 1 failed')).toBeVisible();
 		expect(group.open).toBe(false);
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(0);
 		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
 
-		await screen.getByText('2 tools called').click();
+		await screen.getByText('2 tools called · 1 completed · 1 failed').click();
 		await vi.waitFor(() => expect(group.open).toBe(true));
 		expect(group.open).toBe(true);
 		const result = screen.container.querySelector('.tool-result') as HTMLDetailsElement;
@@ -603,7 +603,7 @@ describe('ChatTimeline', () => {
 		});
 
 		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(1);
-		await expect.element(screen.getByText('3 tools called')).toBeVisible();
+		await expect.element(screen.getByText('3 tools called · 3 completed')).toBeVisible();
 		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
 		await expect.element(screen.getByText('The project is ready to run.')).toBeVisible();
 	});
@@ -690,7 +690,7 @@ describe('ChatTimeline', () => {
 		expect(group.closest('.message-assistant')).toBeNull();
 		await expect.element(screen.getByText('I will inspect the project.')).toBeVisible();
 		expect(group.nextElementSibling).toBe(screen.container.querySelector('article.streaming'));
-		await screen.getByText('2 tools called').click();
+		await screen.getByText('2 tools called · 1 completed · 1 running').click();
 		await vi.waitFor(() => expect(group.open).toBe(true));
 		expect(screen.container.querySelectorAll('.tool-detail > span')).toHaveLength(1);
 		const statuses = [
@@ -725,7 +725,7 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		await expect.element(screen.getByText('2 tools called')).toBeVisible();
+		await expect.element(screen.getByText('2 tools called · 2 running')).toBeVisible();
 		await expect.element(screen.getByText('Legacy result')).toBeVisible();
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(1);
 	});

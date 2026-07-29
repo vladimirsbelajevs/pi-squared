@@ -150,6 +150,21 @@
 		return tool.stream ? 'running' : 'pending';
 	}
 
+	function toolGroupSummary(tools: ToolView[]): string {
+		const counts = { completed: 0, running: 0, failed: 0 };
+		for (const tool of tools) {
+			const status = toolStatus(tool);
+			if (status !== 'pending') counts[status] += 1;
+		}
+
+		return [
+			toolCountLabel(tools.length),
+			...(['completed', 'running', 'failed'] as const)
+				.filter((status) => counts[status] > 0)
+				.map((status) => `${counts[status]} ${status}`)
+		].join(' · ');
+	}
+
 	function formatTimestamp(timestamp: string | undefined): string | undefined {
 		if (!timestamp) return undefined;
 		const date = new Date(timestamp);
@@ -203,7 +218,7 @@
 				entry.tools.some((tool) => toolStatus(tool) === 'failed') && 'tool-group-error'
 			]}
 		>
-			<summary class="tool-group-summary">{toolCountLabel(entry.tools.length)}</summary>
+			<summary class="tool-group-summary">{toolGroupSummary(entry.tools)}</summary>
 			{#if showReasoning && entry.thinking}
 				<details class="thinking tool-thinking">
 					<summary>Reasoning</summary>
