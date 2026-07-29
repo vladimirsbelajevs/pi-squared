@@ -557,6 +557,7 @@
 		color: var(--text-muted);
 		font-size: 0.78rem;
 		text-align: center;
+		white-space: pre-wrap;
 	}
 
 	.thinking-indicator {

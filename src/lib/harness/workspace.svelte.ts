@@ -524,7 +524,9 @@ export class HarnessWorkspace {
 			return;
 		}
 		if (event.type === 'notice') {
+			if (!event.message.trim()) return;
 			chat.transientNotices.push({ id: `notice-${envelope.id}`, message: event.message });
+			if (chat.transientNotices.length > 20) chat.transientNotices.splice(0, 1);
 			return;
 		}
 		if (event.type === 'permission_request') {
@@ -576,7 +578,6 @@ export class HarnessWorkspace {
 		chat.streamText = '';
 		chat.streamThinking = '';
 		chat.streamTools = [];
-		chat.transientNotices = [];
 	}
 
 	#createChatTab(id: string, snapshot: RuntimeSnapshot): ChatTab {

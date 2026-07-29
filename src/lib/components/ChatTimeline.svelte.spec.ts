@@ -65,6 +65,18 @@ describe('ChatTimeline', () => {
 		}
 	});
 
+	it('renders multiline transient notices', async () => {
+		const message = 'Language server status:\n  Indexing workspace';
+		const screen = render(ChatTimeline, {
+			chat: chat({ transientNotices: [{ id: 'notice-1', message }] })
+		});
+
+		await expect.element(screen.getByText(message)).toBeVisible();
+		const notice = screen.container.querySelector('.timeline-notice');
+		expect(notice).not.toBeNull();
+		expect(notice?.textContent).toBe(message);
+	});
+
 	it('renders metadata and copy controls for user and assistant messages', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
