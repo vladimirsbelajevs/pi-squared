@@ -390,7 +390,7 @@
 
 	.message-entry {
 		max-width: 54rem;
-		margin: 0 auto 0.25rem;
+		margin: 0 auto 1rem;
 	}
 
 	.message {
@@ -484,7 +484,7 @@
 	.message-markdown {
 		color: var(--text);
 		overflow-wrap: anywhere;
-		padding: 0.8rem;
+		padding: 0;
 		font-size: 0.92rem;
 		line-height: 1.6;
 	}
@@ -644,7 +644,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.55rem;
-		padding: 0.6rem 0.8rem;
+		padding: 0;
 		color: var(--text-muted);
 		font-size: 0.8rem;
 		cursor: pointer;
@@ -662,7 +662,7 @@
 	.tool-list {
 		display: grid;
 		gap: 0.65rem;
-		padding: 0 0.75rem 0.75rem;
+		padding: 0.75rem;
 	}
 
 	.tool-entry {
