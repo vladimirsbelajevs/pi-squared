@@ -110,6 +110,7 @@
 	}
 
 	.theme-choice span {
+		flex: 0 0 1rem;
 		width: 1rem;
 		height: 1rem;
 		border-radius: 50%;
