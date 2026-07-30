@@ -8,8 +8,15 @@
 	import type { WorkspaceTab } from '$lib/harness/types';
 
 	let { children } = $props();
-	let scrollContainer = $state<HTMLElement>();
+	let scrollContainer: HTMLElement | undefined;
 	let restoringScroll = false;
+
+	function rememberScrollContainer(element: HTMLElement): () => void {
+		scrollContainer = element;
+		return () => {
+			scrollContainer = undefined;
+		};
+	}
 
 	function rememberScrollPosition(event: Event): void {
 		if (restoringScroll) return;
@@ -83,16 +90,15 @@
 
 	<div
 		id="workspace-content"
+		class:workspace-state={workspace.initializing || workspace.error}
 		class="workspace-content"
-		bind:this={scrollContainer}
+		{@attach rememberScrollContainer}
 		onscroll={rememberScrollPosition}
 	>
-		{#if workspace.error}
-			<div class="app-error" role="alert">{workspace.error}</div>
-		{/if}
-
 		{#if workspace.initializing}
 			<section class="loading-state"><span class="pulse"></span>Loading local harness…</section>
+		{:else if workspace.error}
+			<div class="app-error" role="alert">{workspace.error}</div>
 		{:else}
 			{@render children()}
 		{/if}
@@ -113,12 +119,14 @@
 		overflow: auto;
 	}
 
+	.workspace-content.workspace-state {
+		display: grid;
+		grid-template-rows: minmax(0, 1fr);
+	}
+
 	.app-error {
-		position: fixed;
-		top: 3.5rem;
-		right: 1rem;
-		z-index: 10;
-		max-width: 28rem;
+		width: min(100%, 28rem);
+		place-self: center;
 		padding: 0.75rem 1rem;
 		border: 1px solid var(--danger);
 		background: var(--surface);
@@ -128,6 +136,7 @@
 
 	.loading-state {
 		display: grid;
+		place-self: stretch;
 		place-content: center;
 		gap: 1rem;
 		color: var(--text-muted);
