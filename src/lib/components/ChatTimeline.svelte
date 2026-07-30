@@ -590,6 +590,39 @@
 		font: inherit;
 	}
 
+	.message-markdown :global(pre code .hljs-keyword) {
+		color: var(--accent);
+	}
+
+	.message-markdown :global(pre code .hljs-string) {
+		color: var(--success);
+	}
+
+	.message-markdown :global(pre code .hljs-comment) {
+		color: var(--text-muted);
+		font-style: italic;
+	}
+
+	.message-markdown :global(pre code .hljs-title) {
+		color: var(--accent-strong);
+	}
+
+	.message-markdown :global(pre code .hljs-built_in) {
+		color: var(--warning);
+	}
+
+	.message-markdown :global(pre code .hljs-number) {
+		color: var(--warning);
+	}
+
+	.message-markdown :global(pre code .hljs-attribute) {
+		color: var(--accent);
+	}
+
+	.message-markdown :global(pre code .hljs-meta) {
+		color: var(--danger);
+	}
+
 	.message-markdown > :global(:first-child) {
 		margin-top: 0;
 	}

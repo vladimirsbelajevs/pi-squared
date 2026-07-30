@@ -12,7 +12,29 @@ describe('renderAssistantMarkdown', () => {
 		expect(html).toContain('<ul>');
 		expect(html).toContain('<li>First</li>');
 		expect(html).toContain('<a href="https://example.test/docs">Docs</a>');
-		expect(html).toContain('<pre><code class="language-ts">const answer = 42;\n</code></pre>');
+		expect(html).toContain(
+			'<pre><code class="language-ts"><span class="hljs-keyword">const</span>'
+		);
+	});
+
+	it('highlights C# and Bash code blocks', () => {
+		const html = renderAssistantMarkdown(
+			'```csharp\npublic class Greeter {}\n```\n\n```bash\necho "$HOME"\n```'
+		);
+
+		expect(html).toContain('class="language-csharp"');
+		expect(html).toContain('class="language-bash"');
+		expect(html).toContain('class="hljs-keyword"');
+		expect(html).toContain('class="hljs-built_in"');
+	});
+
+	it('escapes code when its language is unknown', () => {
+		const html = renderAssistantMarkdown(
+			'```not-a-language\n<script>alert("unsafe")</script>\n```'
+		);
+
+		expect(html).toContain('&lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt;');
+		expect(html).not.toContain('hljs-');
 	});
 
 	it('escapes raw HTML instead of returning DOM elements', () => {
