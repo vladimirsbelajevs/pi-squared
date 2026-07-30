@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
+	import { on } from 'svelte/events';
 	import type { ChatItem, ChatToolCall } from '$lib/contracts';
 	import type { ChatTab, StreamingTool } from '$lib/harness/types';
 	import { renderAssistantMarkdown } from '$lib/markdown';
@@ -22,6 +23,7 @@
 	let copiedMessageId = $state<string>();
 	let copyError = $state<string>();
 	let copiedMessageTimer: ReturnType<typeof setTimeout> | undefined;
+	const copiedCodeTimers = new WeakMap<HTMLButtonElement, ReturnType<typeof setTimeout>>();
 	let hoveredMessageId = $state<string>();
 	let waitingForResponse = $derived(
 		chat.snapshot?.isStreaming === true &&
@@ -189,20 +191,61 @@
 		return item.modelName ?? chat.snapshot?.model?.name;
 	}
 
-	async function copyMessage(item: ChatItem): Promise<void> {
-		if (!item.text) return;
+	async function copyText(text: string, fallbackError: string): Promise<boolean> {
 		try {
 			if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
-			await navigator.clipboard.writeText(item.text);
+			await navigator.clipboard.writeText(text);
 			copyError = undefined;
-			copiedMessageId = item.id;
-			if (copiedMessageTimer) clearTimeout(copiedMessageTimer);
-			copiedMessageTimer = setTimeout(() => {
-				copiedMessageId = undefined;
-			}, 1600);
+			return true;
 		} catch (error) {
-			copyError = error instanceof Error ? error.message : 'Unable to copy the message.';
+			copyError = error instanceof Error ? error.message : fallbackError;
+			return false;
 		}
+	}
+
+	async function copyMessage(item: ChatItem): Promise<void> {
+		if (!item.text || !(await copyText(item.text, 'Unable to copy the message.'))) return;
+
+		copiedMessageId = item.id;
+		if (copiedMessageTimer) clearTimeout(copiedMessageTimer);
+		copiedMessageTimer = setTimeout(() => {
+			copiedMessageId = undefined;
+		}, 1600);
+	}
+
+	async function copyCodeBlock(button: HTMLButtonElement, code: string): Promise<void> {
+		if (!(await copyText(code, 'Unable to copy the code.'))) return;
+
+		const previousTimer = copiedCodeTimers.get(button);
+		if (previousTimer) clearTimeout(previousTimer);
+		button.classList.add('copied');
+		button.setAttribute('aria-label', 'Copied code');
+		button.title = 'Copied code';
+		copiedCodeTimers.set(
+			button,
+			setTimeout(() => {
+				button.classList.remove('copied');
+				button.setAttribute('aria-label', 'Copy code');
+				button.title = 'Copy code';
+				copiedCodeTimers.delete(button);
+			}, 1600)
+		);
+	}
+
+	function codeCopyControls(container: HTMLElement): () => void {
+		return on(container, 'click', (event) => {
+			if (!(event.target instanceof Element)) return;
+
+			const button = event.target.closest<HTMLButtonElement>('button[data-code-copy]');
+			if (!button || !container.contains(button)) return;
+
+			const code = button
+				.closest<HTMLElement>('[data-code-block]')
+				?.querySelector<HTMLElement>('pre > code')?.textContent;
+			if (code === undefined || code === null) return;
+
+			void copyCodeBlock(button, code);
+		});
 	}
 </script>
 
@@ -283,8 +326,9 @@
 				{/if}
 				{#if item.text}
 					{#if item.role === 'assistant'}
+						{@const markdown = renderAssistantMarkdown(item.text)}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
-						<div class="message-markdown">{@html renderAssistantMarkdown(item.text)}</div>
+						<div class="message-markdown" {@attach codeCopyControls}>{@html markdown}</div>
 					{:else}
 						<pre class="message-text">{item.text}</pre>
 					{/if}
@@ -367,8 +411,9 @@
 			</details>
 		{/if}
 		{#if chat.streamText}
+			{@const markdown = renderAssistantMarkdown(chat.streamText)}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
-			<div class="message-markdown">{@html renderAssistantMarkdown(chat.streamText)}</div>
+			<div class="message-markdown" {@attach codeCopyControls}>{@html markdown}</div>
 		{/if}
 	</article>
 {/if}
@@ -580,6 +625,50 @@
 			Menlo,
 			monospace;
 		white-space: pre;
+	}
+
+	.message-markdown :global(.markdown-code-block) {
+		margin: 0.9rem 0;
+		position: relative;
+	}
+
+	.message-markdown :global(.markdown-code-block > pre) {
+		margin: 0;
+		padding-right: 2.8rem;
+	}
+
+	.message-markdown :global(.code-copy-action) {
+		position: absolute;
+		top: 0.45rem;
+		right: 0.45rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 0;
+		border-radius: 0.25rem;
+		background: transparent;
+		color: var(--text-muted);
+		padding: 0.25rem;
+		opacity: 0;
+		transition: opacity 160ms ease;
+	}
+
+	.message-markdown :global(.markdown-code-block:hover .code-copy-action),
+	.message-markdown :global(.code-copy-action:focus-within),
+	.message-markdown :global(.code-copy-action.copied) {
+		opacity: 1;
+	}
+
+	.message-markdown :global(.code-copy-action:hover:not(:disabled)),
+	.message-markdown :global(.code-copy-action:focus-visible),
+	.message-markdown :global(.code-copy-action.copied) {
+		background: var(--surface);
+		color: var(--text);
+	}
+
+	.message-markdown :global(.code-copy-action svg) {
+		width: 1.35rem;
+		height: 1.35rem;
 	}
 
 	.message-markdown :global(pre code) {

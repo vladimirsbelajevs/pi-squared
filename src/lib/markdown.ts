@@ -22,6 +22,7 @@ import MarkdownIt from 'markdown-it';
 
 const ENCODED_CONTROL_CHARACTER = /%(?:25)*(?:0[0-9a-f]|1[0-9a-f]|7f)/i;
 const ENCODED_SCHEME_SEPARATOR = /^[a-z][a-z0-9+.-]*%(?:25)*3a/i;
+const CODE_COPY_BUTTON = `<button class="code-copy-action" type="button" data-code-copy aria-label="Copy code" title="Copy code"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="7" y="6" width="8" height="9" rx="1.25" stroke="currentColor" stroke-width="1.5"/><path d="M5 12V5.25C5 4.56 5.56 4 6.25 4H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`;
 
 hljs.registerLanguage('bash', bash);
 hljs.registerLanguage('c', c);
@@ -91,6 +92,14 @@ const markdown = new MarkdownIt({
 		return hljs.highlight(code, { language: normalizedLanguage, ignoreIllegals: true }).value;
 	}
 });
+const defaultFence = markdown.renderer.rules.fence;
+
+if (!defaultFence) {
+	throw new Error('Markdown-it fence renderer is unavailable.');
+}
+
+markdown.renderer.rules.fence = (...args) =>
+	`<div class="markdown-code-block" data-code-block>${CODE_COPY_BUTTON}${defaultFence(...args)}</div>\n`;
 const defaultNormalizeLink = markdown.normalizeLink.bind(markdown);
 const defaultValidateLink = markdown.validateLink.bind(markdown);
 

@@ -12,9 +12,20 @@ describe('renderAssistantMarkdown', () => {
 		expect(html).toContain('<ul>');
 		expect(html).toContain('<li>First</li>');
 		expect(html).toContain('<a href="https://example.test/docs">Docs</a>');
+		expect(html).toContain('<div class="markdown-code-block" data-code-block>');
+		expect(html).toContain('class="code-copy-action"');
+		expect(html).toContain('data-code-copy');
 		expect(html).toContain(
 			'<pre><code class="language-ts"><span class="hljs-keyword">const</span>'
 		);
+	});
+
+	it('adds copy controls only to fenced code blocks', () => {
+		const html = renderAssistantMarkdown('Inline `code`.\n\n```ts\nconst answer = 42;\n```');
+
+		expect(html).toContain('data-code-block');
+		expect(html.match(/data-code-copy/g)).toHaveLength(1);
+		expect(html).toContain('<p>Inline <code>code</code>.</p>');
 	});
 
 	it('highlights C# and Bash code blocks', () => {

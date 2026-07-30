@@ -39,6 +39,22 @@ function chat(overrides: Partial<ChatTab> = {}): ChatTab {
 	};
 }
 
+function mockClipboard(writeText: ReturnType<typeof vi.fn>): () => void {
+	const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+	Object.defineProperty(navigator, 'clipboard', {
+		configurable: true,
+		value: { writeText }
+	});
+
+	return () => {
+		if (originalClipboard) {
+			Object.defineProperty(navigator, 'clipboard', originalClipboard);
+		} else {
+			delete (navigator as unknown as { clipboard?: Clipboard }).clipboard;
+		}
+	};
+}
+
 describe('ChatTimeline', () => {
 	it('shows an animated thinking status before the first response delta', async () => {
 		const screen = render(ChatTimeline, { chat: chat() });
@@ -237,6 +253,78 @@ describe('ChatTimeline', () => {
 		expect(message.querySelector('strong')).toHaveTextContent('Ready');
 		expect(message.querySelectorAll('li')).toHaveLength(2);
 		expect(message.querySelector('a')).toHaveAttribute('href', 'https://example.test');
+	});
+
+	it('copies persisted fenced code without adding controls to inline code', async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		const restoreClipboard = mockClipboard(writeText);
+		const base = chat();
+
+		try {
+			const screen = render(ChatTimeline, {
+				chat: chat({
+					snapshot: {
+						...base.snapshot!,
+						isStreaming: false,
+						items: [
+							{
+								id: 'assistant-code',
+								kind: 'message',
+								role: 'assistant',
+								text: 'Use `inlineCode`.\n\n```ts\nconst answer = 42;\n```'
+							}
+						]
+					}
+				})
+			});
+			const message = screen.container.querySelector('.message-markdown') as HTMLElement;
+
+			expect(message.querySelectorAll('[data-code-copy]')).toHaveLength(1);
+			expect(message.querySelector('p code [data-code-copy]')).toBeNull();
+			const copyButton = message.querySelector<HTMLButtonElement>('[data-code-copy]')!;
+			await copyButton.click();
+
+			await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('const answer = 42;\n'));
+			await vi.waitFor(() => expect(copyButton).toHaveAttribute('aria-label', 'Copied code'));
+			expect(copyButton).toHaveClass('copied');
+		} finally {
+			restoreClipboard();
+		}
+	});
+
+	it('copies fenced code added to an existing streaming Markdown container', async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		const restoreClipboard = mockClipboard(writeText);
+
+		try {
+			const screen = render(ChatTimeline, { chat: chat({ streamText: 'Still working…' }) });
+			expect(screen.container.querySelector('[data-code-copy]')).toBeNull();
+
+			await screen.rerender({
+				chat: chat({ streamText: '```bash\necho "done"\n```' })
+			});
+			await screen.getByRole('button', { name: 'Copy code' }).click();
+
+			await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('echo "done"\n'));
+		} finally {
+			restoreClipboard();
+		}
+	});
+
+	it('reports fenced code clipboard failures', async () => {
+		const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied.'));
+		const restoreClipboard = mockClipboard(writeText);
+
+		try {
+			const screen = render(ChatTimeline, { chat: chat({ streamText: '```\nsecret\n```' }) });
+			await screen.getByRole('button', { name: 'Copy code' }).click();
+
+			await expect
+				.element(screen.getByRole('alert'))
+				.toHaveTextContent('Clipboard permission denied.');
+		} finally {
+			restoreClipboard();
+		}
 	});
 
 	it('omits ordinary empty assistant messages but renders empty aborted messages as stopped rows', async () => {
