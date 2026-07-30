@@ -654,8 +654,7 @@
 	}
 
 	.message-markdown :global(.markdown-code-block:hover .code-copy-action),
-	.message-markdown :global(.code-copy-action:focus-within),
-	.message-markdown :global(.code-copy-action.copied) {
+	.message-markdown :global(.code-copy-action:focus-visible) {
 		opacity: 1;
 	}
 
