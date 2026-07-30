@@ -145,12 +145,60 @@ describe('ChatTimeline', () => {
 		expect(bubble.nextElementSibling).toBe(attachments);
 		expect(attachments.nextElementSibling).toHaveClass('message-meta-row');
 		await expect.element(screen.getByRole('list', { name: 'assistant attachments' })).toBeVisible();
-		const preview = attachments.querySelector<HTMLImageElement>('.message-attachment-thumbnail');
+		const preview = attachments.querySelector<HTMLImageElement>('.attachment-preview-thumbnail');
 		expect(preview?.src).toMatch(/^data:image\/png;base64,/);
+		await expect
+			.element(screen.getByRole('button', { name: 'Open preview of diagram.png' }))
+			.toBeVisible();
 		await expect.element(screen.getByText('diagram.png')).toBeVisible();
 		await expect.element(screen.getByText('secrets.ts')).toBeVisible();
+		expect(attachments.querySelector('button[aria-label^="Remove "]')).toBeNull();
 		expect(screen.container.textContent).not.toContain('const secret = true;');
 		expect(screen.container.textContent).not.toContain(textData);
+	});
+
+	it('opens and closes persisted image attachment previews', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-image',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							attachments: [
+								{
+									id: 'image-1',
+									kind: 'image',
+									name: 'diagram.png',
+									mimeType: 'image/png',
+									size: 8,
+									data: 'iVBORw0KGgo='
+								}
+							]
+						}
+					]
+				}
+			})
+		});
+
+		const thumbnail = screen.getByRole('button', { name: 'Open preview of diagram.png' });
+		await thumbnail.click();
+		await expect
+			.element(screen.getByRole('dialog', { name: 'Image preview: diagram.png' }))
+			.toBeVisible();
+		await expect.element(screen.getByRole('button', { name: 'Close image preview' })).toBeVisible();
+
+		await screen.getByRole('button', { name: 'Close image preview' }).click();
+		await vi.waitFor(() => expect(screen.container.querySelector('[role="dialog"]')).toBeNull());
+
+		await thumbnail.click();
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		await vi.waitFor(() => expect(screen.container.querySelector('[role="dialog"]')).toBeNull());
 	});
 
 	it('hides the thinking status once text, tools, or approval is visible', async () => {

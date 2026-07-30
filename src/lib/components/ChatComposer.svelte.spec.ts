@@ -107,7 +107,9 @@ describe('ChatComposer', () => {
 		await userEvent.upload(input, image);
 
 		await expect.element(screen.getByText('diagram.png')).toBeVisible();
-		const preview = screen.container.querySelector<HTMLImageElement>('.attachment-thumbnail');
+		const preview = screen.container.querySelector<HTMLImageElement>(
+			'.attachment-preview-thumbnail'
+		);
 		expect(preview?.src).toMatch(/^data:image\/png;base64,/);
 		await expect.element(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
 
@@ -128,6 +130,54 @@ describe('ChatComposer', () => {
 			})
 		);
 		expect(screen.container.querySelector('.attachment-draft-list')).toBeNull();
+	});
+
+	it('opens and closes draft image attachment previews', async () => {
+		const screen = render(ChatComposer, props());
+		const input = screen.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+		const image = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'diagram.png', {
+			type: 'image/png'
+		});
+
+		await userEvent.upload(input, image);
+
+		const thumbnail = screen.getByRole('button', { name: 'Open preview of diagram.png' });
+		await thumbnail.click();
+		await expect
+			.element(screen.getByRole('dialog', { name: 'Image preview: diagram.png' }))
+			.toBeVisible();
+		await expect.element(screen.getByRole('button', { name: 'Close image preview' })).toBeVisible();
+
+		await screen.getByRole('button', { name: 'Close image preview' }).click();
+		await vi.waitFor(() => expect(screen.container.querySelector('[role="dialog"]')).toBeNull());
+
+		await thumbnail.click();
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		await vi.waitFor(() => expect(screen.container.querySelector('[role="dialog"]')).toBeNull());
+	});
+
+	it('removes only the selected draft attachment', async () => {
+		const onSend = vi.fn().mockResolvedValue(true);
+		const screen = render(ChatComposer, props({ onSend }));
+		const input = screen.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+		const first = new File(['first attachment'], 'first.txt', { type: 'text/plain' });
+		const second = new File(['second attachment'], 'second.txt', { type: 'text/plain' });
+
+		await userEvent.upload(input, [first, second]);
+		await expect.element(screen.getByText('first.txt')).toBeVisible();
+		await expect.element(screen.getByText('second.txt')).toBeVisible();
+
+		await screen.getByRole('button', { name: 'Remove second.txt attachment 2' }).click();
+		await vi.waitFor(() => expect(screen.container.textContent).not.toContain('second.txt'));
+		await expect.element(screen.getByText('first.txt')).toBeVisible();
+
+		await screen.getByRole('button', { name: 'Send message' }).click();
+		await vi.waitFor(() =>
+			expect(onSend).toHaveBeenCalledWith({
+				text: '',
+				attachments: [expect.objectContaining({ name: 'first.txt', data: expect.any(String) })]
+			})
+		);
 	});
 
 	it('reports draft changes from typing and sending', async () => {

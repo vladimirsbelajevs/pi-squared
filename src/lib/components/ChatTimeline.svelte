@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { on } from 'svelte/events';
-	import { attachmentDataUrl } from '$lib/attachments';
-	import type { ChatAttachment, ChatItem, ChatToolCall } from '$lib/contracts';
+	import type { ChatItem, ChatToolCall } from '$lib/contracts';
 	import type { ChatTab, StreamingTool } from '$lib/harness/types';
 	import { renderAssistantMarkdown } from '$lib/markdown';
+	import AttachmentPreview from './AttachmentPreview.svelte';
+	import ImageViewer, { type ImageViewerImage } from './ImageViewer.svelte';
 
 	type ToolView = {
 		id: string;
@@ -26,6 +27,7 @@
 	let copiedMessageTimer: ReturnType<typeof setTimeout> | undefined;
 	const copiedCodeTimers = new WeakMap<HTMLButtonElement, ReturnType<typeof setTimeout>>();
 	let hoveredMessageId = $state<string>();
+	let selectedImage = $state<ImageViewerImage>();
 	let waitingForResponse = $derived(
 		chat.snapshot?.isStreaming === true &&
 			(!showReasoning || !chat.streamThinking) &&
@@ -193,28 +195,8 @@
 		}).format(new Date(timestamp));
 	}
 
-	function attachmentName(attachment: ChatAttachment): string {
-		return attachment.name || 'Unnamed attachment';
-	}
-
-	function attachmentSize(attachment: ChatAttachment): string {
-		const bytes = attachment.size;
-		if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-		const units = ['B', 'KB', 'MB', 'GB'];
-		const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-		const value = bytes / 1024 ** exponent;
-		return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${
-			units[exponent]
-		}`;
-	}
-
-	function imagePreview(attachment: ChatAttachment): string | undefined {
-		if (attachment.kind !== 'image' || !attachment.data) return undefined;
-		return attachmentDataUrl({
-			kind: attachment.kind,
-			mimeType: attachment.mimeType,
-			data: attachment.data
-		});
+	function openImageViewer(image: ImageViewerImage): void {
+		selectedImage = image;
 	}
 
 	function modelName(item: ChatItem): string | undefined {
@@ -367,23 +349,7 @@
 			{#if item.attachments?.length}
 				<ul class="message-attachments" aria-label={`${role} attachments`}>
 					{#each item.attachments as attachment (attachment.id)}
-						<li class="message-attachment">
-							{#if imagePreview(attachment)}
-								<img
-									class="message-attachment-thumbnail"
-									src={imagePreview(attachment)}
-									alt={`Preview of ${attachmentName(attachment)}`}
-								/>
-							{:else}
-								<span class="message-attachment-icon" aria-hidden="true"
-									>{attachment.kind === 'image' ? 'Image' : 'Code'}</span
-								>
-							{/if}
-							<span class="message-attachment-details">
-								<strong>{attachmentName(attachment)}</strong>
-								<small>{attachmentSize(attachment)}</small>
-							</span>
-						</li>
+						<AttachmentPreview {attachment} onOpen={openImageViewer} />
 					{/each}
 				</ul>
 			{/if}
@@ -471,6 +437,8 @@
 	</article>
 {/if}
 
+<ImageViewer bind:image={selectedImage} />
+
 <style>
 	.fallback-error {
 		width: min(54rem, 100%);
@@ -505,64 +473,6 @@
 		margin: 0.45rem 0 0;
 		padding: 0;
 		list-style: none;
-	}
-
-	.message-attachment {
-		display: flex;
-		align-items: center;
-		min-width: min(100%, 12rem);
-		max-width: min(100%, 18rem);
-		gap: 0.45rem;
-		border: 1px solid var(--border);
-		border-radius: 0.45rem;
-		background: var(--surface-muted);
-		padding: 0.35rem;
-	}
-
-	.message-attachment-thumbnail,
-	.message-attachment-icon {
-		width: 2.25rem;
-		height: 2.25rem;
-		flex: 0 0 auto;
-		border-radius: 0.3rem;
-	}
-
-	.message-attachment-thumbnail {
-		object-fit: cover;
-		background: var(--surface-strong);
-	}
-
-	.message-attachment-icon {
-		display: grid;
-		place-items: center;
-		background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
-		color: var(--accent);
-		font-size: 0.62rem;
-		font-weight: 700;
-		text-transform: uppercase;
-	}
-
-	.message-attachment-details {
-		display: grid;
-		min-width: 0;
-		gap: 0.08rem;
-	}
-
-	.message-attachment-details strong,
-	.message-attachment-details small {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.message-attachment-details strong {
-		font-size: 0.72rem;
-		font-weight: 600;
-	}
-
-	.message-attachment-details small {
-		color: var(--text-muted);
-		font-size: 0.66rem;
 	}
 
 	.message header {

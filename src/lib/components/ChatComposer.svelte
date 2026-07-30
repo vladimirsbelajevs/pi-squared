@@ -14,7 +14,6 @@
 		type ThinkingLevel
 	} from '$lib/contracts';
 	import {
-		attachmentDataUrl,
 		attachmentKind,
 		attachmentMimeType,
 		MAX_ATTACHMENTS,
@@ -36,7 +35,9 @@
 		type ChatAutocompleteToken
 	} from './chat-autocomplete';
 	import type { TransientNotice } from '$lib/harness/types';
+	import AttachmentPreview from './AttachmentPreview.svelte';
 	import ComposerStatusPanel from './ComposerStatusPanel.svelte';
+	import ImageViewer, { type ImageViewerImage } from './ImageViewer.svelte';
 	import TransientNoticePopup from './TransientNoticePopup.svelte';
 
 	type QueueMode = 'followUp' | 'steer';
@@ -123,6 +124,7 @@
 	let dismissedToken = $state<string>();
 	let selectedAutocompleteIndex = $state(0);
 	let attachments = $state.raw<PromptAttachment[]>([]);
+	let selectedImage = $state<ImageViewerImage>();
 	let readingAttachmentCount = $state(0);
 	let fileInput: HTMLInputElement | undefined;
 	let commands = $state.raw<SlashCommand[]>([]);
@@ -358,6 +360,10 @@
 
 	function removeAttachment(id: string): void {
 		attachments = attachments.filter((attachment) => attachment.id !== id);
+	}
+
+	function openImageViewer(image: ImageViewerImage): void {
+		selectedImage = image;
 	}
 
 	async function clearTransientNotices(): Promise<void> {
@@ -741,29 +747,12 @@
 			{#if attachments.length}
 				<ul class="attachment-draft-list" aria-label="Attached files">
 					{#each attachments as attachment, index (attachment.id)}
-						<li class="attachment-draft-card">
-							{#if attachment.kind === 'image'}
-								<img
-									class="attachment-thumbnail"
-									src={attachmentDataUrl(attachment)}
-									alt={`Preview of ${attachment.name}`}
-								/>
-							{:else}
-								<span class="attachment-file-icon" aria-hidden="true">&lt;/&gt;</span>
-							{/if}
-							<span class="attachment-draft-details">
-								<strong>{attachment.name}</strong>
-								<small>{formatFileSize(attachment.size)}</small>
-							</span>
-							<button
-								class="remove-attachment"
-								type="button"
-								aria-label={`Remove ${attachment.name} attachment ${index + 1}`}
-								onclick={() => removeAttachment(attachment.id)}
-							>
-								×
-							</button>
-						</li>
+						<AttachmentPreview
+							{attachment}
+							onOpen={openImageViewer}
+							onRemove={() => removeAttachment(attachment.id)}
+							removeLabel={`Remove ${attachment.name} attachment ${index + 1}`}
+						/>
 					{/each}
 				</ul>
 			{/if}
@@ -837,6 +826,8 @@
 		</p>
 	{/if}
 </form>
+
+<ImageViewer bind:image={selectedImage} />
 
 <style>
 	.visually-hidden {
@@ -1136,89 +1127,6 @@
 		list-style: none;
 	}
 
-	.attachment-draft-card {
-		display: flex;
-		align-items: center;
-		min-width: 0;
-		max-width: min(100%, 18rem);
-		gap: 0.45rem;
-		border: 1px solid var(--border);
-		border-radius: 0.45rem;
-		background: var(--surface-muted);
-		padding: 0.35rem;
-	}
-
-	.attachment-thumbnail,
-	.attachment-file-icon {
-		width: 2.25rem;
-		height: 2.25rem;
-		flex: 0 0 auto;
-		border-radius: 0.3rem;
-	}
-
-	.attachment-thumbnail {
-		object-fit: cover;
-		background: var(--surface-strong);
-	}
-
-	.attachment-file-icon {
-		display: grid;
-		place-items: center;
-		background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
-		color: var(--accent);
-		font:
-			600 0.62rem ui-monospace,
-			SFMono-Regular,
-			Menlo,
-			Monaco,
-			Consolas,
-			monospace;
-	}
-
-	.attachment-draft-details {
-		display: grid;
-		min-width: 0;
-		gap: 0.08rem;
-	}
-
-	.attachment-draft-details strong,
-	.attachment-draft-details small {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.attachment-draft-details strong {
-		font-size: 0.72rem;
-		font-weight: 600;
-	}
-
-	.attachment-draft-details small {
-		color: var(--text-muted);
-		font-size: 0.66rem;
-	}
-
-	.remove-attachment {
-		display: grid;
-		width: 1.45rem;
-		height: 1.45rem;
-		flex: 0 0 auto;
-		place-items: center;
-		border: 0;
-		border-radius: 0.3rem;
-		background: transparent;
-		color: var(--text-muted);
-		padding: 0;
-		font-size: 1.1rem;
-		line-height: 1;
-	}
-
-	.remove-attachment:hover,
-	.remove-attachment:focus-visible {
-		background: color-mix(in srgb, var(--danger) 12%, var(--surface));
-		color: var(--danger);
-	}
-
 	.composer-footer {
 		display: flex;
 		align-items: center;
@@ -1302,7 +1210,6 @@
 		.keyboard-hint {
 			display: none;
 		}
-
 	}
 
 	@media (prefers-reduced-motion: reduce) {
