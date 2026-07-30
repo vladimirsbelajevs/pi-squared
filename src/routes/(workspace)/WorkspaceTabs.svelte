@@ -33,11 +33,11 @@
 		<div class:active={isActive(tab)} class="chat-tab-wrap">
 			<a
 				class="chat-tab"
-				href={tab.kind === 'new'
-					? resolve(`/new/${encodeURIComponent(tab.id)}`)
-					: resolve(
-							`/chat/${encodeURIComponent(tab.projectId)}/${encodeURIComponent(tab.sessionId)}`
-						)}
+				href={resolve(
+					tab.kind === 'new'
+						? `/new/${encodeURIComponent(tab.id)}`
+						: `/chat/${encodeURIComponent(tab.projectId)}/${encodeURIComponent(tab.sessionId)}`
+				)}
 				role="tab"
 				aria-selected={isActive(tab)}
 			>

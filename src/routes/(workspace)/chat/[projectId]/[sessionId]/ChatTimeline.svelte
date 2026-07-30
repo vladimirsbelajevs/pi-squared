@@ -4,8 +4,8 @@
 	import type { ChatItem, ChatToolCall } from '$lib/contracts';
 	import type { ChatTab, StreamingTool } from '$lib/harness/types';
 	import { renderAssistantMarkdown } from '$lib/markdown';
-	import AttachmentPreview from './AttachmentPreview.svelte';
-	import ImageViewer, { type ImageViewerImage } from './ImageViewer.svelte';
+	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
+	import ImageViewer, { type ImageViewerImage } from '$lib/components/ImageViewer.svelte';
 
 	type ToolView = {
 		id: string;

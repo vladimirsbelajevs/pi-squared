@@ -34,11 +34,9 @@
 		rankSlashCommands,
 		type ChatAutocompleteToken
 	} from './chat-autocomplete';
-	import type { TransientNotice } from '$lib/harness/types';
 	import AttachmentPreview from './AttachmentPreview.svelte';
 	import ComposerStatusPanel from './ComposerStatusPanel.svelte';
 	import ImageViewer, { type ImageViewerImage } from './ImageViewer.svelte';
-	import TransientNoticePopup from './TransientNoticePopup.svelte';
 
 	type QueueMode = 'followUp' | 'steer';
 
@@ -53,8 +51,6 @@
 		autoFocus?: boolean;
 		showStatusPanel?: boolean;
 		error?: string;
-		transientNotices?: TransientNotice[];
-		onClearTransientNotices?: () => void;
 		overlay?: Snippet;
 		mcpStatus?: McpStatusSnapshot;
 		contextUsage?: ContextUsageSnapshot;
@@ -83,8 +79,6 @@
 		autoFocus = false,
 		showStatusPanel = true,
 		error,
-		transientNotices = [],
-		onClearTransientNotices,
 		overlay,
 		mcpStatus,
 		contextUsage,
@@ -366,12 +360,6 @@
 		selectedImage = image;
 	}
 
-	async function clearTransientNotices(): Promise<void> {
-		onClearTransientNotices?.();
-		await tick();
-		textarea?.focus();
-	}
-
 	function handleDraftInput(event: Event): void {
 		const target = event.currentTarget as HTMLTextAreaElement;
 		updateDraft(target.value);
@@ -619,11 +607,8 @@
 		onchange={handleFileInput}
 	/>
 	<div class="composer-stack">
-		{#if transientNotices.length || overlay}
+		{#if overlay}
 			<div class="composer-popups">
-				{#if transientNotices.length}
-					<TransientNoticePopup notices={transientNotices} onClear={clearTransientNotices} />
-				{/if}
 				{@render overlay?.()}
 			</div>
 		{/if}

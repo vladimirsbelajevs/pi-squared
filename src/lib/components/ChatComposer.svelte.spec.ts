@@ -191,48 +191,6 @@ describe('ChatComposer', () => {
 		expect(onDraftChange).toHaveBeenLastCalledWith('');
 	});
 
-	it('clears transient notices and returns focus to the message textbox', async () => {
-		const onClearTransientNotices = vi.fn();
-		const screen = render(
-			ChatComposer,
-			props({
-				transientNotices: [{ id: 'notice-1', message: 'Language server status:\nIndexing' }],
-				onClearTransientNotices
-			})
-		);
-		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
-
-		screen.getByRole('button', { name: 'Clear all notices' }).element().click();
-		expect(onClearTransientNotices).toHaveBeenCalledOnce();
-		await expect.element(textbox).toHaveFocus();
-	});
-
-	it('floats transient notices above the composer grid without adding a grid row', async () => {
-		const screen = render(
-			ChatComposer,
-			props({
-				showStatusPanel: false,
-				transientNotices: [{ id: 'notice-1', message: 'Language server status: Indexing' }]
-			})
-		);
-		const stack = screen.container.querySelector<HTMLElement>('.composer-stack');
-		const popups = screen.container.querySelector<HTMLElement>('.composer-popups');
-		const popup = screen.getByRole('status', { name: 'Session notices' }).element();
-		const composerShell = screen.container.querySelector<HTMLElement>('.composer-shell');
-
-		expect(stack).not.toBeNull();
-		expect(popups).not.toBeNull();
-		expect(composerShell).not.toBeNull();
-		expect(popup.parentElement).toBe(popups);
-		expect(getComputedStyle(popups as HTMLElement).position).toBe('absolute');
-		expect(getComputedStyle(popups as HTMLElement).left).toBe('0px');
-		expect(getComputedStyle(popups as HTMLElement).right).toBe('0px');
-		expect(getComputedStyle(popups as HTMLElement).zIndex).toBe('4');
-		expect(stack?.getBoundingClientRect().height).toBe(
-			composerShell?.getBoundingClientRect().height
-		);
-	});
-
 	it('renders the MCP status row by default and enables controls when status is available', async () => {
 		const withoutStatus = render(ChatComposer, props());
 		await expect.element(withoutStatus.getByText('MCP: No servers configured')).toBeVisible();

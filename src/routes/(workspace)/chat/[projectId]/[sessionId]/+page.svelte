@@ -5,10 +5,11 @@
 	import { resolve } from '$app/paths';
 	import { fly } from 'svelte/transition';
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
-	import ChatTimeline from '$lib/components/ChatTimeline.svelte';
-	import PermissionApproval from '$lib/components/PermissionApproval.svelte';
 	import type { ChatSubmission } from '$lib/contracts';
 	import { workspace } from '$lib/harness/workspace.svelte';
+	import ChatTimeline from './ChatTimeline.svelte';
+	import PermissionApproval from './PermissionApproval.svelte';
+	import TransientNoticePopup from './TransientNoticePopup.svelte';
 
 	let projectId = $derived(page.params.projectId ?? '');
 	let sessionId = $derived(page.params.sessionId ?? '');
@@ -130,8 +131,6 @@
 				isStreaming={chat.snapshot.isStreaming}
 				autoFocus
 				error={chat.error}
-				transientNotices={chat.transientNotices}
-				onClearTransientNotices={() => workspace.clearTransientNotices(chat)}
 				mcpStatus={chat.snapshot.mcpStatus}
 				contextUsage={chat.snapshot.contextUsage}
 				sessionTokens={chat.snapshot.sessionTokens}
@@ -148,6 +147,10 @@
 				}}
 			>
 				{#snippet overlay()}
+					<TransientNoticePopup
+						notices={chat.transientNotices}
+						onClear={() => workspace.clearTransientNotices(chat)}
+					/>
 					{#each chat.permissionRequests as request (request.id)}
 						<PermissionApproval
 							{request}
