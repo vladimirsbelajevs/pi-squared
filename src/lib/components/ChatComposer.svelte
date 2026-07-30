@@ -3,14 +3,26 @@
 	import { fade } from 'svelte/transition';
 	import {
 		THINKING_LEVELS,
+		type ChatSubmission,
 		type ContextUsageSnapshot,
 		type McpStatusSnapshot,
 		type ModelOption,
+		type PromptAttachment,
 		type ProjectFileSuggestion,
 		type SessionTokenUsage,
 		type SlashCommand,
 		type ThinkingLevel
 	} from '$lib/contracts';
+	import {
+		attachmentDataUrl,
+		attachmentKind,
+		attachmentMimeType,
+		MAX_ATTACHMENTS,
+		MAX_IMAGE_BYTES,
+		MAX_TEXT_FILE_BYTES,
+		MAX_TOTAL_ATTACHMENT_BYTES,
+		validatePromptAttachments
+	} from '$lib/attachments';
 	import {
 		listProjectSlashCommands,
 		listRuntimeSlashCommands,
@@ -51,7 +63,7 @@
 		projectCwd?: string;
 		projectId?: string;
 		runtimeId?: string;
-		onSend: (message: string) => Promise<boolean>;
+		onSend: (submission: ChatSubmission) => Promise<boolean>;
 		onDraftChange?: (draft: string) => void;
 		onStop?: () => void | Promise<void>;
 		onModelChange: (modelKey: string) => void | Promise<void>;
@@ -98,6 +110,8 @@
 		'Review the current changes'
 	];
 	const placeholderTransition = { duration: 260 };
+	const attachmentAccept =
+		'image/png,image/jpeg,image/gif,image/webp,text/*,.txt,.md,.markdown,.json,.js,.mjs,.cjs,.ts,.mts,.cts,.jsx,.tsx,.css,.html,.htm,.xml,.yaml,.yml,.toml,.py,.rb,.go,.rs,.java,.c,.h,.cc,.cpp,.cxx,.hpp,.cs,.sh,.bash,.zsh,.fish,.sql,.csv';
 
 	let submitting = $state(false);
 	let localError = $state<string>();
@@ -108,6 +122,9 @@
 	let isComposing = $state(false);
 	let dismissedToken = $state<string>();
 	let selectedAutocompleteIndex = $state(0);
+	let attachments = $state.raw<PromptAttachment[]>([]);
+	let readingAttachmentCount = $state(0);
+	let fileInput: HTMLInputElement | undefined;
 	let commands = $state.raw<SlashCommand[]>([]);
 	let loadedCommandKey = $state<string>();
 	let fileSuggestions = $state.raw<ProjectFileSuggestion[]>([]);
@@ -117,7 +134,15 @@
 	let fileDebounce: number | undefined;
 	let fileGeneration = 0;
 	let selectedModel = $derived(models.find((model) => keyForModel(model) === modelKey));
-	let submitDisabled = $derived(disabled || submitting || !draft.trim());
+	let selectedModelAllowsImages = $derived(
+		selectedModel?.input === undefined || selectedModel.input.includes('image')
+	);
+	let submitDisabled = $derived(
+		disabled ||
+			submitting ||
+			readingAttachmentCount > 0 ||
+			(!draft.trim() && attachments.length === 0)
+	);
 	let placeholder = $derived(placeholderExamples[placeholderIndex]);
 	let detectedAutocompleteToken = $derived.by(() => getChatAutocompleteToken(draft, caret));
 	let activeAutocompleteToken = $derived.by(() => {
@@ -192,9 +217,147 @@
 		};
 	}
 
+	function captureFileInput(element: HTMLInputElement): () => void {
+		fileInput = element;
+		return () => {
+			if (fileInput === element) fileInput = undefined;
+		};
+	}
+
 	function updateDraft(value: string): void {
 		draft = value;
 		onDraftChange?.(value);
+	}
+
+	function formatFileSize(bytes: number): string {
+		if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+		const units = ['B', 'KB', 'MB', 'GB'];
+		const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+		const value = bytes / 1024 ** exponent;
+		return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${
+			units[exponent]
+		}`;
+	}
+
+	function attachmentLimitError(kind: PromptAttachment['kind'], size: number): string | undefined {
+		if (attachments.length >= MAX_ATTACHMENTS) {
+			return `You can attach up to ${MAX_ATTACHMENTS} files.`;
+		}
+
+		const maximumSize = kind === 'image' ? MAX_IMAGE_BYTES : MAX_TEXT_FILE_BYTES;
+		if (size > maximumSize) {
+			return `${kind === 'image' ? 'Images' : 'Text files'} must be ${formatFileSize(
+				maximumSize
+			)} or smaller.`;
+		}
+
+		const totalSize = attachments.reduce((total, attachment) => total + attachment.size, 0);
+		if (totalSize + size > MAX_TOTAL_ATTACHMENT_BYTES) {
+			return `Attachments must total ${formatFileSize(MAX_TOTAL_ATTACHMENT_BYTES)} or less.`;
+		}
+	}
+
+	function supportedAttachment(
+		file: File
+	): { kind: PromptAttachment['kind']; mimeType: string } | undefined {
+		const kind = attachmentKind(file.name, file.type);
+		const mimeType = attachmentMimeType(file.name, file.type);
+		if (!kind || !mimeType) return undefined;
+		return { kind, mimeType };
+	}
+
+	async function verifyUtf8Text(file: File): Promise<void> {
+		try {
+			const bytes = await file.arrayBuffer();
+			new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		} catch {
+			throw new Error(`“${file.name}” must be UTF-8 text.`);
+		}
+	}
+
+	function readFileAsBase64(file: File): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onerror = () => reject(new Error(`Unable to read “${file.name}”.`));
+			reader.onload = () => {
+				if (typeof reader.result !== 'string') {
+					reject(new Error(`Unable to read “${file.name}”.`));
+					return;
+				}
+				const delimiter = reader.result.indexOf(',');
+				if (delimiter === -1) {
+					reject(new Error(`Unable to read “${file.name}”.`));
+					return;
+				}
+				resolve(reader.result.slice(delimiter + 1));
+			};
+			reader.readAsDataURL(file);
+		});
+	}
+
+	async function addFiles(files: Iterable<File>): Promise<void> {
+		const selectedFiles = [...files];
+		if (!selectedFiles.length) return;
+
+		readingAttachmentCount += 1;
+		localError = undefined;
+		try {
+			for (const file of selectedFiles) {
+				const supported = supportedAttachment(file);
+				if (!supported) {
+					localError = `“${file.name}” is not a supported image or UTF-8 text/code file.`;
+					continue;
+				}
+				if (supported.kind === 'image' && !selectedModelAllowsImages) {
+					localError = 'The selected model does not support image attachments.';
+					continue;
+				}
+
+				const limitError = attachmentLimitError(supported.kind, file.size);
+				if (limitError) {
+					localError = limitError;
+					continue;
+				}
+
+				try {
+					if (supported.kind === 'text') await verifyUtf8Text(file);
+					const attachment: PromptAttachment = {
+						id: crypto.randomUUID(),
+						kind: supported.kind,
+						name: file.name,
+						mimeType: supported.mimeType,
+						size: file.size,
+						data: await readFileAsBase64(file)
+					};
+					validatePromptAttachments([...attachments, attachment]);
+					attachments = [...attachments, attachment];
+				} catch (error) {
+					localError = error instanceof Error ? error.message : `Unable to attach “${file.name}”.`;
+				}
+			}
+		} finally {
+			readingAttachmentCount -= 1;
+		}
+	}
+
+	function handleFileInput(event: Event): void {
+		const input = event.currentTarget as HTMLInputElement;
+		const files = Array.from(input.files ?? []);
+		input.value = '';
+		void addFiles(files);
+	}
+
+	function handlePaste(event: ClipboardEvent): void {
+		const files = Array.from(event.clipboardData?.items ?? []).flatMap((item) => {
+			if (item.kind !== 'file') return [];
+			const file = item.getAsFile();
+			return file ? [file] : [];
+		});
+		void addFiles(files);
+	}
+
+	function removeAttachment(id: string): void {
+		attachments = attachments.filter((attachment) => attachment.id !== id);
 	}
 
 	async function clearTransientNotices(): Promise<void> {
@@ -219,7 +382,7 @@
 	function submitOnEnter(event: KeyboardEvent): void {
 		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
 		event.preventDefault();
-		if (!draft.trim()) return;
+		if (!draft.trim() && !attachments.length) return;
 		(event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
 	}
 
@@ -397,22 +560,35 @@
 
 	async function submitMessage(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
-		const message = draft.trim();
-		if (!message || submitDisabled) return;
+		const previousDraft = draft;
+		const text = previousDraft.trim();
+		const previousAttachments = attachments;
+		if ((!text && !previousAttachments.length) || submitDisabled) return;
+		if (
+			previousAttachments.some((attachment) => attachment.kind === 'image') &&
+			!selectedModelAllowsImages
+		) {
+			localError = 'The selected model does not support image attachments.';
+			return;
+		}
 
 		localError = undefined;
 		submitting = true;
 		updateDraft('');
+		attachments = [];
 		await Promise.resolve();
 		resizeTextarea();
 
 		try {
-			if (!(await onSend(message))) {
-				updateDraft(message);
+			validatePromptAttachments(previousAttachments);
+			if (!(await onSend({ text, attachments: previousAttachments }))) {
+				updateDraft(previousDraft);
+				attachments = previousAttachments;
 				localError = 'Message was not accepted. Please try again.';
 			}
 		} catch (sendError) {
-			updateDraft(message);
+			updateDraft(previousDraft);
+			attachments = previousAttachments;
 			localError = sendError instanceof Error ? sendError.message : 'Unable to send this message.';
 		} finally {
 			submitting = false;
@@ -428,6 +604,14 @@
 
 <form class="chat-composer" aria-busy={submitting} onsubmit={submitMessage}>
 	<label class="visually-hidden" for={inputId}>Message Pi</label>
+	<input
+		{@attach captureFileInput}
+		class="visually-hidden"
+		type="file"
+		multiple
+		accept={attachmentAccept}
+		onchange={handleFileInput}
+	/>
 	<div class="composer-stack">
 		{#if transientNotices.length || overlay}
 			<div class="composer-popups">
@@ -476,6 +660,7 @@
 						onblur={handleBlur}
 						onselect={handleSelectionChange}
 						onclick={handleSelectionChange}
+						onpaste={handlePaste}
 						oncompositionstart={handleCompositionStart}
 						oncompositionend={handleCompositionEnd}></textarea>
 
@@ -553,7 +738,55 @@
 				</div>
 			</div>
 
+			{#if attachments.length}
+				<ul class="attachment-draft-list" aria-label="Attached files">
+					{#each attachments as attachment, index (attachment.id)}
+						<li class="attachment-draft-card">
+							{#if attachment.kind === 'image'}
+								<img
+									class="attachment-thumbnail"
+									src={attachmentDataUrl(attachment)}
+									alt={`Preview of ${attachment.name}`}
+								/>
+							{:else}
+								<span class="attachment-file-icon" aria-hidden="true">&lt;/&gt;</span>
+							{/if}
+							<span class="attachment-draft-details">
+								<strong>{attachment.name}</strong>
+								<small>{formatFileSize(attachment.size)}</small>
+							</span>
+							<button
+								class="remove-attachment"
+								type="button"
+								aria-label={`Remove ${attachment.name} attachment ${index + 1}`}
+								onclick={() => removeAttachment(attachment.id)}
+							>
+								×
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+
 			<div class="composer-footer">
+				<button
+					class="attach-action"
+					type="button"
+					aria-label="Attach files"
+					title="Attach files"
+					disabled={disabled || submitting || readingAttachmentCount > 0}
+					onclick={() => fileInput?.click()}
+				>
+					<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+						<path
+							d="M7.2 10.8L11.9 6.1A2.65 2.65 0 1 1 15.65 9.85L9.2 16.3A4 4 0 0 1 3.55 10.65L9.3 4.9"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				</button>
 				<label class="composer-picker">
 					<span>Model</span>
 					<select
@@ -801,7 +1034,8 @@
 	}
 
 	.send-action,
-	.stop-action {
+	.stop-action,
+	.attach-action {
 		display: grid;
 		width: 2.8rem;
 		height: 2.8rem;
@@ -813,6 +1047,37 @@
 			background 180ms ease,
 			box-shadow 180ms ease,
 			transform 180ms ease;
+	}
+
+	.attach-action {
+		width: 1.9rem;
+		height: 1.9rem;
+		min-height: 1.9rem;
+		border: 0;
+		border-radius: 0.35rem;
+		background: transparent;
+		color: var(--text-muted);
+	}
+
+	.attach-action:hover:not(:disabled),
+	.attach-action:focus-visible {
+		background: var(--surface-muted);
+		color: var(--text);
+	}
+
+	.attach-action:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+
+	.attach-action:disabled {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	.attach-action svg {
+		width: 1rem;
+		height: 1rem;
 	}
 
 	.send-action {
@@ -859,6 +1124,99 @@
 	.send-action svg {
 		width: 1.2rem;
 		height: 1.2rem;
+	}
+
+	.attachment-draft-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		margin: -0.05rem 0 0;
+		border-top: 1px solid var(--border);
+		padding: 0.6rem 0.65rem;
+		list-style: none;
+	}
+
+	.attachment-draft-card {
+		display: flex;
+		align-items: center;
+		min-width: 0;
+		max-width: min(100%, 18rem);
+		gap: 0.45rem;
+		border: 1px solid var(--border);
+		border-radius: 0.45rem;
+		background: var(--surface-muted);
+		padding: 0.35rem;
+	}
+
+	.attachment-thumbnail,
+	.attachment-file-icon {
+		width: 2.25rem;
+		height: 2.25rem;
+		flex: 0 0 auto;
+		border-radius: 0.3rem;
+	}
+
+	.attachment-thumbnail {
+		object-fit: cover;
+		background: var(--surface-strong);
+	}
+
+	.attachment-file-icon {
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
+		color: var(--accent);
+		font:
+			600 0.62rem ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			Monaco,
+			Consolas,
+			monospace;
+	}
+
+	.attachment-draft-details {
+		display: grid;
+		min-width: 0;
+		gap: 0.08rem;
+	}
+
+	.attachment-draft-details strong,
+	.attachment-draft-details small {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.attachment-draft-details strong {
+		font-size: 0.72rem;
+		font-weight: 600;
+	}
+
+	.attachment-draft-details small {
+		color: var(--text-muted);
+		font-size: 0.66rem;
+	}
+
+	.remove-attachment {
+		display: grid;
+		width: 1.45rem;
+		height: 1.45rem;
+		flex: 0 0 auto;
+		place-items: center;
+		border: 0;
+		border-radius: 0.3rem;
+		background: transparent;
+		color: var(--text-muted);
+		padding: 0;
+		font-size: 1.1rem;
+		line-height: 1;
+	}
+
+	.remove-attachment:hover,
+	.remove-attachment:focus-visible {
+		background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+		color: var(--danger);
 	}
 
 	.composer-footer {
@@ -944,6 +1302,7 @@
 		.keyboard-hint {
 			display: none;
 		}
+
 	}
 
 	@media (prefers-reduced-motion: reduce) {

@@ -11,6 +11,7 @@ function pending(id: string, text: string, knownUserItemIds: string[]): PendingU
 	return {
 		id,
 		text,
+		attachments: [],
 		timestamp: '2026-07-29T12:00:00.000Z',
 		knownUserItemIds
 	};
@@ -50,6 +51,34 @@ describe('reconcilePendingUserMessages', () => {
 				firstAuthoritative,
 				userItem('user-second', existing.text)
 			])
+		).toEqual([]);
+	});
+
+	it('requires matching attachment identity before acknowledging an optimistic message', () => {
+		const attachment = {
+			id: 'image-1',
+			kind: 'image' as const,
+			name: 'diagram.png',
+			mimeType: 'image/png',
+			size: 8,
+			data: 'iVBORw0KGgo='
+		};
+		const pendingMessage = {
+			...pending('pending-1', '', []),
+			attachments: [attachment]
+		};
+
+		expect(
+			reconcilePendingUserMessages(
+				[pendingMessage],
+				[{ ...userItem('user-wrong', ''), attachments: [{ ...attachment, id: 'image-2' }] }]
+			)
+		).toEqual([{ ...pendingMessage, knownUserItemIds: ['user-wrong'] }]);
+		expect(
+			reconcilePendingUserMessages(
+				[pendingMessage],
+				[{ ...userItem('user-match', ''), attachments: [attachment] }]
+			)
 		).toEqual([]);
 	});
 });

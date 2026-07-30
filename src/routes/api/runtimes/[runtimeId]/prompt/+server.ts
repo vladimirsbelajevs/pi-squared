@@ -1,11 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import {
-	errorResponse,
-	optionalString,
-	readObject,
-	requiredParam,
-	requiredString
-} from '$lib/server/http';
+import { validatePromptAttachments } from '$lib/attachments';
+import { errorResponse, optionalString, readObject, requiredParam } from '$lib/server/http';
 import { promptRuntime } from '$lib/server/runtimes';
 
 export const POST: RequestHandler = async ({ params, request }) => {
@@ -17,7 +12,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 		const result = promptRuntime(
 			requiredParam(params.runtimeId, 'Runtime'),
-			requiredString(body.text, 'Message'),
+			optionalString(body.text, 'Message') ?? '',
+			validatePromptAttachments(body.attachments),
 			streamingBehavior as 'steer' | 'followUp' | undefined
 		);
 		return json(result);

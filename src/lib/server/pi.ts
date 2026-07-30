@@ -12,6 +12,7 @@ import {
 	type SessionEntry
 } from '@earendil-works/pi-coding-agent';
 import type {
+	ChatAttachment,
 	ChatItem,
 	ChatToolCall,
 	HistoricalSession,
@@ -23,6 +24,8 @@ import type {
 	SlashCommand,
 	ThinkingLevel
 } from '$lib/contracts';
+import { attachmentKind } from '$lib/attachments';
+import { userPromptFromStoredText } from '$lib/prompt-attachments';
 
 let modelRuntimePromise: Promise<ModelRuntime> | undefined;
 
@@ -49,6 +52,54 @@ function textFromContent(content: unknown, includeThinking = false): string {
 		})
 		.filter(Boolean)
 		.join('\n');
+}
+
+function imagesFromContent(content: unknown): Array<{ data: string; mimeType: string }> {
+	if (!Array.isArray(content)) return [];
+	return content.flatMap((block) => {
+		const item = record(block);
+		if (
+			!item ||
+			item.type !== 'image' ||
+			typeof item.data !== 'string' ||
+			typeof item.mimeType !== 'string' ||
+			attachmentKind('image', item.mimeType) !== 'image'
+		)
+			return [];
+		return [{ data: item.data, mimeType: item.mimeType }];
+	});
+}
+
+function userAttachmentsFromContent(content: unknown): {
+	text: string;
+	attachments?: ChatAttachment[];
+} {
+	const stored = userPromptFromStoredText(textFromContent(content));
+	const images = imagesFromContent(content);
+	let imageIndex = 0;
+	const attachments = stored.attachments.map((attachment) => {
+		if (attachment.kind !== 'image') return attachment;
+		const image = images[imageIndex++];
+		return image && image.mimeType === attachment.mimeType
+			? { ...attachment, data: image.data }
+			: attachment;
+	});
+
+	if (!stored.attachments.length && images.length) {
+		return {
+			text: stored.text,
+			attachments: images.map((image, index) => ({
+				id: `image-${index + 1}`,
+				kind: 'image' as const,
+				name: `Image ${index + 1}`,
+				mimeType: image.mimeType,
+				size: Math.floor((image.data.length * 3) / 4),
+				data: image.data
+			}))
+		};
+	}
+
+	return { text: stored.text, ...(attachments.length ? { attachments } : {}) };
 }
 
 function thinkingFromContent(content: unknown): string | undefined {
@@ -88,6 +139,7 @@ function modelOption(model: {
 	id: string;
 	name?: string;
 	reasoning?: boolean;
+	input?: Array<'text' | 'image'>;
 	contextWindow?: number;
 }): ModelOption {
 	return {
@@ -95,6 +147,7 @@ function modelOption(model: {
 		id: model.id,
 		name: model.name ?? model.id,
 		reasoning: model.reasoning ?? false,
+		...(model.input ? { input: [...model.input] } : {}),
 		...(model.contextWindow ? { contextWindow: model.contextWindow } : {})
 	};
 }
@@ -120,12 +173,14 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 		const message = entry.message as unknown as Record<string, unknown>;
 		const role = message.role;
 		if (role === 'user') {
+			const userContent = userAttachmentsFromContent(message.content);
 			return {
 				id: entry.id,
 				kind: 'message',
 				role: 'user',
-				text: textFromContent(message.content),
-				timestamp: entry.timestamp
+				text: userContent.text,
+				timestamp: entry.timestamp,
+				...(userContent.attachments ? { attachments: userContent.attachments } : {})
 			};
 		}
 		if (role === 'assistant') {

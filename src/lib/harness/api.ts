@@ -2,6 +2,7 @@ import type {
 	HistoricalSession,
 	ModelOption,
 	PermissionResponse,
+	PromptAttachment,
 	Project,
 	ProjectFileSuggestion,
 	PromptRuntimeResult,
@@ -97,7 +98,11 @@ export function disposeRuntime(runtimeId: string): Promise<void> {
 
 export function promptRuntime(
 	runtimeId: string,
-	input: { text: string; streamingBehavior: 'steer' | 'followUp' }
+	input: {
+		text: string;
+		attachments: PromptAttachment[];
+		streamingBehavior: 'steer' | 'followUp';
+	}
 ): Promise<PromptRuntimeResult> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/prompt`, {
 		method: 'POST',

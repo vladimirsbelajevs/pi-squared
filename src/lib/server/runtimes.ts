@@ -3,6 +3,7 @@ import type {
 	ModelOption,
 	McpStatusSnapshot,
 	PermissionResponse,
+	PromptAttachment,
 	PromptRuntimeResult,
 	Project,
 	RuntimeEvent,
@@ -10,6 +11,8 @@ import type {
 	SlashCommand,
 	ThinkingLevel
 } from '$lib/contracts';
+import { validatePromptAttachments } from '$lib/attachments';
+import { promptWithAttachments } from '$lib/prompt-attachments';
 import { eventBroker } from '$lib/server/event-broker';
 import { PermissionBridge } from '$lib/server/permission-bridge';
 import { getProject, markProjectOpened, resolveProject } from '$lib/server/projects';
@@ -23,7 +26,12 @@ import {
 	resolveSessionPath
 } from '$lib/server/pi';
 import { MCP_STATUS_EVENT, parseMcpStatusSnapshot } from '$lib/server/mcp-status';
-import type { AgentSession, EventBus, ExtensionUIContext } from '@earendil-works/pi-coding-agent';
+import type {
+	AgentSession,
+	EventBus,
+	ExtensionUIContext,
+	PromptOptions
+} from '@earendil-works/pi-coding-agent';
 
 const IDLE_RUNTIME_MS = 30 * 60 * 1000;
 
@@ -276,20 +284,39 @@ export async function listProjectRuntimeSlashCommands(projectId: string): Promis
 export function promptRuntime(
 	runtimeId: string,
 	text: string,
+	attachments: unknown = [],
 	streamingBehavior?: 'steer' | 'followUp'
 ): PromptRuntimeResult {
 	const record = getRecord(runtimeId);
-	if (!text.trim()) throw new Error('Messages cannot be empty.');
+	const validatedAttachments = validatePromptAttachments(attachments);
+	const visibleText = text.trim();
+	if (!visibleText && !validatedAttachments.length) throw new Error('Messages cannot be empty.');
 	if (record.mcpToggle) throw new Error('Wait for the MCP server change to finish.');
-	const resolved = resolveWebExtensionCommand(text);
+	const resolved = resolveWebExtensionCommand(
+		promptWithAttachments(visibleText, validatedAttachments)
+	);
 	if (resolved.notice) publish(record, { type: 'notice', message: resolved.notice });
-	if (!resolved.text) return { queued: false };
+	if (!resolved.text) {
+		if (validatedAttachments.length)
+			throw new Error('Attachments cannot be sent with this command.');
+		return { queued: false };
+	}
 	text = resolved.text;
 	const queued = record.promptActive || record.session.isStreaming;
 	record.promptActive = true;
+	const images: NonNullable<PromptOptions['images']> = validatedAttachments
+		.filter(
+			(attachment): attachment is PromptAttachment & { kind: 'image' } =>
+				attachment.kind === 'image'
+		)
+		.map((attachment) => ({ type: 'image', data: attachment.data, mimeType: attachment.mimeType }));
+	const options: PromptOptions = {
+		...(images.length ? { images } : {}),
+		...(queued ? { streamingBehavior: streamingBehavior ?? 'followUp' } : {})
+	};
 
 	void record.session
-		.prompt(text, queued ? { streamingBehavior: streamingBehavior ?? 'followUp' } : undefined)
+		.prompt(text, Object.keys(options).length ? options : undefined)
 		.catch((error: unknown) => publish(record, { type: 'error', message: messageFromError(error) }))
 		.finally(() => {
 			record.promptActive = false;
@@ -297,7 +324,7 @@ export function promptRuntime(
 			publishSnapshot(record);
 		});
 
-	return { queued, userMessageText: text };
+	return { queued, userMessageText: visibleText };
 }
 
 export async function setRuntimeModel(

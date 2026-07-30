@@ -1,4 +1,5 @@
 import type {
+	ChatAttachment,
 	ModelOption,
 	PermissionRequest,
 	RuntimeSnapshot,
@@ -60,6 +61,7 @@ export interface PendingUserMessage {
 	/** UI-only ID, kept separate from Pi's authoritative entry IDs. */
 	id: string;
 	text: string;
+	attachments: ChatAttachment[];
 	timestamp: string;
 	/** User entry IDs already observed when this prompt was submitted. */
 	knownUserItemIds: string[];

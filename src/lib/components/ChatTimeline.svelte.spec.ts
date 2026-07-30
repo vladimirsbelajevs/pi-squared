@@ -67,6 +67,7 @@ describe('ChatTimeline', () => {
 		const pendingMessage = {
 			id: 'pending-user-1',
 			text: 'Send this before Pi persists it.',
+			attachments: [],
 			timestamp: '2026-07-29T12:00:00.000Z',
 			knownUserItemIds: []
 		};
@@ -98,6 +99,58 @@ describe('ChatTimeline', () => {
 
 		expect(screen.container.querySelectorAll('.message-entry-user')).toHaveLength(1);
 		await expect.element(screen.getByText(pendingMessage.text)).toBeVisible();
+	});
+
+	it('renders attachment cards below the message bubble without exposing text file contents', async () => {
+		const base = chat();
+		const imageData = 'iVBORw0KGgo=';
+		const textData = 'Y29uc3Qgc2VjcmV0ID0gdHJ1ZTs=';
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-attachments',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							attachments: [
+								{
+									id: 'image-1',
+									kind: 'image',
+									name: 'diagram.png',
+									mimeType: 'image/png',
+									size: 8,
+									data: imageData
+								},
+								{
+									id: 'text-1',
+									kind: 'text',
+									name: 'secrets.ts',
+									mimeType: 'text/plain',
+									size: 20,
+									data: textData
+								}
+							]
+						}
+					]
+				}
+			})
+		});
+
+		const bubble = screen.container.querySelector('article.message-assistant')!;
+		const attachments = screen.container.querySelector<HTMLElement>('.message-attachments')!;
+		expect(bubble.nextElementSibling).toBe(attachments);
+		expect(attachments.nextElementSibling).toHaveClass('message-meta-row');
+		await expect.element(screen.getByRole('list', { name: 'assistant attachments' })).toBeVisible();
+		const preview = attachments.querySelector<HTMLImageElement>('.message-attachment-thumbnail');
+		expect(preview?.src).toMatch(/^data:image\/png;base64,/);
+		await expect.element(screen.getByText('diagram.png')).toBeVisible();
+		await expect.element(screen.getByText('secrets.ts')).toBeVisible();
+		expect(screen.container.textContent).not.toContain('const secret = true;');
+		expect(screen.container.textContent).not.toContain(textData);
 	});
 
 	it('hides the thinking status once text, tools, or approval is visible', async () => {

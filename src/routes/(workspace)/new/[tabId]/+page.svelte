@@ -5,6 +5,7 @@
 	import { onMount } from 'svelte';
 	import { fade, fly, slide } from 'svelte/transition';
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
+	import type { ChatSubmission } from '$lib/contracts';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
 	let tabId = $derived(page.params.tabId ?? '');
@@ -37,9 +38,9 @@
 		};
 	});
 
-	async function startChat(message: string): Promise<boolean> {
+	async function startChat(submission: ChatSubmission): Promise<boolean> {
 		if (!tab) return false;
-		const chat = await workspace.startChat(tab, message);
+		const chat = await workspace.startChat(tab, submission);
 		if (!chat) return false;
 		await goto(
 			resolve(`/chat/${encodeURIComponent(chat.projectId)}/${encodeURIComponent(chat.sessionId)}`),
@@ -272,13 +273,6 @@
 		border-radius: 0.65rem;
 		background: var(--surface-muted);
 		padding: 1rem;
-	}
-
-	.add-project-panel > p {
-		margin: 0;
-		color: var(--warning);
-		font-size: 0.85rem;
-		line-height: 1.5;
 	}
 
 	.add-project-panel form {

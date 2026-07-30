@@ -7,6 +7,7 @@
 	import ChatComposer from '$lib/components/ChatComposer.svelte';
 	import ChatTimeline from '$lib/components/ChatTimeline.svelte';
 	import PermissionApproval from '$lib/components/PermissionApproval.svelte';
+	import type { ChatSubmission } from '$lib/contracts';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
 	let projectId = $derived(page.params.projectId ?? '');
@@ -19,9 +20,30 @@
 	let contentKey = $derived.by(() => {
 		if (!chat?.snapshot) return undefined;
 		return JSON.stringify({
-			items: chat.snapshot.items.length,
+			items: chat.snapshot.items.map((item) => [
+				item.id,
+				item.attachments?.map((attachment) => [
+					attachment.id,
+					attachment.kind,
+					attachment.name,
+					attachment.mimeType,
+					attachment.size,
+					attachment.data
+				])
+			]),
 			isStreaming: chat.snapshot.isStreaming,
-			pendingMessages: chat.pendingUserMessages.map((message) => [message.id, message.text]),
+			pendingMessages: chat.pendingUserMessages.map((message) => [
+				message.id,
+				message.text,
+				message.attachments.map((attachment) => [
+					attachment.id,
+					attachment.kind,
+					attachment.name,
+					attachment.mimeType,
+					attachment.size,
+					attachment.data
+				])
+			]),
 			streamText: chat.streamText,
 			streamThinking: workspace.showReasoning ? chat.streamThinking : '',
 			streamTools: chat.streamTools.map((tool) => [tool.id, tool.text, tool.isError])
@@ -115,7 +137,7 @@
 				sessionTokens={chat.snapshot.sessionTokens}
 				onMcpToggle={(serverName, enabled) =>
 					workspace.setMcpServerEnabled(chat, serverName, enabled)}
-				onSend={(message) => workspace.sendPrompt(chat, message)}
+				onSend={(submission: ChatSubmission) => workspace.sendPrompt(chat, submission)}
 				onDraftChange={() => workspace.schedulePersist()}
 				onStop={() => workspace.stopChat(chat)}
 				onModelChange={(key) => workspace.changeModel(chat, key)}

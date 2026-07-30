@@ -51,7 +51,36 @@ export interface ModelOption {
 	id: string;
 	name: string;
 	reasoning: boolean;
+	/** Input modalities reported by Pi's model catalog. Missing values are treated as unknown. */
+	input?: Array<'text' | 'image'>;
 	contextWindow?: number;
+}
+
+export type ChatAttachmentKind = 'image' | 'text';
+
+/** An attachment submitted from the browser, including base64-encoded file bytes. */
+export interface PromptAttachment {
+	id: string;
+	kind: ChatAttachmentKind;
+	name: string;
+	mimeType: string;
+	size: number;
+	data: string;
+}
+
+/** Browser-safe attachment metadata, with image bytes when a preview is available. */
+export interface ChatAttachment {
+	id: string;
+	kind: ChatAttachmentKind;
+	name: string;
+	mimeType: string;
+	size: number;
+	data?: string;
+}
+
+export interface ChatSubmission {
+	text: string;
+	attachments: PromptAttachment[];
 }
 
 /** Cumulative token usage across every entry in a Pi session. */
@@ -97,6 +126,7 @@ export interface ChatItem {
 	thinking?: string;
 	toolCalls?: ChatToolCall[];
 	toolCallId?: string;
+	attachments?: ChatAttachment[];
 	isError?: boolean;
 	stopReason?: 'aborted';
 	label?: string;
@@ -120,7 +150,7 @@ export interface RuntimeSnapshot {
 /** Result returned after a prompt has been accepted by a runtime. */
 export interface PromptRuntimeResult {
 	queued: boolean;
-	/** The effective text submitted to Pi, omitted when a command needs no prompt. */
+	/** User-visible prompt text, omitted when a command needs no prompt. */
 	userMessageText?: string;
 }
 

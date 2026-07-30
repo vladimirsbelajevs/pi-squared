@@ -1,4 +1,4 @@
-import type { ChatItem } from '$lib/contracts';
+import type { ChatAttachment, ChatItem } from '$lib/contracts';
 import type { PendingUserMessage } from './types';
 
 /**
@@ -24,6 +24,7 @@ export function reconcilePendingUserMessages(
 		const matchingItem = userItems.find(
 			(item) =>
 				item.text === pending.text &&
+				attachmentsMatch(pending.attachments, item.attachments ?? []) &&
 				!knownUserItemIds.has(item.id) &&
 				!consumedUserItemIds.has(item.id)
 		);
@@ -39,4 +40,23 @@ export function reconcilePendingUserMessages(
 	}
 
 	return remaining;
+}
+
+function attachmentsMatch(
+	pending: readonly ChatAttachment[],
+	authoritative: readonly ChatAttachment[]
+): boolean {
+	return (
+		pending.length === authoritative.length &&
+		pending.every((attachment, index) => {
+			const item = authoritative[index];
+			return (
+				attachment.id === item?.id &&
+				attachment.kind === item.kind &&
+				attachment.name === item.name &&
+				attachment.mimeType === item.mimeType &&
+				attachment.size === item.size
+			);
+		})
+	);
 }

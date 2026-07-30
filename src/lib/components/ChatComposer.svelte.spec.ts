@@ -80,7 +80,9 @@ describe('ChatComposer', () => {
 		expect(onSend).not.toHaveBeenCalled();
 
 		await userEvent.keyboard('{Enter}');
-		await vi.waitFor(() => expect(onSend).toHaveBeenCalledWith('Inspect this route'));
+		await vi.waitFor(() =>
+			expect(onSend).toHaveBeenCalledWith({ text: 'Inspect this route', attachments: [] })
+		);
 	});
 
 	it('restores a rejected message', async () => {
@@ -92,6 +94,40 @@ describe('ChatComposer', () => {
 
 		await expect.element(textbox).toHaveValue('Keep this draft');
 		await expect.element(screen.getByRole('alert')).toBeVisible();
+	});
+
+	it('previews and sends an attachment-only image submission', async () => {
+		const onSend = vi.fn().mockResolvedValue(true);
+		const screen = render(ChatComposer, props({ onSend }));
+		const input = screen.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+		const image = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'diagram.png', {
+			type: 'image/png'
+		});
+
+		await userEvent.upload(input, image);
+
+		await expect.element(screen.getByText('diagram.png')).toBeVisible();
+		const preview = screen.container.querySelector<HTMLImageElement>('.attachment-thumbnail');
+		expect(preview?.src).toMatch(/^data:image\/png;base64,/);
+		await expect.element(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
+
+		await screen.getByRole('button', { name: 'Send message' }).click();
+		await vi.waitFor(() =>
+			expect(onSend).toHaveBeenCalledWith({
+				text: '',
+				attachments: [
+					expect.objectContaining({
+						id: expect.any(String),
+						kind: 'image',
+						name: 'diagram.png',
+						mimeType: 'image/png',
+						size: image.size,
+						data: expect.any(String)
+					})
+				]
+			})
+		);
+		expect(screen.container.querySelector('.attachment-draft-list')).toBeNull();
 	});
 
 	it('reports draft changes from typing and sending', async () => {
@@ -202,6 +238,7 @@ describe('ChatComposer', () => {
 		await expect.element(screen.getByRole('button', { name: 'Stop response' })).toBeVisible();
 		await expect.element(screen.getByRole('combobox', { name: 'Queue' })).toHaveValue('followUp');
 		expect(screen.container.querySelectorAll('.composer-actions button')).toHaveLength(1);
+		await expect.element(screen.getByRole('button', { name: 'Attach files' })).toBeVisible();
 		expect(screen.container.querySelector('.send-action')).toBeNull();
 		await screen.getByRole('button', { name: 'Stop response' }).click();
 		expect(onStop).toHaveBeenCalledOnce();
@@ -209,7 +246,9 @@ describe('ChatComposer', () => {
 		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
 		await textbox.fill('Queue this follow-up');
 		await userEvent.keyboard('{Enter}');
-		await vi.waitFor(() => expect(onSend).toHaveBeenCalledWith('Queue this follow-up'));
+		await vi.waitFor(() =>
+			expect(onSend).toHaveBeenCalledWith({ text: 'Queue this follow-up', attachments: [] })
+		);
 	});
 
 	it('inserts a slash command with Enter instead of submitting', async () => {

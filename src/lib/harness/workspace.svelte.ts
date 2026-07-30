@@ -1,4 +1,5 @@
 import type {
+	ChatSubmission,
 	HistoricalSession,
 	ModelOption,
 	Project,
@@ -252,7 +253,7 @@ export class HarnessWorkspace {
 		this.sessions = sessions;
 	}
 
-	async startChat(tab: NewTab, openingPrompt: string): Promise<ChatTab | undefined> {
+	async startChat(tab: NewTab, openingPrompt: ChatSubmission): Promise<ChatTab | undefined> {
 		tab.error = '';
 		const model = this.selectedModel(tab.draft.modelKey);
 		if (!tab.draft.projectId || !model) {
@@ -271,7 +272,7 @@ export class HarnessWorkspace {
 			const chat = this.#createChatTab(tab.id, snapshot);
 			this.tabs = this.tabs.map((candidate) => (candidate.id === tab.id ? chat : candidate));
 			const accepted = await this.sendPrompt(chat, openingPrompt);
-			if (!accepted) chat.draft = openingPrompt;
+			if (!accepted) chat.draft = openingPrompt.text;
 			this.persist();
 			return chat;
 		} catch (error) {
@@ -326,20 +327,22 @@ export class HarnessWorkspace {
 		return load;
 	}
 
-	async sendPrompt(chat: ChatTab, text: string): Promise<boolean> {
-		const message = text.trim();
-		if (!message || !chat.runtimeId) return false;
+	async sendPrompt(chat: ChatTab, submission: ChatSubmission): Promise<boolean> {
+		const message = submission.text.trim();
+		if ((!message && !submission.attachments.length) || !chat.runtimeId) return false;
 		chat.error = '';
 		const knownUserItemIds = this.#userItemIds(chat.snapshot);
 		try {
 			const result = await promptRuntime(chat.runtimeId, {
 				text: message,
+				attachments: submission.attachments,
 				streamingBehavior: chat.queueMode
 			});
 			if (result.userMessageText !== undefined) {
 				chat.pendingUserMessages.push({
 					id: `pending-${randomId()}`,
 					text: result.userMessageText,
+					attachments: submission.attachments,
 					timestamp: new SvelteDate().toISOString(),
 					knownUserItemIds
 				});

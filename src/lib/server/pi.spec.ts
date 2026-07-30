@@ -6,6 +6,7 @@ import {
 	mapSessionEntry,
 	normalizePiEvent
 } from './pi.js';
+import { promptWithAttachments } from '$lib/prompt-attachments';
 
 describe('mapSessionEntry', () => {
 	it('keeps assistant text, reasoning, and tool calls browser-safe', () => {
@@ -69,6 +70,68 @@ describe('mapSessionEntry', () => {
 			role: 'assistant',
 			text: '',
 			stopReason: 'aborted'
+		});
+	});
+
+	it('maps persisted image and text/code attachments without exposing injected file text', () => {
+		const imageData = 'iVBORw0KGgo=';
+		const entry = {
+			type: 'message',
+			id: 'entry-attachments',
+			parentId: null,
+			timestamp: '2026-07-30T00:00:00.000Z',
+			message: {
+				role: 'user',
+				content: [
+					{
+						type: 'text',
+						text: promptWithAttachments('Inspect these files.', [
+							{
+								id: 'image-1',
+								kind: 'image',
+								name: 'diagram.png',
+								mimeType: 'image/png',
+								size: 8,
+								data: imageData
+							},
+							{
+								id: 'text-1',
+								kind: 'text',
+								name: 'config.ts',
+								mimeType: 'text/plain',
+								size: 18,
+								data: 'ZXhwb3J0IGNvbnN0IGZvbyA9IDE7'
+							}
+						])
+					},
+					{ type: 'image', data: imageData, mimeType: 'image/png' }
+				]
+			}
+		} as unknown as SessionEntry;
+
+		expect(mapSessionEntry(entry)).toEqual({
+			id: 'entry-attachments',
+			kind: 'message',
+			role: 'user',
+			text: 'Inspect these files.',
+			timestamp: '2026-07-30T00:00:00.000Z',
+			attachments: [
+				{
+					id: 'image-1',
+					kind: 'image',
+					name: 'diagram.png',
+					mimeType: 'image/png',
+					size: 8,
+					data: imageData
+				},
+				{
+					id: 'text-1',
+					kind: 'text',
+					name: 'config.ts',
+					mimeType: 'text/plain',
+					size: 18
+				}
+			]
 		});
 	});
 
