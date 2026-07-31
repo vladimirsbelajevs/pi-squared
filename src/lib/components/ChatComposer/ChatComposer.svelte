@@ -10,20 +10,18 @@
 		SessionTokenUsage,
 		ThinkingLevel
 	} from '$lib/contracts';
-	import {
-		attachmentKind,
-		attachmentMimeType,
-		MAX_ATTACHMENTS,
-		MAX_IMAGE_BYTES,
-		MAX_TEXT_FILE_BYTES,
-		MAX_TOTAL_ATTACHMENT_BYTES,
-		validatePromptAttachments
-	} from '$lib/attachments';
+	import { validatePromptAttachments } from '$lib/attachments';
 	import AttachmentPreview from '../AttachmentPreview.svelte';
 	import ComposerStatusPanel from '../ComposerStatusPanel.svelte';
 	import ImageViewer, { type ImageViewerImage } from '../ImageViewer.svelte';
 	import ComposerFooter from './ComposerFooter.svelte';
 	import ComposerTextInput from './ComposerTextInput.svelte';
+	import {
+		attachmentLimitError,
+		classifyAttachment,
+		readFileAsBase64,
+		verifyUtf8Text
+	} from './attachment-draft';
 
 	type QueueMode = 'followUp' | 'steer';
 
@@ -118,72 +116,6 @@
 		onDraftChange?.(value);
 	}
 
-	function formatFileSize(bytes: number): string {
-		if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-		const units = ['B', 'KB', 'MB', 'GB'];
-		const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-		const value = bytes / 1024 ** exponent;
-		return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${
-			units[exponent]
-		}`;
-	}
-
-	function attachmentLimitError(kind: PromptAttachment['kind'], size: number): string | undefined {
-		if (attachments.length >= MAX_ATTACHMENTS) {
-			return `You can attach up to ${MAX_ATTACHMENTS} files.`;
-		}
-
-		const maximumSize = kind === 'image' ? MAX_IMAGE_BYTES : MAX_TEXT_FILE_BYTES;
-		if (size > maximumSize) {
-			return `${kind === 'image' ? 'Images' : 'Text files'} must be ${formatFileSize(
-				maximumSize
-			)} or smaller.`;
-		}
-
-		const totalSize = attachments.reduce((total, attachment) => total + attachment.size, 0);
-		if (totalSize + size > MAX_TOTAL_ATTACHMENT_BYTES) {
-			return `Attachments must total ${formatFileSize(MAX_TOTAL_ATTACHMENT_BYTES)} or less.`;
-		}
-	}
-
-	function supportedAttachment(
-		file: File
-	): { kind: PromptAttachment['kind']; mimeType: string } | undefined {
-		const kind = attachmentKind(file.name, file.type);
-		const mimeType = attachmentMimeType(file.name, file.type);
-		if (!kind || !mimeType) return undefined;
-		return { kind, mimeType };
-	}
-
-	async function verifyUtf8Text(file: File): Promise<void> {
-		try {
-			const bytes = await file.arrayBuffer();
-			new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-		} catch {
-			throw new Error(`“${file.name}” must be UTF-8 text.`);
-		}
-	}
-
-	function readFileAsBase64(file: File): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const reader = new FileReader();
-			reader.onerror = () => reject(new Error(`Unable to read “${file.name}”.`));
-			reader.onload = () => {
-				if (typeof reader.result !== 'string') {
-					reject(new Error(`Unable to read “${file.name}”.`));
-					return;
-				}
-				const delimiter = reader.result.indexOf(',');
-				if (delimiter === -1) {
-					reject(new Error(`Unable to read “${file.name}”.`));
-					return;
-				}
-				resolve(reader.result.slice(delimiter + 1));
-			};
-			reader.readAsDataURL(file);
-		});
-	}
-
 	async function addFiles(files: Iterable<File>): Promise<void> {
 		const selectedFiles = [...files];
 		if (!selectedFiles.length) return;
@@ -192,7 +124,7 @@
 		localError = undefined;
 		try {
 			for (const file of selectedFiles) {
-				const supported = supportedAttachment(file);
+				const supported = classifyAttachment(file.name, file.type);
 				if (!supported) {
 					localError = `“${file.name}” is not a supported image or UTF-8 text/code file.`;
 					continue;
@@ -202,7 +134,7 @@
 					continue;
 				}
 
-				const limitError = attachmentLimitError(supported.kind, file.size);
+				const limitError = attachmentLimitError(attachments, supported.kind, file.size);
 				if (limitError) {
 					localError = limitError;
 					continue;
