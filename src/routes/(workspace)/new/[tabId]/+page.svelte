@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { fade, fly, slide } from 'svelte/transition';
-	import ChatComposer from '$lib/components/ChatComposer.svelte';
+	import ChatComposer from '$lib/components/ChatComposer/ChatComposer.svelte';
 	import type { ChatSubmission } from '$lib/contracts';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
