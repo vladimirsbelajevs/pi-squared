@@ -16,7 +16,7 @@
 	import ImageViewer, { type ImageViewerImage } from '../ImageViewer.svelte';
 	import ComposerFooter from './ComposerFooter.svelte';
 	import ComposerTextInput from './ComposerTextInput.svelte';
-	import { createPromptAttachmentDrafts } from './attachment-draft';
+	import { ATTACHMENT_ACCEPT, createPromptAttachmentDrafts } from './attachment-draft';
 
 	type QueueMode = 'followUp' | 'steer';
 
@@ -30,7 +30,7 @@
 		disabled?: boolean;
 		autoFocus?: boolean;
 		showStatusPanel?: boolean;
-		error?: string;
+		externalError?: string;
 		overlay?: Snippet;
 		mcpStatus?: McpStatusSnapshot;
 		contextUsage?: ContextUsageSnapshot;
@@ -58,7 +58,7 @@
 		disabled = false,
 		autoFocus = false,
 		showStatusPanel = true,
-		error,
+		externalError,
 		overlay,
 		mcpStatus,
 		contextUsage,
@@ -77,8 +77,6 @@
 	}: Props = $props();
 
 	const inputId = $props.id();
-	const attachmentAccept =
-		'image/png,image/jpeg,image/gif,image/webp,text/*,.txt,.md,.markdown,.json,.js,.mjs,.cjs,.ts,.mts,.cts,.jsx,.tsx,.css,.html,.htm,.xml,.yaml,.yml,.toml,.py,.rb,.go,.rs,.java,.c,.h,.cc,.cpp,.cxx,.hpp,.cs,.sh,.bash,.zsh,.fish,.sql,.csv';
 
 	let submitting = $state(false);
 	let localError = $state<string>();
@@ -196,7 +194,7 @@
 		class="visually-hidden"
 		type="file"
 		multiple
-		accept={attachmentAccept}
+		accept={ATTACHMENT_ACCEPT}
 		onchange={handleFileInput}
 	/>
 	<div class="composer-stack">
@@ -262,9 +260,9 @@
 		</div>
 	</div>
 
-	{#if error || localError}
+	{#if externalError || localError}
 		<p class="composer-error" role="alert" transition:fade={{ duration: 160 }}>
-			{error || localError}
+			{externalError || localError}
 		</p>
 	{/if}
 </form>

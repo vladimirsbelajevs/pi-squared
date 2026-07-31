@@ -9,6 +9,9 @@ import {
 	validatePromptAttachments
 } from '$lib/attachments';
 
+export const ATTACHMENT_ACCEPT =
+	'image/png,image/jpeg,image/gif,image/webp,text/*,.txt,.md,.markdown,.json,.js,.mjs,.cjs,.ts,.mts,.cts,.jsx,.tsx,.css,.html,.htm,.xml,.yaml,.yml,.toml,.py,.rb,.go,.rs,.java,.c,.h,.cc,.cpp,.cxx,.hpp,.cs,.sh,.bash,.zsh,.fish,.sql,.csv';
+
 export type AttachmentClassification = Pick<PromptAttachment, 'kind' | 'mimeType'>;
 
 export function classifyAttachment(

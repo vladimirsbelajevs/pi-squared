@@ -73,7 +73,7 @@
 							modelKey={tab.draft.modelKey}
 							thinkingLevel={tab.draft.thinkingLevel}
 							disabled={!tab.draft.projectId || !tab.draft.modelKey}
-							error={tab.error}
+							externalError={tab.error}
 							onSend={startChat}
 							onDraftChange={() => workspace.schedulePersist()}
 							onModelChange={(key) => workspace.changeNewTabModel(tab, key)}
