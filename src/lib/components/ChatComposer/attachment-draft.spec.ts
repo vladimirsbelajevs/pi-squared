@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	attachmentLimitError,
 	classifyAttachment,
+	createPromptAttachmentDrafts,
 	readFileAsBase64,
 	verifyUtf8Text
 } from './attachment-draft';
@@ -61,5 +62,60 @@ describe('attachment draft helpers', () => {
 		await expect(
 			readFileAsBase64(new File([new Uint8Array([0, 255, 10, 20])], 'data.bin'))
 		).resolves.toBe('AP8KFA==');
+	});
+
+	it('keeps accepted and rejected files in input order', async () => {
+		const result = await createPromptAttachmentDrafts(
+			[
+				new File(['first'], 'first.txt', { type: 'text/plain' }),
+				new File(['archive'], 'archive.zip', { type: 'application/zip' }),
+				new File(['last'], 'last.md', { type: 'text/markdown' })
+			],
+			[],
+			true
+		);
+
+		expect(result.attachments.map((attachment) => attachment.name)).toEqual([
+			'first.txt',
+			'last.md'
+		]);
+		expect(result.errors).toEqual([
+			'“archive.zip” is not a supported image or UTF-8 text/code file.'
+		]);
+	});
+
+	it('rejects images when the selected model cannot accept them', async () => {
+		const result = await createPromptAttachmentDrafts(
+			[new File(['not read'], 'diagram.png', { type: 'image/png' })],
+			[],
+			false
+		);
+
+		expect(result).toEqual({
+			attachments: [],
+			errors: ['The selected model does not support image attachments.']
+		});
+	});
+
+	it('applies the cumulative attachment count limit while continuing through the batch', async () => {
+		const existing = Array.from({ length: 4 }, (_, index) => ({
+			id: `existing-${index}`,
+			kind: 'text' as const,
+			name: `existing-${index}.txt`,
+			mimeType: 'text/plain',
+			size: 1,
+			data: 'YQ=='
+		}));
+		const result = await createPromptAttachmentDrafts(
+			[
+				new File(['first'], 'first.txt', { type: 'text/plain' }),
+				new File(['second'], 'second.txt', { type: 'text/plain' })
+			],
+			existing,
+			true
+		);
+
+		expect(result.attachments.map((attachment) => attachment.name)).toEqual(['first.txt']);
+		expect(result.errors).toEqual(['You can attach up to 5 files.']);
 	});
 });

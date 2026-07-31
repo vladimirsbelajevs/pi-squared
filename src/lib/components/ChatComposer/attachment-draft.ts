@@ -5,7 +5,8 @@ import {
 	MAX_ATTACHMENTS,
 	MAX_IMAGE_BYTES,
 	MAX_TEXT_FILE_BYTES,
-	MAX_TOTAL_ATTACHMENT_BYTES
+	MAX_TOTAL_ATTACHMENT_BYTES,
+	validatePromptAttachments
 } from '$lib/attachments';
 
 export type AttachmentClassification = Pick<PromptAttachment, 'kind' | 'mimeType'>;
@@ -62,6 +63,55 @@ export async function readFileAsBase64(file: File): Promise<string> {
 	} catch {
 		throw new Error(`Unable to read “${file.name}”.`);
 	}
+}
+
+export async function createPromptAttachmentDrafts(
+	files: readonly File[],
+	existing: readonly PromptAttachment[],
+	allowsImages: boolean
+): Promise<{ attachments: PromptAttachment[]; errors: string[] }> {
+	const attachments: PromptAttachment[] = [];
+	const errors: string[] = [];
+
+	for (const file of files) {
+		const supported = classifyAttachment(file.name, file.type);
+		if (!supported) {
+			errors.push(`“${file.name}” is not a supported image or UTF-8 text/code file.`);
+			continue;
+		}
+		if (supported.kind === 'image' && !allowsImages) {
+			errors.push('The selected model does not support image attachments.');
+			continue;
+		}
+
+		const limitError = attachmentLimitError(
+			[...existing, ...attachments],
+			supported.kind,
+			file.size
+		);
+		if (limitError) {
+			errors.push(limitError);
+			continue;
+		}
+
+		try {
+			if (supported.kind === 'text') await verifyUtf8Text(file);
+			const attachment: PromptAttachment = {
+				id: crypto.randomUUID(),
+				kind: supported.kind,
+				name: file.name,
+				mimeType: supported.mimeType,
+				size: file.size,
+				data: await readFileAsBase64(file)
+			};
+			validatePromptAttachments([...existing, ...attachments, attachment]);
+			attachments.push(attachment);
+		} catch (error) {
+			errors.push(error instanceof Error ? error.message : `Unable to attach “${file.name}”.`);
+		}
+	}
+
+	return { attachments, errors };
 }
 
 function formatFileSize(bytes: number): string {

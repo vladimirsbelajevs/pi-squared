@@ -16,12 +16,7 @@
 	import ImageViewer, { type ImageViewerImage } from '../ImageViewer.svelte';
 	import ComposerFooter from './ComposerFooter.svelte';
 	import ComposerTextInput from './ComposerTextInput.svelte';
-	import {
-		attachmentLimitError,
-		classifyAttachment,
-		readFileAsBase64,
-		verifyUtf8Text
-	} from './attachment-draft';
+	import { createPromptAttachmentDrafts } from './attachment-draft';
 
 	type QueueMode = 'followUp' | 'steer';
 
@@ -116,46 +111,19 @@
 		onDraftChange?.(value);
 	}
 
-	async function addFiles(files: Iterable<File>): Promise<void> {
-		const selectedFiles = [...files];
-		if (!selectedFiles.length) return;
+	async function addFiles(files: readonly File[]): Promise<void> {
+		if (!files.length) return;
 
 		readingAttachmentCount += 1;
 		localError = undefined;
 		try {
-			for (const file of selectedFiles) {
-				const supported = classifyAttachment(file.name, file.type);
-				if (!supported) {
-					localError = `“${file.name}” is not a supported image or UTF-8 text/code file.`;
-					continue;
-				}
-				if (supported.kind === 'image' && !selectedModelAllowsImages) {
-					localError = 'The selected model does not support image attachments.';
-					continue;
-				}
-
-				const limitError = attachmentLimitError(attachments, supported.kind, file.size);
-				if (limitError) {
-					localError = limitError;
-					continue;
-				}
-
-				try {
-					if (supported.kind === 'text') await verifyUtf8Text(file);
-					const attachment: PromptAttachment = {
-						id: crypto.randomUUID(),
-						kind: supported.kind,
-						name: file.name,
-						mimeType: supported.mimeType,
-						size: file.size,
-						data: await readFileAsBase64(file)
-					};
-					validatePromptAttachments([...attachments, attachment]);
-					attachments = [...attachments, attachment];
-				} catch (error) {
-					localError = error instanceof Error ? error.message : `Unable to attach “${file.name}”.`;
-				}
-			}
+			const result = await createPromptAttachmentDrafts(
+				files,
+				attachments,
+				selectedModelAllowsImages
+			);
+			attachments = [...attachments, ...result.attachments];
+			localError = result.errors.at(-1);
 		} finally {
 			readingAttachmentCount -= 1;
 		}
