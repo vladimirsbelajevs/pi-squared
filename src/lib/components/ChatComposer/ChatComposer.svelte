@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import type {
 		ChatSubmission,
 		ContextUsageSnapshot,
@@ -11,6 +10,7 @@
 		ThinkingLevel
 	} from '$lib/contracts';
 	import { validatePromptAttachments } from '$lib/attachments';
+	import { errorNotices } from '$lib/error-notices';
 	import AttachmentPreview from '../AttachmentPreview.svelte';
 	import ComposerStatusPanel from '../ComposerStatusPanel.svelte';
 	import ImageViewer, { type ImageViewerImage } from '../ImageViewer.svelte';
@@ -30,7 +30,6 @@
 		disabled?: boolean;
 		autoFocus?: boolean;
 		showStatusPanel?: boolean;
-		externalError?: string;
 		overlay?: Snippet;
 		mcpStatus?: McpStatusSnapshot;
 		contextUsage?: ContextUsageSnapshot;
@@ -58,7 +57,6 @@
 		disabled = false,
 		autoFocus = false,
 		showStatusPanel = true,
-		externalError,
 		overlay,
 		mcpStatus,
 		contextUsage,
@@ -79,7 +77,6 @@
 	const inputId = $props.id();
 
 	let submitting = $state(false);
-	let localError = $state<string>();
 	let attachments = $state.raw<PromptAttachment[]>([]);
 	let selectedImage = $state<ImageViewerImage>();
 	let readingAttachmentCount = $state(0);
@@ -113,7 +110,6 @@
 		if (!files.length) return;
 
 		readingAttachmentCount += 1;
-		localError = undefined;
 		try {
 			const result = await createPromptAttachmentDrafts(
 				files,
@@ -121,7 +117,8 @@
 				selectedModelAllowsImages
 			);
 			attachments = [...attachments, ...result.attachments];
-			localError = result.errors.at(-1);
+			const error = result.errors.at(-1);
+			if (error) errorNotices.show(error);
 		} finally {
 			readingAttachmentCount -= 1;
 		}
@@ -161,11 +158,10 @@
 			previousAttachments.some((attachment) => attachment.kind === 'image') &&
 			!selectedModelAllowsImages
 		) {
-			localError = 'The selected model does not support image attachments.';
+			errorNotices.show('The selected model does not support image attachments.');
 			return;
 		}
 
-		localError = undefined;
 		submitting = true;
 		updateDraft('');
 		attachments = [];
@@ -175,12 +171,14 @@
 			if (!(await onSend({ text, attachments: previousAttachments }))) {
 				updateDraft(previousDraft);
 				attachments = previousAttachments;
-				localError = 'Message was not accepted. Please try again.';
+				errorNotices.show('Message was not accepted. Please try again.');
 			}
 		} catch (sendError) {
 			updateDraft(previousDraft);
 			attachments = previousAttachments;
-			localError = sendError instanceof Error ? sendError.message : 'Unable to send this message.';
+			errorNotices.show(
+				sendError instanceof Error ? sendError.message : 'Unable to send this message.'
+			);
 		} finally {
 			submitting = false;
 		}
@@ -259,12 +257,6 @@
 			/>
 		</div>
 	</div>
-
-	{#if externalError || localError}
-		<p class="composer-error" role="alert" transition:fade={{ duration: 160 }}>
-			{externalError || localError}
-		</p>
-	{/if}
 </form>
 
 <ImageViewer bind:image={selectedImage} />
@@ -340,12 +332,6 @@
 		border-top: 1px solid var(--border);
 		padding: 0.6rem 0.65rem;
 		list-style: none;
-	}
-
-	.composer-error {
-		margin: 0;
-		color: var(--danger);
-		font-size: 0.82rem;
 	}
 
 	@media (max-width: 700px) {

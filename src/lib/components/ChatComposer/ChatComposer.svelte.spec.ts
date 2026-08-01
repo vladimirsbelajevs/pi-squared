@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { ContextUsageSnapshot, McpStatusSnapshot, SessionTokenUsage } from '$lib/contracts';
@@ -10,7 +10,10 @@ const autocompleteApi = vi.hoisted(() => ({
 	searchProjectFiles: vi.fn()
 }));
 
+const errorNotices = vi.hoisted(() => ({ show: vi.fn() }));
+
 vi.mock('$lib/harness/api', () => autocompleteApi);
+vi.mock('$lib/error-notices', () => ({ errorNotices }));
 
 const models = [
 	{ provider: 'openai', id: 'gpt-test', name: 'GPT Test', reasoning: true },
@@ -59,6 +62,10 @@ function props(overrides: Record<string, unknown> = {}) {
 }
 
 describe('ChatComposer', () => {
+	beforeEach(() => {
+		errorNotices.show.mockClear();
+	});
+
 	it('renders an empty composer with inline model and reasoning controls', async () => {
 		const screen = render(ChatComposer, props());
 
@@ -93,7 +100,7 @@ describe('ChatComposer', () => {
 		await screen.getByRole('button', { name: 'Send message' }).click();
 
 		await expect.element(textbox).toHaveValue('Keep this draft');
-		await expect.element(screen.getByRole('alert')).toBeVisible();
+		expect(errorNotices.show).toHaveBeenCalledWith('Message was not accepted. Please try again.');
 	});
 
 	it('previews and sends an attachment-only image submission', async () => {

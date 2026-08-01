@@ -36,7 +36,6 @@ export interface NewTab {
 	projectPath: string;
 	projectName: string;
 	projectError?: string;
-	error?: string;
 }
 
 export interface StreamingTool {

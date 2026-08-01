@@ -130,7 +130,6 @@
 				queueMode={chat.queueMode}
 				isStreaming={chat.snapshot.isStreaming}
 				autoFocus
-				externalError={chat.error}
 				mcpStatus={chat.snapshot.mcpStatus}
 				contextUsage={chat.snapshot.contextUsage}
 				sessionTokens={chat.snapshot.sessionTokens}

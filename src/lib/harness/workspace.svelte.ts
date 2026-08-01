@@ -23,6 +23,7 @@ import {
 	setRuntimeModel,
 	setRuntimeThinking
 } from '$lib/harness/api';
+import { errorNotices } from '$lib/error-notices';
 import { reconcilePendingUserMessages } from '$lib/harness/pending-user-messages';
 import {
 	modelKey,
@@ -89,6 +90,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function randomId(): string {
 	return crypto.randomUUID();
+}
+
+function normalizeError(error: unknown, fallback: string): Error {
+	return error instanceof Error ? error : new Error(fallback);
 }
 
 export class HarnessWorkspace {
@@ -253,12 +258,10 @@ export class HarnessWorkspace {
 		this.sessions = sessions;
 	}
 
-	async startChat(tab: NewTab, openingPrompt: ChatSubmission): Promise<ChatTab | undefined> {
-		tab.error = '';
+	async startChat(tab: NewTab, openingPrompt: ChatSubmission): Promise<ChatTab> {
 		const model = this.selectedModel(tab.draft.modelKey);
 		if (!tab.draft.projectId || !model) {
-			tab.error = 'Choose a project and model before sending a message.';
-			return undefined;
+			throw new Error('Choose a project and model before sending a message.');
 		}
 
 		try {
@@ -276,8 +279,7 @@ export class HarnessWorkspace {
 			this.persist();
 			return chat;
 		} catch (error) {
-			tab.error = error instanceof Error ? error.message : 'Unable to start the chat.';
-			return undefined;
+			throw normalizeError(error, 'Unable to start the chat.');
 		}
 	}
 
@@ -330,7 +332,6 @@ export class HarnessWorkspace {
 	async sendPrompt(chat: ChatTab, submission: ChatSubmission): Promise<boolean> {
 		const message = submission.text.trim();
 		if ((!message && !submission.attachments.length) || !chat.runtimeId) return false;
-		chat.error = '';
 		const knownUserItemIds = this.#userItemIds(chat.snapshot);
 		try {
 			const result = await promptRuntime(chat.runtimeId, {
@@ -352,8 +353,7 @@ export class HarnessWorkspace {
 			this.persist();
 			return true;
 		} catch (error) {
-			chat.error = error instanceof Error ? error.message : 'Unable to send the message.';
-			return false;
+			throw normalizeError(error, 'Unable to send the message.');
 		}
 	}
 
@@ -362,7 +362,7 @@ export class HarnessWorkspace {
 		try {
 			await abortRuntime(chat.runtimeId);
 		} catch (error) {
-			chat.error = error instanceof Error ? error.message : 'Unable to stop the response.';
+			errorNotices.show(normalizeError(error, 'Unable to stop the response.'));
 		}
 	}
 
@@ -444,7 +444,7 @@ export class HarnessWorkspace {
 			localStorage.setItem(LAST_MODEL_KEY, key);
 			if (model.reasoning === false) localStorage.setItem(LAST_THINKING_LEVEL_KEY, 'off');
 		} catch (error) {
-			chat.error = error instanceof Error ? error.message : 'Unable to change the model.';
+			errorNotices.show(normalizeError(error, 'Unable to change the model.'));
 		}
 	}
 
@@ -455,7 +455,7 @@ export class HarnessWorkspace {
 			this.#applySnapshot(chat, snapshot);
 			localStorage.setItem(LAST_THINKING_LEVEL_KEY, thinkingLevel);
 		} catch (error) {
-			chat.error = error instanceof Error ? error.message : 'Unable to change reasoning.';
+			errorNotices.show(normalizeError(error, 'Unable to change reasoning.'));
 		}
 	}
 
@@ -609,7 +609,7 @@ export class HarnessWorkspace {
 			);
 			return;
 		}
-		if (event.type === 'error') chat.error = event.message;
+		if (event.type === 'error') errorNotices.show(event.message);
 	}
 
 	async #hydrateChat(chat: ChatTab): Promise<void> {
