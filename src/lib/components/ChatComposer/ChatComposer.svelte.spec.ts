@@ -72,10 +72,10 @@ describe('ChatComposer', () => {
 		await expect.element(screen.getByRole('textbox', { name: 'Message Pi' })).toHaveValue('');
 		await expect.element(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
 		await expect
-			.element(screen.getByRole('combobox', { name: 'Model' }))
+			.element(screen.getByRole('button', { name: 'Model' }))
 			.toHaveTextContent('GPT Test');
 		await expect
-			.element(screen.getByRole('combobox', { name: 'Reasoning' }))
+			.element(screen.getByRole('button', { name: 'Reasoning' }))
 			.toHaveTextContent('medium');
 		expect(screen.container.textContent).not.toContain('openai');
 	});
@@ -85,11 +85,11 @@ describe('ChatComposer', () => {
 		const onThinkingChange = vi.fn();
 		const screen = render(ChatComposer, props({ onModelChange, onThinkingChange }));
 
-		await screen.getByRole('combobox', { name: 'Model' }).click();
+		await screen.getByRole('button', { name: 'Model' }).click();
 		await screen.getByRole('option', { name: 'Plain Test (example)' }).click();
 		expect(onModelChange).toHaveBeenCalledWith('example::plain-test');
 
-		await screen.getByRole('combobox', { name: 'Reasoning' }).click();
+		await screen.getByRole('button', { name: 'Reasoning' }).click();
 		await screen.getByRole('option', { name: 'high', exact: true }).click();
 		expect(onThinkingChange).toHaveBeenCalledWith('high');
 	});
@@ -269,7 +269,7 @@ describe('ChatComposer', () => {
 
 		await expect.element(screen.getByRole('button', { name: 'Stop response' })).toBeVisible();
 		await expect
-			.element(screen.getByRole('combobox', { name: 'Queue' }))
+			.element(screen.getByRole('button', { name: 'Queue' }))
 			.toHaveTextContent('follow-up');
 		expect(screen.container.querySelectorAll('.composer-actions button')).toHaveLength(1);
 		await expect.element(screen.getByRole('button', { name: 'Attach files' })).toBeVisible();

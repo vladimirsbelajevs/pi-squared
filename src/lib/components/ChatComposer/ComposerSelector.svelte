@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { Select } from 'bits-ui';
 
 	type Option = {
 		value: string;
@@ -18,106 +18,27 @@
 
 	let { label, value, options, triggerLabel, disabled = false, onChange }: Props = $props();
 
-	const listboxId = $props.id();
-
-	let isOpen = $state(false);
-	let selector: HTMLDivElement | undefined;
-	let trigger: HTMLButtonElement | undefined;
 	let selectedOption = $derived(options.find((option) => option.value === value));
 	let displayLabel = $derived(
 		triggerLabel ?? selectedOption?.label ?? `No ${label.toLowerCase()} selected`
 	);
 
-	function captureSelector(element: HTMLDivElement): () => void {
-		selector = element;
-
-		return () => {
-			if (selector === element) {
-				selector = undefined;
-			}
-		};
-	}
-
-	function captureTrigger(element: HTMLButtonElement): () => void {
-		trigger = element;
-
-		return () => {
-			if (trigger === element) {
-				trigger = undefined;
-			}
-		};
-	}
-
-	function close(): void {
-		isOpen = false;
-	}
-
-	async function open(): Promise<void> {
-		isOpen = true;
-		await tick();
-		selector
-			?.querySelector<HTMLElement>('.selector-option.selected')
-			?.scrollIntoView({ block: 'nearest' });
-	}
-
-	function toggle(): void {
-		if (disabled) {
-			return;
-		}
-
-		if (isOpen) {
-			close();
-		} else {
-			void open();
-		}
-	}
-
-	function select(option: Option): void {
-		if (option.disabled) {
-			return;
-		}
-
-		isOpen = false;
-		void onChange(option.value);
-		trigger?.focus();
-	}
-
-	function handleTriggerKeydown(event: KeyboardEvent): void {
-		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-			event.preventDefault();
-			void open();
-		}
-
-		if (event.key === 'Escape') {
-			close();
-		}
-	}
-
-	function handleDocumentPointerDown(event: PointerEvent): void {
-		if (event.target instanceof Node && !selector?.contains(event.target)) {
-			close();
+	function handleValueChange(nextValue: string): void {
+		if (nextValue !== value) {
+			void onChange(nextValue);
 		}
 	}
 </script>
 
-<svelte:document onpointerdown={handleDocumentPointerDown} />
-
-<div class="composer-selector" {@attach captureSelector}>
-	<span class="visually-hidden" id={`${listboxId}-label`}>{label}</span>
-	<button
-		{@attach captureTrigger}
-		class="selector-trigger"
-		type="button"
-		role="combobox"
-		aria-labelledby={`${listboxId}-label`}
-		aria-controls={isOpen ? listboxId : undefined}
-		aria-expanded={isOpen}
-		aria-haspopup="listbox"
-		title={displayLabel}
-		{disabled}
-		onclick={toggle}
-		onkeydown={handleTriggerKeydown}
-	>
+<Select.Root
+	type="single"
+	{value}
+	items={options}
+	{disabled}
+	scrollAlignment="nearest"
+	onValueChange={handleValueChange}
+>
+	<Select.Trigger class="selector-trigger" aria-label={label} title={displayLabel}>
 		<span class="selector-value">{displayLabel}</span>
 		<svg viewBox="0 0 12 12" aria-hidden="true">
 			<path
@@ -128,44 +49,34 @@
 				stroke-linejoin="round"
 			/>
 		</svg>
-	</button>
+	</Select.Trigger>
 
-	{#if isOpen}
-		<div class="selector-menu" id={listboxId} role="listbox" aria-labelledby={`${listboxId}-label`}>
-			{#each options as option (option.value)}
-				<button
-					class:selected={option.value === value}
-					class="selector-option"
-					type="button"
-					role="option"
-					aria-selected={option.value === value}
-					title={option.label}
-					disabled={option.disabled}
-					onclick={() => select(option)}
-				>
-					{option.label}
-				</button>
-			{/each}
-		</div>
-	{/if}
-</div>
+	<Select.Portal>
+		<Select.Content class="selector-menu" side="top" sideOffset={6} align="start">
+			<Select.Viewport class="selector-viewport">
+				{#each options as option (option.value)}
+					<Select.Item
+						class="selector-option"
+						value={option.value}
+						label={option.label}
+						title={option.label}
+						disabled={option.disabled}
+					>
+						{#snippet children({ selected })}
+							<span class="selector-option-label">{option.label}</span>
+							{#if selected}
+								<span class="selector-check" aria-hidden="true">✓</span>
+							{/if}
+						{/snippet}
+					</Select.Item>
+				{/each}
+			</Select.Viewport>
+		</Select.Content>
+	</Select.Portal>
+</Select.Root>
 
 <style>
-	.visually-hidden {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
-		white-space: nowrap;
-	}
-
-	.composer-selector {
-		position: relative;
-		min-width: 0;
-	}
-
-	.selector-trigger {
+	:global(.selector-trigger) {
 		display: inline-flex;
 		align-items: center;
 		min-width: 0;
@@ -183,50 +94,45 @@
 			color 150ms ease;
 	}
 
-	.selector-trigger:hover:not(:disabled),
-	.selector-trigger[aria-expanded='true'],
-	.selector-trigger:focus-visible {
+	:global(.selector-trigger:hover:not(:disabled)),
+	:global(.selector-trigger[data-state='open']),
+	:global(.selector-trigger:focus-visible) {
 		background: var(--surface-muted);
 		color: var(--text);
 	}
 
-	.selector-trigger:focus-visible {
+	:global(.selector-trigger:focus-visible) {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
 
-	.selector-trigger:disabled {
+	:global(.selector-trigger:disabled) {
 		cursor: not-allowed;
 		opacity: 0.45;
 	}
 
-	.selector-value {
+	:global(.selector-value) {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.selector-trigger svg {
+	:global(.selector-trigger svg) {
 		width: 0.8rem;
 		height: 0.8rem;
 		flex: none;
 		transition: transform 150ms ease;
 	}
 
-	.selector-trigger[aria-expanded='true'] svg {
+	:global(.selector-trigger[data-state='open'] svg) {
 		transform: rotate(180deg);
 	}
 
-	.selector-menu {
-		position: absolute;
+	:global(.selector-menu) {
 		z-index: 5;
-		bottom: calc(100% + 0.45rem);
-		left: 0;
-		display: grid;
-		min-width: max(100%, 10rem);
+		min-width: max(var(--bits-select-anchor-width), 10rem);
 		max-width: min(22rem, calc(100vw - 1.5rem));
-		max-height: min(18rem, 45dvh);
-		overflow-y: auto;
+		overflow: hidden;
 		border: 1px solid var(--border-strong);
 		border-radius: 0.55rem;
 		background: color-mix(in srgb, var(--surface) 94%, var(--canvas) 6%);
@@ -234,48 +140,56 @@
 		padding: 0.25rem;
 	}
 
-	.selector-option {
-		position: relative;
-		width: 100%;
-		overflow: hidden;
-		border: 0;
-		border-radius: 0.35rem;
-		background: transparent;
-		color: var(--text-muted);
-		padding: 0.45rem 0.55rem;
-		text-align: left;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	:global(.selector-viewport) {
+		display: grid;
+		max-height: min(18rem, 45dvh);
+		overflow-y: auto;
 	}
 
-	.selector-option:hover:not(:disabled),
-	.selector-option:focus-visible,
-	.selector-option.selected {
+	:global(.selector-option) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		width: 100%;
+		min-width: 0;
+		gap: 0.5rem;
+		border-radius: 0.35rem;
+		color: var(--text-muted);
+		padding: 0.45rem 0.55rem;
+		font-size: 0.72rem;
+		line-height: 1.2;
+		outline: none;
+	}
+
+	:global(.selector-option[data-highlighted]),
+	:global(.selector-option[data-selected]) {
 		background: var(--surface-strong);
 		color: var(--text);
 	}
 
-	.selector-option.selected {
-		padding-right: 1.8rem;
+	:global(.selector-option[data-disabled]) {
+		cursor: not-allowed;
+		opacity: 0.45;
 	}
 
-	.selector-option.selected::after {
-		position: absolute;
-		top: 50%;
-		right: 0.55rem;
-		color: var(--accent);
-		content: '✓';
-		transform: translateY(-50%);
-	}
-
-	.selector-option:focus-visible {
+	:global(.selector-option:focus-visible) {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
 	}
 
+	:global(.selector-option-label) {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	:global(.selector-check) {
+		color: var(--accent);
+	}
+
 	@media (prefers-reduced-motion: reduce) {
-		.selector-trigger,
-		.selector-trigger svg {
+		:global(.selector-trigger),
+		:global(.selector-trigger svg) {
 			transition: none;
 		}
 	}

@@ -46,6 +46,7 @@
 	},
 	"dependencies": {
 		"@earendil-works/pi-coding-agent": "^0.83.0",
+		"bits-ui": "^2.18.1",
 		"highlight.js": "^11.11.1",
 		"ignore": "^7.0.6",
 		"markdown-it": "^14.3.0"
