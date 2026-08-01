@@ -11,11 +11,12 @@
 		label: string;
 		value: string;
 		options: Option[];
+		triggerLabel?: string;
 		disabled?: boolean;
 		onChange: (value: string) => void | Promise<void>;
 	};
 
-	let { label, value, options, disabled = false, onChange }: Props = $props();
+	let { label, value, options, triggerLabel, disabled = false, onChange }: Props = $props();
 
 	const listboxId = $props.id();
 
@@ -23,6 +24,9 @@
 	let selector: HTMLDivElement | undefined;
 	let trigger: HTMLButtonElement | undefined;
 	let selectedOption = $derived(options.find((option) => option.value === value));
+	let displayLabel = $derived(
+		triggerLabel ?? selectedOption?.label ?? `No ${label.toLowerCase()} selected`
+	);
 
 	function captureSelector(element: HTMLDivElement): () => void {
 		selector = element;
@@ -109,14 +113,12 @@
 		aria-controls={isOpen ? listboxId : undefined}
 		aria-expanded={isOpen}
 		aria-haspopup="listbox"
-		title={selectedOption?.label ?? `No ${label.toLowerCase()} selected`}
+		title={displayLabel}
 		{disabled}
 		onclick={toggle}
 		onkeydown={handleTriggerKeydown}
 	>
-		<span class="selector-value"
-			>{selectedOption?.label ?? `No ${label.toLowerCase()} selected`}</span
-		>
+		<span class="selector-value">{displayLabel}</span>
 		<svg viewBox="0 0 12 12" aria-hidden="true">
 			<path
 				d="m3 4.5 3 3 3-3"

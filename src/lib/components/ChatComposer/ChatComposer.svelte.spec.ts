@@ -86,7 +86,7 @@ describe('ChatComposer', () => {
 		const screen = render(ChatComposer, props({ onModelChange, onThinkingChange }));
 
 		await screen.getByRole('combobox', { name: 'Model' }).click();
-		await screen.getByRole('option', { name: 'Plain Test' }).click();
+		await screen.getByRole('option', { name: 'Plain Test (example)' }).click();
 		expect(onModelChange).toHaveBeenCalledWith('example::plain-test');
 
 		await screen.getByRole('combobox', { name: 'Reasoning' }).click();

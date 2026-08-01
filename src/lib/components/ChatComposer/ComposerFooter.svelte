@@ -37,7 +37,10 @@
 	}: Props = $props();
 
 	let modelOptions = $derived(
-		models.map((model) => ({ value: keyForModel(model), label: model.name }))
+		models.map((model) => ({
+			value: keyForModel(model),
+			label: `${model.name} (${model.provider})`
+		}))
 	);
 	let thinkingOptions = $derived(THINKING_LEVELS.map((level) => ({ value: level, label: level })));
 
@@ -69,6 +72,7 @@
 		label="Model"
 		value={modelKey}
 		options={modelOptions}
+		triggerLabel={selectedModel?.name}
 		disabled={isStreaming || submitting || !models.length}
 		onChange={onModelChange}
 	/>
