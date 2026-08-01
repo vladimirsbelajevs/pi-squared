@@ -176,6 +176,7 @@ function latestCacheHitRate(entries: SessionEntry[]): number | undefined {
 
 		const usage = entry.message.usage;
 		const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+
 		return promptTokens > 0 ? (usage.cacheRead / promptTokens) * 100 : undefined;
 	}
 

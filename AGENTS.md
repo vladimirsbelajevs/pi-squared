@@ -5,6 +5,11 @@
 - **Add-ons**: prettier, eslint, vitest, playwright, tailwindcss, mcp,
   sveltekit-adapter
 
+## Validation
+
+- After making any edits, run `npm run lint` before responding. Report any
+  failures and their cause.
+
 ---
 
 You are able to use the Svelte MCP server, where you have access to

@@ -1,50 +1,50 @@
 {
-  "$schema": "https://raw.githubusercontent.com/gotgenes/pi-permission-system/main/schemas/permissions.schema.json",
+	"$schema": "https://raw.githubusercontent.com/gotgenes/pi-permission-system/main/schemas/permissions.schema.json",
 
-  "permission": {
-    "*": "allow",
+	"permission": {
+		"*": "allow",
 
-    "path": {
-      "*": "allow",
-      "*.env": "deny",
-      "*.env.*": "deny",
-      "*.env.example": "allow",
-      "~/.ssh/*": "deny",
-      "~/.gnupg/*": "deny"
-    },
+		"path": {
+			"*": "allow",
+			"*.env": "deny",
+			"*.env.*": "deny",
+			"*.env.example": "allow",
+			"~/.ssh/*": "deny",
+			"~/.gnupg/*": "deny"
+		},
 
-    "bash": {
-      "*": "allow",
+		"bash": {
+			"*": "allow",
 
-      "sudo *": "ask",
-      "su *": "ask",
+			"sudo *": "ask",
+			"su *": "ask",
 
-      "rm -rf *": "ask",
-      "rm -r *": "ask",
+			"rm -rf *": "ask",
+			"rm -r *": "ask",
 
-      "rm -rf .pi-subagents": "allow",
-      "rm -rf .pi-subagents/": "allow",
+			"rm -rf .pi-subagents": "allow",
+			"rm -rf .pi-subagents/": "allow",
 
-      "git reset --hard*": "ask",
-      "git clean -f*": "ask",
-      "git checkout -- *": "ask",
-      "git restore *": "ask",
+			"git reset --hard*": "ask",
+			"git clean -f*": "ask",
+			"git checkout -- *": "ask",
+			"git restore *": "ask",
 
-      "git push --force*": "ask",
-      "git push -f*": "ask",
+			"git push --force*": "ask",
+			"git push -f*": "ask",
 
-      "curl *|*sh*": "ask",
-      "wget *|*sh*": "ask"
-    },
+			"curl *|*sh*": "ask",
+			"wget *|*sh*": "ask"
+		},
 
-    "external_directory": {
-      "*": "ask",
+		"external_directory": {
+			"*": "ask",
 
-      "~/.cache/*": "allow",
-      "~/.local/share/pnpm/*": "allow",
-      "~/.npm/*": "allow",
-      "~/.nuget/packages/*": "allow",
-      "~/.cargo/registry/*": "allow"
-    }
-  }
+			"~/.cache/*": "allow",
+			"~/.local/share/pnpm/*": "allow",
+			"~/.npm/*": "allow",
+			"~/.nuget/packages/*": "allow",
+			"~/.cargo/registry/*": "allow"
+		}
+	}
 }
