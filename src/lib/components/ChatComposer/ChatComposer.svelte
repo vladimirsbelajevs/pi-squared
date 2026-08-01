@@ -97,7 +97,9 @@
 	function captureFileInput(element: HTMLInputElement): () => void {
 		fileInput = element;
 		return () => {
-			if (fileInput === element) fileInput = undefined;
+			if (fileInput === element) {
+				fileInput = undefined;
+			}
 		};
 	}
 
@@ -107,7 +109,9 @@
 	}
 
 	async function addFiles(files: readonly File[]): Promise<void> {
-		if (!files.length) return;
+		if (!files.length) {
+			return;
+		}
 
 		readingAttachmentCount += 1;
 		try {
@@ -118,7 +122,9 @@
 			);
 			attachments = [...attachments, ...result.attachments];
 			const error = result.errors.at(-1);
-			if (error) errorNotices.show(error);
+			if (error) {
+				errorNotices.show(error);
+			}
 		} finally {
 			readingAttachmentCount -= 1;
 		}
@@ -133,7 +139,9 @@
 
 	function handlePaste(event: ClipboardEvent): void {
 		const files = Array.from(event.clipboardData?.items ?? []).flatMap((item) => {
-			if (item.kind !== 'file') return [];
+			if (item.kind !== 'file') {
+				return [];
+			}
 			const file = item.getAsFile();
 			return file ? [file] : [];
 		});
@@ -153,7 +161,9 @@
 		const previousDraft = draft;
 		const text = previousDraft.trim();
 		const previousAttachments = attachments;
-		if ((!text && !previousAttachments.length) || submitDisabled) return;
+		if ((!text && !previousAttachments.length) || submitDisabled) {
+			return;
+		}
 		if (
 			previousAttachments.some((attachment) => attachment.kind === 'image') &&
 			!selectedModelAllowsImages

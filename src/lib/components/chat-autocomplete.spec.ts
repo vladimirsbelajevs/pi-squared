@@ -54,7 +54,9 @@ describe('chat autocomplete helpers', () => {
 	it('replaces only the active token and keeps text after the caret', () => {
 		const commandToken = getLeadingSlashCommandToken('/rev follow-up', 4);
 		const fileToken = getFileAutocompleteToken('Read @sr then', 8);
-		if (!commandToken || !fileToken) throw new Error('Expected completion tokens');
+		if (!commandToken || !fileToken) {
+			throw new Error('Expected completion tokens');
+		}
 
 		expect(insertSlashCommand('/rev follow-up', commandToken, 'review')).toEqual({
 			value: '/review follow-up',

@@ -43,7 +43,9 @@
 	let servers = $derived(status?.servers ?? []);
 	let enabledCount = $derived(servers.filter((server) => !server.disabled).length);
 	let usageEntries = $derived.by((): UsageEntry[] => {
-		if (!sessionTokens) return [];
+		if (!sessionTokens) {
+			return [];
+		}
 
 		return [
 			{ abbreviation: '↑', label: 'input tokens', value: sessionTokens.input },
@@ -88,7 +90,9 @@
 	let panelTransition = $derived({ y: 8, duration: reducedMotion.current ? 0 : 160 });
 
 	function stateLabel(server: McpServerStatus): string {
-		if (server.disabled) return 'Disabled';
+		if (server.disabled) {
+			return 'Disabled';
+		}
 
 		switch (server.state) {
 			case 'connected':
@@ -113,9 +117,15 @@
 	}
 
 	function formatTokens(tokens: number): string {
-		if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}m`;
-		if (tokens >= 100_000) return `${Math.round(tokens / 1_000)}k`;
-		if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+		if (tokens >= 1_000_000) {
+			return `${(tokens / 1_000_000).toFixed(1)}m`;
+		}
+		if (tokens >= 100_000) {
+			return `${Math.round(tokens / 1_000)}k`;
+		}
+		if (tokens >= 1_000) {
+			return `${(tokens / 1_000).toFixed(1)}k`;
+		}
 		return `${tokens}`;
 	}
 
@@ -128,13 +138,17 @@
 	}
 
 	function closeOnEscape(event: KeyboardEvent): void {
-		if (!expanded || event.key !== 'Escape') return;
+		if (!expanded || event.key !== 'Escape') {
+			return;
+		}
 		event.preventDefault();
 		expanded = false;
 	}
 
 	async function toggleServer(server: McpServerStatus): Promise<void> {
-		if (disabled || !onToggle || isPending(server.name)) return;
+		if (disabled || !onToggle || isPending(server.name)) {
+			return;
+		}
 
 		toggleError = undefined;
 		pendingServerNames = [...pendingServerNames, server.name];
@@ -186,9 +200,7 @@
 							>
 						{/each}
 						{#if contextText}
-							<span class={['context-usage', contextTone]} aria-hidden="true"
-								>{contextText}</span
-							>
+							<span class={['context-usage', contextTone]} aria-hidden="true">{contextText}</span>
 						{/if}
 					</div>
 				{/if}

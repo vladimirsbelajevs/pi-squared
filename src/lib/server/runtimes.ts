@@ -63,7 +63,9 @@ function messageFromError(error: unknown): string {
 /** Avoid terminal-only MCP panels while retaining useful text commands in the web UI. */
 export function resolveWebExtensionCommand(text: string): WebExtensionCommand {
 	const trimmed = text.trim();
-	if (!trimmed.startsWith('/mcp')) return { text };
+	if (!trimmed.startsWith('/mcp')) {
+		return { text };
+	}
 
 	const [command, subcommand] = trimmed.split(/\s+/, 2);
 	if (command === '/mcp') {
@@ -85,7 +87,9 @@ export function resolveWebExtensionCommand(text: string): WebExtensionCommand {
 			};
 		}
 	}
-	if (trimmed === '/mcp-auth') return { notice: 'Specify an MCP server: /mcp-auth <server>' };
+	if (trimmed === '/mcp-auth') {
+		return { notice: 'Specify an MCP server: /mcp-auth <server>' };
+	}
 	return { text };
 }
 
@@ -95,7 +99,9 @@ export function subscribeToMcpStatus(
 ): () => void {
 	return events.on(MCP_STATUS_EVENT, (value) => {
 		const status = parseMcpStatusSnapshot(value);
-		if (status) onStatus(status);
+		if (status) {
+			onStatus(status);
+		}
 	});
 }
 
@@ -153,21 +159,28 @@ function publishSnapshot(record: RuntimeRecord): RuntimeSnapshot {
 function attachSessionEvents(record: RuntimeRecord): () => void {
 	return record.session.subscribe((event) => {
 		record.lastAccessedAt = Date.now();
-		if (event.type === 'agent_start') publish(record, { type: 'state', isStreaming: true });
+		if (event.type === 'agent_start') {
+			publish(record, { type: 'state', isStreaming: true });
+		}
 		if (event.type === 'agent_settled' || event.type === 'agent_end') {
 			publish(record, { type: 'state', isStreaming: record.session.isStreaming });
 		}
-		if (event.type === 'entry_appended' || event.type === 'session_info_changed')
+		if (event.type === 'entry_appended' || event.type === 'session_info_changed') {
 			publishSnapshot(record);
+		}
 
 		const normalized = normalizePiEvent(event);
-		if (normalized) publish(record, normalized);
+		if (normalized) {
+			publish(record, normalized);
+		}
 	});
 }
 
 function getRecord(runtimeId: string): RuntimeRecord {
 	const record = runtimes.get(runtimeId);
-	if (!record) throw new Error('Chat tab is no longer active.');
+	if (!record) {
+		throw new Error('Chat tab is no longer active.');
+	}
 	record.lastAccessedAt = Date.now();
 	return record;
 }
@@ -180,12 +193,15 @@ export async function createRuntime(input: {
 	thinkingLevel?: ThinkingLevel;
 }): Promise<RuntimeSnapshot> {
 	const project = await getProject(input.projectId);
-	if (!project) throw new Error('Project not found.');
+	if (!project) {
+		throw new Error('Project not found.');
+	}
 	if (input.mode === 'new' && (!input.model || !input.thinkingLevel)) {
 		throw new Error('New chats require a model and reasoning level.');
 	}
-	if (input.mode === 'resume' && !input.sessionId)
+	if (input.mode === 'resume' && !input.sessionId) {
 		throw new Error('A session is required to resume a chat.');
+	}
 
 	const sessionPath = input.sessionId
 		? await resolveSessionPath(project, input.sessionId)
@@ -271,7 +287,9 @@ export function listRuntimeSlashCommands(runtimeId: string): SlashCommand[] {
 export async function listProjectRuntimeSlashCommands(projectId: string): Promise<SlashCommand[]> {
 	const project = await resolveProject(projectId);
 	const cached = projectCommandCache.get(project.id);
-	if (cached && cached.expiresAt > Date.now()) return cached.commands;
+	if (cached && cached.expiresAt > Date.now()) {
+		return cached.commands;
+	}
 
 	const commands = await listProjectSlashCommands(project);
 	projectCommandCache.set(project.id, {
@@ -290,15 +308,22 @@ export function promptRuntime(
 	const record = getRecord(runtimeId);
 	const validatedAttachments = validatePromptAttachments(attachments);
 	const visibleText = text.trim();
-	if (!visibleText && !validatedAttachments.length) throw new Error('Messages cannot be empty.');
-	if (record.mcpToggle) throw new Error('Wait for the MCP server change to finish.');
+	if (!visibleText && !validatedAttachments.length) {
+		throw new Error('Messages cannot be empty.');
+	}
+	if (record.mcpToggle) {
+		throw new Error('Wait for the MCP server change to finish.');
+	}
 	const resolved = resolveWebExtensionCommand(
 		promptWithAttachments(visibleText, validatedAttachments)
 	);
-	if (resolved.notice) publish(record, { type: 'notice', message: resolved.notice });
+	if (resolved.notice) {
+		publish(record, { type: 'notice', message: resolved.notice });
+	}
 	if (!resolved.text) {
-		if (validatedAttachments.length)
+		if (validatedAttachments.length) {
 			throw new Error('Attachments cannot be sent with this command.');
+		}
 		return { queued: false };
 	}
 	text = resolved.text;
@@ -332,8 +357,9 @@ export async function setRuntimeModel(
 	model: { provider: string; id: string }
 ): Promise<RuntimeSnapshot> {
 	const record = getRecord(runtimeId);
-	if (record.session.isStreaming)
+	if (record.session.isStreaming) {
 		throw new Error('Wait for the current response before changing the model.');
+	}
 	await record.session.setModel(await resolveModel(model.provider, model.id));
 	return publishSnapshot(record);
 }
@@ -343,8 +369,9 @@ export function setRuntimeThinkingLevel(
 	thinkingLevel: ThinkingLevel
 ): RuntimeSnapshot {
 	const record = getRecord(runtimeId);
-	if (record.session.isStreaming)
+	if (record.session.isStreaming) {
 		throw new Error('Wait for the current response before changing reasoning.');
+	}
 	record.session.setThinkingLevel(thinkingLevel);
 	return publishSnapshot(record);
 }
@@ -362,8 +389,12 @@ export async function setRuntimeMcpServerEnabled(
 			throw new Error('Wait for the current response before changing MCP servers.');
 		}
 		const server = record.mcpStatus?.servers.find((candidate) => candidate.name === serverName);
-		if (!server) throw new Error('MCP server not found in this chat.');
-		if (server.disabled === !enabled) return publishSnapshot(record);
+		if (!server) {
+			throw new Error('MCP server not found in this chat.');
+		}
+		if (server.disabled === !enabled) {
+			return publishSnapshot(record);
+		}
 
 		record.suppressMcpReloadNotice = true;
 		try {
@@ -380,7 +411,9 @@ export async function setRuntimeMcpServerEnabled(
 	);
 	record.mcpToggle = pending;
 	void pending.finally(() => {
-		if (record.mcpToggle === pending) record.mcpToggle = undefined;
+		if (record.mcpToggle === pending) {
+			record.mcpToggle = undefined;
+		}
 	});
 	return toggle;
 }
@@ -394,10 +427,14 @@ export async function abortRuntime(runtimeId: string): Promise<void> {
 
 export async function disposeRuntime(runtimeId: string): Promise<void> {
 	const record = runtimes.get(runtimeId);
-	if (!record) return;
+	if (!record) {
+		return;
+	}
 	runtimes.delete(runtimeId);
 	record.permissions.cancelAll();
-	if (record.session.isStreaming) await record.session.abort();
+	if (record.session.isStreaming) {
+		await record.session.abort();
+	}
 	record.unsubscribe();
 	record.unsubscribeMcpStatus();
 	await shutdownRuntimeSession(record.session);
@@ -406,7 +443,8 @@ export async function disposeRuntime(runtimeId: string): Promise<void> {
 export async function cleanupIdleRuntimes(): Promise<void> {
 	const cutoff = Date.now() - IDLE_RUNTIME_MS;
 	for (const [runtimeId, record] of runtimes) {
-		if (record.lastAccessedAt < cutoff && !record.session.isStreaming)
+		if (record.lastAccessedAt < cutoff && !record.session.isStreaming) {
 			await disposeRuntime(runtimeId);
+		}
 	}
 }

@@ -39,15 +39,25 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 
 function textFromContent(content: unknown, includeThinking = false): string {
-	if (typeof content === 'string') return content;
-	if (!Array.isArray(content)) return '';
+	if (typeof content === 'string') {
+		return content;
+	}
+	if (!Array.isArray(content)) {
+		return '';
+	}
 
 	return content
 		.map((block) => {
 			const item = record(block);
-			if (!item) return '';
-			if (typeof item.text === 'string') return item.text;
-			if (includeThinking && typeof item.thinking === 'string') return item.thinking;
+			if (!item) {
+				return '';
+			}
+			if (typeof item.text === 'string') {
+				return item.text;
+			}
+			if (includeThinking && typeof item.thinking === 'string') {
+				return item.thinking;
+			}
 			return '';
 		})
 		.filter(Boolean)
@@ -55,7 +65,9 @@ function textFromContent(content: unknown, includeThinking = false): string {
 }
 
 function imagesFromContent(content: unknown): Array<{ data: string; mimeType: string }> {
-	if (!Array.isArray(content)) return [];
+	if (!Array.isArray(content)) {
+		return [];
+	}
 	return content.flatMap((block) => {
 		const item = record(block);
 		if (
@@ -64,8 +76,9 @@ function imagesFromContent(content: unknown): Array<{ data: string; mimeType: st
 			typeof item.data !== 'string' ||
 			typeof item.mimeType !== 'string' ||
 			attachmentKind('image', item.mimeType) !== 'image'
-		)
+		) {
 			return [];
+		}
 		return [{ data: item.data, mimeType: item.mimeType }];
 	});
 }
@@ -78,7 +91,9 @@ function userAttachmentsFromContent(content: unknown): {
 	const images = imagesFromContent(content);
 	let imageIndex = 0;
 	const attachments = stored.attachments.map((attachment) => {
-		if (attachment.kind !== 'image') return attachment;
+		if (attachment.kind !== 'image') {
+			return attachment;
+		}
 		const image = images[imageIndex++];
 		return image && image.mimeType === attachment.mimeType
 			? { ...attachment, data: image.data }
@@ -103,7 +118,9 @@ function userAttachmentsFromContent(content: unknown): {
 }
 
 function thinkingFromContent(content: unknown): string | undefined {
-	if (!Array.isArray(content)) return undefined;
+	if (!Array.isArray(content)) {
+		return undefined;
+	}
 	const thinking = content
 		.map((block) => record(block)?.thinking)
 		.filter((value): value is string => typeof value === 'string')
@@ -112,7 +129,9 @@ function thinkingFromContent(content: unknown): string | undefined {
 }
 
 function toolCallsFromContent(content: unknown): ChatToolCall[] | undefined {
-	if (!Array.isArray(content)) return undefined;
+	if (!Array.isArray(content)) {
+		return undefined;
+	}
 	const calls = content.flatMap((block) => {
 		const item = record(block);
 		if (
@@ -163,8 +182,9 @@ export async function resolveModel(provider: string, id: string) {
 	const model = available.find(
 		(candidate) => candidate.provider === provider && candidate.id === id
 	);
-	if (!model)
+	if (!model) {
 		throw new Error('The selected model is not available with the configured credentials.');
+	}
 	return model;
 }
 
@@ -346,7 +366,9 @@ export function listSessionSlashCommands(session: AgentSession): SlashCommand[] 
 	}
 
 	for (const template of session.promptTemplates) {
-		if (commands.has(template.name)) continue;
+		if (commands.has(template.name)) {
+			continue;
+		}
 		commands.set(template.name, {
 			name: template.name,
 			description: template.description,
@@ -356,7 +378,9 @@ export function listSessionSlashCommands(session: AgentSession): SlashCommand[] 
 
 	for (const skill of session.resourceLoader.getSkills().skills) {
 		const name = `skill:${skill.name}`;
-		if (commands.has(name)) continue;
+		if (commands.has(name)) {
+			continue;
+		}
 		commands.set(name, { name, description: skill.description, source: 'skill' });
 	}
 
@@ -391,7 +415,9 @@ export async function resolveSessionPath(project: Project, sessionId: string): P
 	const session = (await SessionManager.list(project.cwd)).find(
 		(candidate) => candidate.id === sessionId
 	);
-	if (!session) throw new Error('Session not found in this project.');
+	if (!session) {
+		throw new Error('Session not found in this project.');
+	}
 	return session.path;
 }
 
@@ -404,10 +430,15 @@ export function normalizePiEvent(
 	| undefined {
 	if (event.type === 'message_update') {
 		const update = event.assistantMessageEvent;
-		if (update.type === 'text_delta') return { type: 'assistant_delta', text: update.delta };
-		if (update.type === 'thinking_delta')
+		if (update.type === 'text_delta') {
+			return { type: 'assistant_delta', text: update.delta };
+		}
+		if (update.type === 'thinking_delta') {
 			return { type: 'assistant_delta', thinking: update.delta };
-		if (update.type === 'error') return { type: 'notice', message: 'The model returned an error.' };
+		}
+		if (update.type === 'error') {
+			return { type: 'notice', message: 'The model returned an error.' };
+		}
 	}
 
 	if (event.type === 'tool_execution_update') {
@@ -429,8 +460,11 @@ export function normalizePiEvent(
 		};
 	}
 
-	if (event.type === 'compaction_start') return { type: 'notice', message: 'Compacting context…' };
-	if (event.type === 'auto_retry_start')
+	if (event.type === 'compaction_start') {
+		return { type: 'notice', message: 'Compacting context…' };
+	}
+	if (event.type === 'auto_retry_start') {
 		return { type: 'notice', message: 'Retrying model request…' };
+	}
 	return undefined;
 }

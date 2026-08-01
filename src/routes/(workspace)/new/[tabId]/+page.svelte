@@ -14,7 +14,9 @@
 
 	function ensureNewTabForRoute(): void {
 		const id = page.params.tabId;
-		if (!id) return;
+		if (!id) {
+			return;
+		}
 		workspace.ensureNewTab(id);
 		workspace.rememberTabForPathname(page.url.pathname);
 	}
@@ -27,21 +29,31 @@
 			introReady = true;
 			const pathname = page.url.pathname;
 			restoreFrame = requestAnimationFrame(() => {
-				if (page.url.pathname !== pathname) return;
+				if (page.url.pathname !== pathname) {
+					return;
+				}
 				const scrollContainer = document.getElementById('workspace-content');
-				if (scrollContainer) scrollContainer.scrollTop = workspace.scrollPosition(pathname);
+				if (scrollContainer) {
+					scrollContainer.scrollTop = workspace.scrollPosition(pathname);
+				}
 			});
 		});
 		return () => {
 			cancelAnimationFrame(introFrame);
-			if (restoreFrame) cancelAnimationFrame(restoreFrame);
+			if (restoreFrame) {
+				cancelAnimationFrame(restoreFrame);
+			}
 		};
 	});
 
 	async function startChat(submission: ChatSubmission): Promise<boolean> {
-		if (!tab) return false;
+		if (!tab) {
+			return false;
+		}
 		const chat = await workspace.startChat(tab, submission);
-		if (!chat) return false;
+		if (!chat) {
+			return false;
+		}
 		await goto(
 			resolve(`/chat/${encodeURIComponent(chat.projectId)}/${encodeURIComponent(chat.sessionId)}`),
 			{ replaceState: true }
@@ -51,7 +63,9 @@
 
 	async function addProject(event: SubmitEvent): Promise<void> {
 		event.preventDefault();
-		if (tab) await workspace.addProject(tab);
+		if (tab) {
+			await workspace.addProject(tab);
+		}
 	}
 </script>
 

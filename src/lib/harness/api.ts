@@ -13,7 +13,9 @@ import type {
 } from '$lib/contracts';
 
 function isStreamEnvelope(value: unknown): value is StreamEnvelope {
-	if (!value || typeof value !== 'object') return false;
+	if (!value || typeof value !== 'object') {
+		return false;
+	}
 	const envelope = value as Record<string, unknown>;
 	return (
 		typeof envelope.id === 'number' &&
@@ -163,7 +165,9 @@ export function openEventStream(
 	source.onmessage = (message) => {
 		try {
 			const parsed: unknown = JSON.parse(message.data);
-			if (isStreamEnvelope(parsed)) onEvent(parsed);
+			if (isStreamEnvelope(parsed)) {
+				onEvent(parsed);
+			}
 		} catch {
 			// EventSource reconnects automatically after a malformed or interrupted event.
 		}

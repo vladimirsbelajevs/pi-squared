@@ -23,7 +23,9 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent): void {
-		if (event.key !== 'Escape' || !image) return;
+		if (event.key !== 'Escape' || !image) {
+			return;
+		}
 
 		event.preventDefault();
 		close();

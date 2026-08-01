@@ -5,9 +5,15 @@ import { respondToPermissionRequest } from '$lib/server/runtimes';
 
 function parseResponse(body: Record<string, unknown>): PermissionResponse {
 	const requestId = requiredString(body.requestId, 'Permission request');
-	if (body.cancelled === true) return { requestId, cancelled: true };
-	if (typeof body.value === 'string') return { requestId, value: body.value };
-	if (typeof body.confirmed === 'boolean') return { requestId, confirmed: body.confirmed };
+	if (body.cancelled === true) {
+		return { requestId, cancelled: true };
+	}
+	if (typeof body.value === 'string') {
+		return { requestId, value: body.value };
+	}
+	if (typeof body.confirmed === 'boolean') {
+		return { requestId, confirmed: body.confirmed };
+	}
 	throw new Error('A permission response must approve, deny, select an option, or cancel.');
 }
 

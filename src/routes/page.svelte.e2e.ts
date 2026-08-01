@@ -201,7 +201,9 @@ test('opens a historical session without reselecting its tab', async ({ page }) 
 	await page.route('**/api/models', (route) => route.fulfill({ json: { models: [model] } }));
 	await page.route('**/api/sessions', (route) => route.fulfill({ json: { sessions: [session] } }));
 	await page.route('**/api/runtimes', async (route) => {
-		if (route.request().method() !== 'POST') return route.fallback();
+		if (route.request().method() !== 'POST') {
+			return route.fallback();
+		}
 		await route.fulfill({ json: { snapshot } });
 	});
 
@@ -245,7 +247,9 @@ test('restores each tab scroll position without animating to the bottom', async 
 
 	await page.evaluate(() => {
 		const container = document.getElementById('workspace-content');
-		if (!container) throw new Error('Workspace scroll container is missing.');
+		if (!container) {
+			throw new Error('Workspace scroll container is missing.');
+		}
 		container.style.paddingBottom = '1200px';
 		container.scrollTop = 180;
 		container.dispatchEvent(new Event('scroll'));
@@ -298,7 +302,9 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 	await page.route('**/api/models', (route) => route.fulfill({ json: { models: [model] } }));
 	await page.route('**/api/sessions', (route) => route.fulfill({ json: { sessions: [] } }));
 	await page.route('**/api/runtimes', async (route) => {
-		if (route.request().method() !== 'POST') return route.fallback();
+		if (route.request().method() !== 'POST') {
+			return route.fallback();
+		}
 		await route.fulfill({ json: { snapshot } });
 	});
 
@@ -306,7 +312,9 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 	await expect(page.getByRole('textbox', { name: 'Message Pi' })).toBeVisible();
 	await page.evaluate(() => {
 		const container = document.getElementById('workspace-content');
-		if (!container) throw new Error('Workspace scroll container is missing.');
+		if (!container) {
+			throw new Error('Workspace scroll container is missing.');
+		}
 		container.style.paddingBottom = '1200px';
 		container.scrollTop = container.scrollHeight;
 	});
@@ -382,7 +390,9 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 
 	await page.evaluate(() => {
 		const container = document.getElementById('workspace-content');
-		if (!container) throw new Error('Workspace scroll container is missing.');
+		if (!container) {
+			throw new Error('Workspace scroll container is missing.');
+		}
 		container.scrollTop = 0;
 	});
 	await emit({
@@ -420,13 +430,17 @@ test('starting a chat does not recreate its draft tab', async ({ page }) => {
 
 	await page.addInitScript(() => localStorage.clear());
 	await page.route('**/api/projects', async (route) => {
-		if (route.request().method() !== 'GET') return route.fallback();
+		if (route.request().method() !== 'GET') {
+			return route.fallback();
+		}
 		await route.fulfill({ json: { projects: [project] } });
 	});
 	await page.route('**/api/models', (route) => route.fulfill({ json: { models: [model] } }));
 	await page.route('**/api/sessions', (route) => route.fulfill({ json: { sessions: [] } }));
 	await page.route('**/api/runtimes', async (route) => {
-		if (route.request().method() !== 'POST') return route.fallback();
+		if (route.request().method() !== 'POST') {
+			return route.fallback();
+		}
 		await route.fulfill({ json: { snapshot } });
 	});
 	await page.route('**/api/runtimes/runtime-1/prompt', (route) =>

@@ -13,7 +13,9 @@
 
 	function submitInput(event: SubmitEvent): void {
 		event.preventDefault();
-		if (!input.trim()) return;
+		if (!input.trim()) {
+			return;
+		}
 		void onSelect(request, input);
 	}
 </script>

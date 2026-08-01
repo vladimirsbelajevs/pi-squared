@@ -81,24 +81,33 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
 
 function extensionFor(name: string): string | undefined {
 	const normalized = name.trim().toLowerCase();
-	if (normalized === 'dockerfile') return 'dockerfile';
+	if (normalized === 'dockerfile') {
+		return 'dockerfile';
+	}
 	const index = normalized.lastIndexOf('.');
 	return index > 0 && index < normalized.length - 1 ? normalized.slice(index + 1) : undefined;
 }
 
 export function attachmentKind(name: string, mimeType: string): ChatAttachmentKind | undefined {
 	const normalizedMimeType = mimeType.toLowerCase().split(';', 1)[0].trim();
-	if (IMAGE_MIME_TYPES.has(normalizedMimeType) || IMAGE_MIME_BY_EXTENSION[extensionFor(name) ?? ''])
+	if (
+		IMAGE_MIME_TYPES.has(normalizedMimeType) ||
+		IMAGE_MIME_BY_EXTENSION[extensionFor(name) ?? '']
+	) {
 		return 'image';
-	if (TEXT_MIME_TYPES.has(normalizedMimeType) || normalizedMimeType.startsWith('text/'))
+	}
+	if (TEXT_MIME_TYPES.has(normalizedMimeType) || normalizedMimeType.startsWith('text/')) {
 		return 'text';
+	}
 	return TEXT_FILE_EXTENSIONS.has(extensionFor(name) ?? '') ? 'text' : undefined;
 }
 
 export function attachmentMimeType(name: string, mimeType: string): string | undefined {
 	const normalizedMimeType = mimeType.toLowerCase().split(';', 1)[0].trim();
 	const kind = attachmentKind(name, normalizedMimeType);
-	if (!kind) return undefined;
+	if (!kind) {
+		return undefined;
+	}
 	if (kind === 'image') {
 		return IMAGE_MIME_TYPES.has(normalizedMimeType)
 			? normalizedMimeType
@@ -115,7 +124,9 @@ function decodedBytes(data: string): Uint8Array {
 	}
 	const binary = atob(data);
 	const bytes = new Uint8Array(binary.length);
-	for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+	for (let index = 0; index < binary.length; index += 1) {
+		bytes[index] = binary.charCodeAt(index);
+	}
 	return bytes;
 }
 
@@ -126,8 +137,9 @@ function hasExpectedImageSignature(mimeType: string, bytes: Uint8Array): boolean
 			bytes.length >= signature.length && signature.every((byte, index) => byte === bytes[index])
 		);
 	}
-	if (mimeType === 'image/jpeg')
+	if (mimeType === 'image/jpeg') {
 		return bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+	}
 	if (mimeType === 'image/gif') {
 		const header = String.fromCharCode(...bytes.slice(0, 6));
 		return header === 'GIF87a' || header === 'GIF89a';
@@ -159,38 +171,55 @@ function validName(value: unknown): value is string {
  * It is intentionally isomorphic so the composer can use the same limits and MIME policy.
  */
 export function validatePromptAttachments(value: unknown): PromptAttachment[] {
-	if (value === undefined) return [];
-	if (!Array.isArray(value)) throw new Error('Attachments must be an array.');
-	if (value.length > MAX_ATTACHMENTS) throw new Error(`Attach at most ${MAX_ATTACHMENTS} files.`);
+	if (value === undefined) {
+		return [];
+	}
+	if (!Array.isArray(value)) {
+		throw new Error('Attachments must be an array.');
+	}
+	if (value.length > MAX_ATTACHMENTS) {
+		throw new Error(`Attach at most ${MAX_ATTACHMENTS} files.`);
+	}
 
 	let totalSize = 0;
 	return value.map((candidate, index) => {
-		if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+		if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
 			throw new Error(`Attachment ${index + 1} is invalid.`);
+		}
 		const attachment = candidate as Record<string, unknown>;
-		if (!validId(attachment.id)) throw new Error(`Attachment ${index + 1} needs an ID.`);
-		if (!validName(attachment.name))
+		if (!validId(attachment.id)) {
+			throw new Error(`Attachment ${index + 1} needs an ID.`);
+		}
+		if (!validName(attachment.name)) {
 			throw new Error(`Attachment ${index + 1} has an invalid filename.`);
-		if (typeof attachment.mimeType !== 'string')
+		}
+		if (typeof attachment.mimeType !== 'string') {
 			throw new Error(`Attachment ${index + 1} has an invalid MIME type.`);
-		if (typeof attachment.data !== 'string')
+		}
+		if (typeof attachment.data !== 'string') {
 			throw new Error(`Attachment ${index + 1} has no data.`);
+		}
 		if (
 			typeof attachment.size !== 'number' ||
 			!Number.isSafeInteger(attachment.size) ||
 			attachment.size < 1
-		)
+		) {
 			throw new Error(`Attachment ${index + 1} has an invalid size.`);
+		}
 
 		const mimeType = attachmentMimeType(attachment.name, attachment.mimeType);
 		const kind = mimeType ? attachmentKind(attachment.name, mimeType) : undefined;
-		if (!mimeType || !kind) throw new Error(`Unsupported attachment: ${attachment.name}.`);
-		if (attachment.kind !== kind)
+		if (!mimeType || !kind) {
+			throw new Error(`Unsupported attachment: ${attachment.name}.`);
+		}
+		if (attachment.kind !== kind) {
 			throw new Error(`Attachment ${attachment.name} has an invalid kind.`);
+		}
 
 		const bytes = decodedBytes(attachment.data);
-		if (bytes.length !== attachment.size)
+		if (bytes.length !== attachment.size) {
 			throw new Error(`Attachment ${attachment.name} has an invalid size.`);
+		}
 		const maximumSize = kind === 'image' ? MAX_IMAGE_BYTES : MAX_TEXT_FILE_BYTES;
 		if (bytes.length > maximumSize) {
 			const limit =
@@ -200,12 +229,14 @@ export function validatePromptAttachments(value: unknown): PromptAttachment[] {
 			throw new Error(`${attachment.name} exceeds the ${limit} limit.`);
 		}
 		totalSize += bytes.length;
-		if (totalSize > MAX_TOTAL_ATTACHMENT_BYTES)
+		if (totalSize > MAX_TOTAL_ATTACHMENT_BYTES) {
 			throw new Error(
 				`Attachments exceed the ${MAX_TOTAL_ATTACHMENT_BYTES / 1024 / 1024} MiB total limit.`
 			);
-		if (kind === 'image' && !hasExpectedImageSignature(mimeType, bytes))
+		}
+		if (kind === 'image' && !hasExpectedImageSignature(mimeType, bytes)) {
 			throw new Error(`${attachment.name} does not match its image type.`);
+		}
 		if (kind === 'text') {
 			try {
 				new TextDecoder('utf-8', { fatal: true }).decode(bytes);

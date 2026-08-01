@@ -10,7 +10,9 @@ let pending: string[] = [];
  * Notifications raised before the host mounts are delivered in FIFO order.
  */
 export function registerErrorNoticeHost(register: ErrorNoticeHost): () => void {
-	if (!browser) return () => {};
+	if (!browser) {
+		return () => {};
+	}
 
 	host = register;
 	for (const message of pending) {
@@ -19,7 +21,9 @@ export function registerErrorNoticeHost(register: ErrorNoticeHost): () => void {
 	pending = [];
 
 	return () => {
-		if (host === register) host = undefined;
+		if (host === register) {
+			host = undefined;
+		}
 	};
 }
 
@@ -30,7 +34,9 @@ function messageFor(notice: string | Error): string {
 /** Client-only facade for displaying application error notifications. */
 export const errorNotices = {
 	show(notice: string | Error): void {
-		if (!browser) return;
+		if (!browser) {
+			return;
+		}
 
 		const message = messageFor(notice);
 		if (host) {

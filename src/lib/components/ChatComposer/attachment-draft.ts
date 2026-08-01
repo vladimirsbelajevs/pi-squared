@@ -20,7 +20,9 @@ export function classifyAttachment(
 ): AttachmentClassification | undefined {
 	const kind = attachmentKind(name, mimeType);
 	const resolvedMimeType = attachmentMimeType(name, mimeType);
-	if (!kind || !resolvedMimeType) return undefined;
+	if (!kind || !resolvedMimeType) {
+		return undefined;
+	}
 	return { kind, mimeType: resolvedMimeType };
 }
 
@@ -98,7 +100,9 @@ export async function createPromptAttachmentDrafts(
 		}
 
 		try {
-			if (supported.kind === 'text') await verifyUtf8Text(file);
+			if (supported.kind === 'text') {
+				await verifyUtf8Text(file);
+			}
 			const attachment: PromptAttachment = {
 				id: crypto.randomUUID(),
 				kind: supported.kind,
@@ -118,7 +122,9 @@ export async function createPromptAttachmentDrafts(
 }
 
 function formatFileSize(bytes: number): string {
-	if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+	if (!Number.isFinite(bytes) || bytes <= 0) {
+		return '0 B';
+	}
 	const units = ['B', 'KB', 'MB', 'GB'];
 	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
 	const value = bytes / 1024 ** exponent;

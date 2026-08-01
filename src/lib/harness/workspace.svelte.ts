@@ -132,7 +132,9 @@ export class HarnessWorkspace {
 	}
 
 	schedulePersist(): void {
-		if (this.#persistTimer) clearTimeout(this.#persistTimer);
+		if (this.#persistTimer) {
+			clearTimeout(this.#persistTimer);
+		}
 		this.#persistTimer = setTimeout(() => {
 			this.#persistTimer = undefined;
 			this.persist();
@@ -166,14 +168,18 @@ export class HarnessWorkspace {
 
 	rememberTabForPathname(pathname: string): void {
 		const tab = this.tabs.find((candidate) => this.hrefForTab(candidate) === pathname);
-		if (!tab || tab.id === this.activeTabId) return;
+		if (!tab || tab.id === this.activeTabId) {
+			return;
+		}
 		this.activeTabId = tab.id;
 		this.persist();
 	}
 
 	createNewTab(tabId = randomId()): NewTab {
 		const existing = this.findNewTab(tabId);
-		if (existing) return existing;
+		if (existing) {
+			return existing;
+		}
 		const tab: NewTab = {
 			id: tabId,
 			kind: 'new',
@@ -190,7 +196,9 @@ export class HarnessWorkspace {
 
 	ensureNewTab(tabId: string): NewTab | undefined {
 		const existing = this.findNewTab(tabId);
-		if (existing || this.tabs.some((tab) => tab.id === tabId)) return existing;
+		if (existing || this.tabs.some((tab) => tab.id === tabId)) {
+			return existing;
+		}
 		return this.createNewTab(tabId);
 	}
 
@@ -212,7 +220,9 @@ export class HarnessWorkspace {
 	changeNewTabModel(tab: NewTab, key: string): void {
 		tab.draft.modelKey = key;
 		const model = this.selectedModel(key);
-		if (!model) return;
+		if (!model) {
+			return;
+		}
 		localStorage.setItem(LAST_MODEL_KEY, key);
 		if (model.reasoning === false) {
 			tab.draft.thinkingLevel = 'off';
@@ -275,7 +285,9 @@ export class HarnessWorkspace {
 			const chat = this.#createChatTab(tab.id, snapshot);
 			this.tabs = this.tabs.map((candidate) => (candidate.id === tab.id ? chat : candidate));
 			const accepted = await this.sendPrompt(chat, openingPrompt);
-			if (!accepted) chat.draft = openingPrompt.text;
+			if (!accepted) {
+				chat.draft = openingPrompt.text;
+			}
 			this.persist();
 			return chat;
 		} catch (error) {
@@ -286,10 +298,14 @@ export class HarnessWorkspace {
 	async ensureChat(projectId: string, sessionId: string): Promise<ChatTab | undefined> {
 		const key = `${projectId}:${sessionId}`;
 		const existingLoad = this.#chatLoads.get(key);
-		if (existingLoad) return existingLoad;
+		if (existingLoad) {
+			return existingLoad;
+		}
 
 		const existing = this.findChat(projectId, sessionId);
-		if (existing?.snapshot) return existing;
+		if (existing?.snapshot) {
+			return existing;
+		}
 
 		let chat =
 			existing ??
@@ -331,7 +347,9 @@ export class HarnessWorkspace {
 
 	async sendPrompt(chat: ChatTab, submission: ChatSubmission): Promise<boolean> {
 		const message = submission.text.trim();
-		if ((!message && !submission.attachments.length) || !chat.runtimeId) return false;
+		if ((!message && !submission.attachments.length) || !chat.runtimeId) {
+			return false;
+		}
 		const knownUserItemIds = this.#userItemIds(chat.snapshot);
 		try {
 			const result = await promptRuntime(chat.runtimeId, {
@@ -358,7 +376,9 @@ export class HarnessWorkspace {
 	}
 
 	async stopChat(chat: ChatTab): Promise<void> {
-		if (!chat.runtimeId) return;
+		if (!chat.runtimeId) {
+			return;
+		}
 		try {
 			await abortRuntime(chat.runtimeId);
 		} catch (error) {
@@ -367,7 +387,9 @@ export class HarnessWorkspace {
 	}
 
 	async setMcpServerEnabled(chat: ChatTab, serverName: string, enabled: boolean): Promise<void> {
-		if (!chat.runtimeId) throw new Error('Chat tab is no longer active.');
+		if (!chat.runtimeId) {
+			throw new Error('Chat tab is no longer active.');
+		}
 		const response = await setRuntimeMcpServerEnabled(chat.runtimeId, { serverName, enabled });
 		this.#applySnapshot(chat, response.snapshot);
 	}
@@ -381,7 +403,9 @@ export class HarnessWorkspace {
 		request: PendingPermission,
 		value: string
 	): Promise<void> {
-		if (!chat.runtimeId || request.responding) return;
+		if (!chat.runtimeId || request.responding) {
+			return;
+		}
 		request.error = undefined;
 		request.responding = true;
 		try {
@@ -402,7 +426,9 @@ export class HarnessWorkspace {
 		request: PendingPermission,
 		confirmed: boolean
 	): Promise<void> {
-		if (!chat.runtimeId || request.responding) return;
+		if (!chat.runtimeId || request.responding) {
+			return;
+		}
 		request.error = undefined;
 		request.responding = true;
 		try {
@@ -419,7 +445,9 @@ export class HarnessWorkspace {
 	}
 
 	async cancelPermission(chat: ChatTab, request: PendingPermission): Promise<void> {
-		if (!chat.runtimeId || request.responding) return;
+		if (!chat.runtimeId || request.responding) {
+			return;
+		}
 		request.error = undefined;
 		request.responding = true;
 		try {
@@ -437,19 +465,25 @@ export class HarnessWorkspace {
 
 	async changeModel(chat: ChatTab, key: string): Promise<void> {
 		const model = this.selectedModel(key);
-		if (!model || !chat.runtimeId) return;
+		if (!model || !chat.runtimeId) {
+			return;
+		}
 		try {
 			const { snapshot } = await setRuntimeModel(chat.runtimeId, model);
 			this.#applySnapshot(chat, snapshot);
 			localStorage.setItem(LAST_MODEL_KEY, key);
-			if (model.reasoning === false) localStorage.setItem(LAST_THINKING_LEVEL_KEY, 'off');
+			if (model.reasoning === false) {
+				localStorage.setItem(LAST_THINKING_LEVEL_KEY, 'off');
+			}
 		} catch (error) {
 			errorNotices.show(normalizeError(error, 'Unable to change the model.'));
 		}
 	}
 
 	async changeThinking(chat: ChatTab, thinkingLevel: ThinkingLevel): Promise<void> {
-		if (!chat.runtimeId) return;
+		if (!chat.runtimeId) {
+			return;
+		}
 		try {
 			const { snapshot } = await setRuntimeThinking(chat.runtimeId, thinkingLevel);
 			this.#applySnapshot(chat, snapshot);
@@ -545,7 +579,9 @@ export class HarnessWorkspace {
 	}
 
 	#connectEvents(): void {
-		if (this.#events) return;
+		if (this.#events) {
+			return;
+		}
 		this.#events = openEventStream(this.#lastEventId, (event) => this.#handleEvent(event));
 	}
 
@@ -555,7 +591,9 @@ export class HarnessWorkspace {
 		const chat = this.tabs.find(
 			(tab): tab is ChatTab => tab.kind === 'chat' && tab.runtimeId === envelope.runtimeId
 		);
-		if (!chat) return;
+		if (!chat) {
+			return;
+		}
 
 		const event = envelope.event;
 		if (event.type === 'snapshot') {
@@ -584,17 +622,25 @@ export class HarnessWorkspace {
 			return;
 		}
 		if (event.type === 'state') {
-			if (chat.snapshot) chat.snapshot.isStreaming = event.isStreaming;
+			if (chat.snapshot) {
+				chat.snapshot.isStreaming = event.isStreaming;
+			}
 			return;
 		}
 		if (event.type === 'mcp_status') {
-			if (chat.snapshot) chat.snapshot.mcpStatus = event.mcpStatus;
+			if (chat.snapshot) {
+				chat.snapshot.mcpStatus = event.mcpStatus;
+			}
 			return;
 		}
 		if (event.type === 'notice') {
-			if (!event.message.trim()) return;
+			if (!event.message.trim()) {
+				return;
+			}
 			chat.transientNotices.push({ id: `notice-${envelope.id}`, message: event.message });
-			if (chat.transientNotices.length > 20) chat.transientNotices.splice(0, 1);
+			if (chat.transientNotices.length > 20) {
+				chat.transientNotices.splice(0, 1);
+			}
 			return;
 		}
 		if (event.type === 'permission_request') {
@@ -609,7 +655,9 @@ export class HarnessWorkspace {
 			);
 			return;
 		}
-		if (event.type === 'error') errorNotices.show(event.message);
+		if (event.type === 'error') {
+			errorNotices.show(event.message);
+		}
 	}
 
 	async #hydrateChat(chat: ChatTab): Promise<void> {
@@ -675,7 +723,9 @@ export class HarnessWorkspace {
 	}
 
 	#reconcilePendingUserMessages(chat: ChatTab): void {
-		if (!chat.snapshot || !chat.pendingUserMessages.length) return;
+		if (!chat.snapshot || !chat.pendingUserMessages.length) {
+			return;
+		}
 		chat.pendingUserMessages = reconcilePendingUserMessages(
 			chat.pendingUserMessages,
 			chat.snapshot.items
@@ -683,14 +733,18 @@ export class HarnessWorkspace {
 	}
 
 	#chatTitle(snapshot: RuntimeSnapshot): string {
-		if (snapshot.sessionName) return snapshot.sessionName;
+		if (snapshot.sessionName) {
+			return snapshot.sessionName;
+		}
 		const firstMessage = snapshot.items.find((item) => item.role === 'user')?.text;
 		return firstMessage ? firstMessage.slice(0, 42) : 'New chat';
 	}
 
 	#restoreTheme(): void {
 		const stored = localStorage.getItem(THEME_KEY);
-		if (isTheme(stored)) this.applyTheme(stored);
+		if (isTheme(stored)) {
+			this.applyTheme(stored);
+		}
 	}
 
 	#restoreShowReasoning(): void {
@@ -703,16 +757,22 @@ export class HarnessWorkspace {
 
 	#restoreTabs(): void {
 		const restored = this.#readStoredWorkspace();
-		if (!restored) return;
+		if (!restored) {
+			return;
+		}
 		this.#lastEventId = restored.lastEventId;
 		const tabs: WorkspaceTab[] = [];
 		const tabIds = new SvelteSet<string>();
 		const chatSessions = new SvelteSet<string>();
 		for (const tab of restored.tabs) {
-			if (tabIds.has(tab.id)) continue;
+			if (tabIds.has(tab.id)) {
+				continue;
+			}
 			if (tab.kind === 'chat') {
 				const sessionKey = `${tab.projectId}:${tab.sessionId}`;
-				if (chatSessions.has(sessionKey)) continue;
+				if (chatSessions.has(sessionKey)) {
+					continue;
+				}
 				chatSessions.add(sessionKey);
 			}
 			tabIds.add(tab.id);
@@ -722,8 +782,9 @@ export class HarnessWorkspace {
 		this.activeTabId = tabs.some((tab) => tab.id === restored.activeTabId)
 			? restored.activeTabId
 			: undefined;
-		if (tabs.length !== restored.tabs.length || this.activeTabId !== restored.activeTabId)
+		if (tabs.length !== restored.tabs.length || this.activeTabId !== restored.activeTabId) {
 			this.persist();
+		}
 	}
 
 	#readStoredWorkspace(): StoredWorkspaceV1 | undefined {
@@ -743,9 +804,13 @@ export class HarnessWorkspace {
 			}
 
 			const legacyRaw = localStorage.getItem(LEGACY_OPEN_CHATS_KEY);
-			if (!legacyRaw) return undefined;
+			if (!legacyRaw) {
+				return undefined;
+			}
 			const legacy: unknown = JSON.parse(legacyRaw);
-			if (!Array.isArray(legacy)) return undefined;
+			if (!Array.isArray(legacy)) {
+				return undefined;
+			}
 			const seen = new SvelteSet<string>();
 			const tabs: StoredChatTab[] = [];
 			for (const value of legacy) {
@@ -753,10 +818,13 @@ export class HarnessWorkspace {
 					!isRecord(value) ||
 					typeof value.projectId !== 'string' ||
 					typeof value.sessionId !== 'string'
-				)
+				) {
 					continue;
+				}
 				const key = `${value.projectId}:${value.sessionId}`;
-				if (seen.has(key)) continue;
+				if (seen.has(key)) {
+					continue;
+				}
 				seen.add(key);
 				tabs.push({
 					kind: 'chat',

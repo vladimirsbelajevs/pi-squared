@@ -141,7 +141,9 @@
 					TimelineEntry,
 					{ kind: 'tools' }
 				>);
-			if (!currentToolEntry) timeline.push(entry);
+			if (!currentToolEntry) {
+				timeline.push(entry);
+			}
 
 			for (const stream of chat.streamTools) {
 				const existing = entry.tools.find((tool) => tool.id === stream.id);
@@ -161,8 +163,12 @@
 	}
 
 	function toolStatus(tool: ToolView): 'pending' | 'running' | 'completed' | 'failed' {
-		if (tool.result) return tool.result.isError ? 'failed' : 'completed';
-		if (tool.stream?.isError) return 'failed';
+		if (tool.result) {
+			return tool.result.isError ? 'failed' : 'completed';
+		}
+		if (tool.stream?.isError) {
+			return 'failed';
+		}
 		return tool.stream ? 'running' : 'pending';
 	}
 
@@ -170,7 +176,9 @@
 		const counts = { completed: 0, running: 0, failed: 0 };
 		for (const tool of tools) {
 			const status = toolStatus(tool);
-			if (status !== 'pending') counts[status] += 1;
+			if (status !== 'pending') {
+				counts[status] += 1;
+			}
 		}
 
 		return [
@@ -182,9 +190,13 @@
 	}
 
 	function formatTimestamp(timestamp: string | undefined): string | undefined {
-		if (!timestamp) return undefined;
+		if (!timestamp) {
+			return undefined;
+		}
 		const date = new Date(timestamp);
-		if (Number.isNaN(date.getTime())) return undefined;
+		if (Number.isNaN(date.getTime())) {
+			return undefined;
+		}
 		return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
 	}
 
@@ -205,7 +217,9 @@
 
 	async function copyText(text: string, fallbackError: string): Promise<boolean> {
 		try {
-			if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
+			if (!navigator.clipboard?.writeText) {
+				throw new Error('Clipboard access is unavailable.');
+			}
 			await navigator.clipboard.writeText(text);
 			copyError = undefined;
 			return true;
@@ -216,20 +230,28 @@
 	}
 
 	async function copyMessage(item: ChatItem): Promise<void> {
-		if (!item.text || !(await copyText(item.text, 'Unable to copy the message.'))) return;
+		if (!item.text || !(await copyText(item.text, 'Unable to copy the message.'))) {
+			return;
+		}
 
 		copiedMessageId = item.id;
-		if (copiedMessageTimer) clearTimeout(copiedMessageTimer);
+		if (copiedMessageTimer) {
+			clearTimeout(copiedMessageTimer);
+		}
 		copiedMessageTimer = setTimeout(() => {
 			copiedMessageId = undefined;
 		}, 1600);
 	}
 
 	async function copyCodeBlock(button: HTMLButtonElement, code: string): Promise<void> {
-		if (!(await copyText(code, 'Unable to copy the code.'))) return;
+		if (!(await copyText(code, 'Unable to copy the code.'))) {
+			return;
+		}
 
 		const previousTimer = copiedCodeTimers.get(button);
-		if (previousTimer) clearTimeout(previousTimer);
+		if (previousTimer) {
+			clearTimeout(previousTimer);
+		}
 		button.classList.add('copied');
 		button.setAttribute('aria-label', 'Copied code');
 		button.title = 'Copied code';
@@ -246,15 +268,21 @@
 
 	function codeCopyControls(container: HTMLElement): () => void {
 		return on(container, 'click', (event) => {
-			if (!(event.target instanceof Element)) return;
+			if (!(event.target instanceof Element)) {
+				return;
+			}
 
 			const button = event.target.closest<HTMLButtonElement>('button[data-code-copy]');
-			if (!button || !container.contains(button)) return;
+			if (!button || !container.contains(button)) {
+				return;
+			}
 
 			const code = button
 				.closest<HTMLElement>('[data-code-block]')
 				?.querySelector<HTMLElement>('pre > code')?.textContent;
-			if (code === undefined || code === null) return;
+			if (code === undefined || code === null) {
+				return;
+			}
 
 			void copyCodeBlock(button, code);
 		});
@@ -323,7 +351,9 @@
 			aria-label={`${role} message`}
 			onmouseenter={() => (hoveredMessageId = item.id)}
 			onmouseleave={() => {
-				if (hoveredMessageId === item.id) hoveredMessageId = undefined;
+				if (hoveredMessageId === item.id) {
+					hoveredMessageId = undefined;
+				}
 			}}
 		>
 			<article class={['message', `message-${role}`, isConversational && 'message-conversational']}>

@@ -73,19 +73,25 @@
 	let placeholder = $derived(placeholderExamples[placeholderIndex]);
 	let detectedAutocompleteToken = $derived.by(() => getChatAutocompleteToken(draft, caret));
 	let activeAutocompleteToken = $derived.by(() => {
-		if (!isFocused || isComposing || !detectedAutocompleteToken) return undefined;
+		if (!isFocused || isComposing || !detectedAutocompleteToken) {
+			return undefined;
+		}
 		return tokenKey(detectedAutocompleteToken) === dismissedToken
 			? undefined
 			: detectedAutocompleteToken;
 	});
 	let expectedCommandKey = $derived(commandRequestKey());
 	let expectedFileKey = $derived.by(() => {
-		if (activeAutocompleteToken?.kind !== 'file' || !projectId) return undefined;
+		if (activeAutocompleteToken?.kind !== 'file' || !projectId) {
+			return undefined;
+		}
 		return fileRequestKey(activeAutocompleteToken);
 	});
 	let autocompleteSuggestions = $derived.by((): AutocompleteSuggestion[] => {
 		if (activeAutocompleteToken?.kind === 'command') {
-			if (loadedCommandKey !== expectedCommandKey) return [];
+			if (loadedCommandKey !== expectedCommandKey) {
+				return [];
+			}
 			return rankSlashCommands(commands, activeAutocompleteToken.query).map((command) => ({
 				kind: 'command',
 				command
@@ -116,7 +122,9 @@
 			placeholderIndex = (placeholderIndex + 1) % placeholderExamples.length;
 		}, 3600);
 
-		if (autoFocus && window.matchMedia('(min-width: 641px)').matches) textarea?.focus();
+		if (autoFocus && window.matchMedia('(min-width: 641px)').matches) {
+			textarea?.focus();
+		}
 		resizeTextarea();
 
 		return () => window.clearInterval(interval);
@@ -128,7 +136,9 @@
 	});
 
 	function resizeTextarea(): void {
-		if (!textarea) return;
+		if (!textarea) {
+			return;
+		}
 		textarea.style.height = 'auto';
 		textarea.style.height = `${Math.min(textarea.scrollHeight, 192)}px`;
 	}
@@ -136,7 +146,9 @@
 	function captureTextarea(element: HTMLTextAreaElement): () => void {
 		textarea = element;
 		return () => {
-			if (textarea === element) textarea = undefined;
+			if (textarea === element) {
+				textarea = undefined;
+			}
 		};
 	}
 
@@ -154,9 +166,13 @@
 	}
 
 	function submitOnEnter(event: KeyboardEvent): void {
-		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+			return;
+		}
 		event.preventDefault();
-		if (!draft.trim() && !hasAttachments) return;
+		if (!draft.trim() && !hasAttachments) {
+			return;
+		}
 		(event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
 	}
 
@@ -165,8 +181,12 @@
 	}
 
 	function commandRequestKey(): string | undefined {
-		if (runtimeId) return `runtime:${runtimeId}`;
-		if (projectId) return `project:${projectId}`;
+		if (runtimeId) {
+			return `runtime:${runtimeId}`;
+		}
+		if (projectId) {
+			return `project:${projectId}`;
+		}
 		return undefined;
 	}
 
@@ -179,7 +199,9 @@
 	}
 
 	function cancelFileSearch(): void {
-		if (fileDebounce !== undefined) window.clearTimeout(fileDebounce);
+		if (fileDebounce !== undefined) {
+			window.clearTimeout(fileDebounce);
+		}
 		fileDebounce = undefined;
 		fileController?.abort();
 		fileController = undefined;
@@ -188,7 +210,9 @@
 
 	async function loadCommands(): Promise<void> {
 		const requestKey = commandRequestKey();
-		if (!requestKey || loadedCommandKey === requestKey) return;
+		if (!requestKey || loadedCommandKey === requestKey) {
+			return;
+		}
 
 		commandController?.abort();
 		const controller = new AbortController();
@@ -199,19 +223,25 @@
 				: projectId
 					? await listProjectSlashCommands(projectId, controller.signal)
 					: undefined;
-			if (!response || controller.signal.aborted || requestKey !== commandRequestKey()) return;
+			if (!response || controller.signal.aborted || requestKey !== commandRequestKey()) {
+				return;
+			}
 			commands = response.commands;
 			loadedCommandKey = requestKey;
 			selectedAutocompleteIndex = 0;
 		} catch {
 			// Autocomplete is optional; keep composing usable if suggestions cannot load.
 		} finally {
-			if (commandController === controller) commandController = undefined;
+			if (commandController === controller) {
+				commandController = undefined;
+			}
 		}
 	}
 
 	function queueFileSearch(token: Extract<ChatAutocompleteToken, { kind: 'file' }>): void {
-		if (!projectId) return;
+		if (!projectId) {
+			return;
+		}
 		cancelFileSearch();
 		const searchProjectId = projectId;
 		const requestKey = fileRequestKey(token);
@@ -226,15 +256,18 @@
 					controller.signal.aborted ||
 					generation !== fileGeneration ||
 					requestKey !== expectedFileKey
-				)
+				) {
 					return;
+				}
 				fileSuggestions = response.files;
 				loadedFileKey = requestKey;
 				selectedAutocompleteIndex = 0;
 			} catch {
 				// File completion must never interfere with normal composition.
 			} finally {
-				if (fileController === controller) fileController = undefined;
+				if (fileController === controller) {
+					fileController = undefined;
+				}
 			}
 		}, 180);
 	}
@@ -277,7 +310,9 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent): void {
-		if (event.isComposing || isComposing) return;
+		if (event.isComposing || isComposing) {
+			return;
+		}
 
 		if (event.key === 'Escape' && activeAutocompleteToken) {
 			dismissedToken = tokenKey(activeAutocompleteToken);
@@ -298,7 +333,9 @@
 			}
 			if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
 				event.preventDefault();
-				if (activeSuggestion) void selectAutocompleteSuggestion(activeSuggestion);
+				if (activeSuggestion) {
+					void selectAutocompleteSuggestion(activeSuggestion);
+				}
 				return;
 			}
 		}
@@ -308,7 +345,9 @@
 
 	async function selectAutocompleteSuggestion(suggestion: AutocompleteSuggestion): Promise<void> {
 		const token = activeAutocompleteToken;
-		if (!token) return;
+		if (!token) {
+			return;
+		}
 
 		let insertion: ReturnType<typeof insertSlashCommand>;
 		if (suggestion.kind === 'command' && token.kind === 'command') {

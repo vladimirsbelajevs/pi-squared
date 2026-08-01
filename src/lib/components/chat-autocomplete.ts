@@ -51,12 +51,20 @@ export function getLeadingSlashCommandToken(
 ): SlashCommandToken | undefined {
 	const position = clampCaret(value, caret);
 	let start = 0;
-	while (start < value.length && isWhitespace(value[start])) start += 1;
-	if (value[start] !== '/') return undefined;
+	while (start < value.length && isWhitespace(value[start])) {
+		start += 1;
+	}
+	if (value[start] !== '/') {
+		return undefined;
+	}
 
 	let end = start;
-	while (end < value.length && !isWhitespace(value[end])) end += 1;
-	if (position <= start || position > end) return undefined;
+	while (end < value.length && !isWhitespace(value[end])) {
+		end += 1;
+	}
+	if (position <= start || position > end) {
+		return undefined;
+	}
 
 	return { kind: 'command', start, end, query: value.slice(start + 1, position) };
 }
@@ -71,11 +79,17 @@ export function getFileAutocompleteToken(
 ): FileAutocompleteToken | undefined {
 	const position = clampCaret(value, caret);
 	let trigger = position - 1;
-	while (trigger >= 0 && isProjectPathCharacter(value[trigger])) trigger -= 1;
-	if (value[trigger] !== '@' || !isMentionBoundary(value[trigger - 1])) return undefined;
+	while (trigger >= 0 && isProjectPathCharacter(value[trigger])) {
+		trigger -= 1;
+	}
+	if (value[trigger] !== '@' || !isMentionBoundary(value[trigger - 1])) {
+		return undefined;
+	}
 
 	let end = trigger + 1;
-	while (end < value.length && isProjectPathCharacter(value[end])) end += 1;
+	while (end < value.length && isProjectPathCharacter(value[end])) {
+		end += 1;
+	}
 
 	return { kind: 'file', start: trigger, end, query: value.slice(trigger + 1, position) };
 }
@@ -90,12 +104,24 @@ export function getChatAutocompleteToken(
 function commandScore(command: SlashCommandSuggestion, query: string): number | undefined {
 	const name = command.name.toLocaleLowerCase();
 	const description = command.description?.toLocaleLowerCase() ?? '';
-	if (!query) return 0;
-	if (name === query) return 0;
-	if (name.startsWith(query)) return 1;
-	if (name.split(/[-_/.]/u).some((part) => part.startsWith(query))) return 2;
-	if (name.includes(query)) return 3;
-	if (description.includes(query)) return 4;
+	if (!query) {
+		return 0;
+	}
+	if (name === query) {
+		return 0;
+	}
+	if (name.startsWith(query)) {
+		return 1;
+	}
+	if (name.split(/[-_/.]/u).some((part) => part.startsWith(query))) {
+		return 2;
+	}
+	if (name.includes(query)) {
+		return 3;
+	}
+	if (description.includes(query)) {
+		return 4;
+	}
 	return undefined;
 }
 

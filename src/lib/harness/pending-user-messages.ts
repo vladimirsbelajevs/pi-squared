@@ -12,7 +12,9 @@ export function reconcilePendingUserMessages(
 	pendingMessages: readonly PendingUserMessage[],
 	items: readonly ChatItem[]
 ): PendingUserMessage[] {
-	if (!pendingMessages.length) return [];
+	if (!pendingMessages.length) {
+		return [];
+	}
 
 	const userItems = items.filter((item) => item.role === 'user');
 	const currentUserItemIds = userItems.map((item) => item.id);

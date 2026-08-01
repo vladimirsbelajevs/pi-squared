@@ -90,7 +90,9 @@ export class PermissionBridge {
 
 	respond(response: PermissionResponse): void {
 		const pending = this.#pending.get(response.requestId);
-		if (!pending) throw new Error('This permission request is no longer pending.');
+		if (!pending) {
+			throw new Error('This permission request is no longer pending.');
+		}
 
 		if (!this.#isValidResponse(pending.request, response)) {
 			throw new Error('The response does not match the pending permission request.');
@@ -124,19 +126,27 @@ export class PermissionBridge {
 
 	#settle(requestId: string, response: PermissionResponse): void {
 		const pending = this.#pending.get(requestId);
-		if (!pending) return;
+		if (!pending) {
+			return;
+		}
 		this.#pending.delete(requestId);
-		if (pending.signal && pending.abort) pending.signal.removeEventListener('abort', pending.abort);
+		if (pending.signal && pending.abort) {
+			pending.signal.removeEventListener('abort', pending.abort);
+		}
 		this.publish({ type: 'permission_resolved', requestId });
 		pending.resolve(response);
 	}
 
 	#isValidResponse(request: PermissionRequest, response: PermissionResponse): boolean {
-		if ('cancelled' in response) return response.cancelled;
+		if ('cancelled' in response) {
+			return response.cancelled;
+		}
 		if (request.method === 'select') {
 			return 'value' in response && request.options?.includes(response.value) === true;
 		}
-		if (request.method === 'confirm') return 'confirmed' in response;
+		if (request.method === 'confirm') {
+			return 'confirmed' in response;
+		}
 		return 'value' in response;
 	}
 }

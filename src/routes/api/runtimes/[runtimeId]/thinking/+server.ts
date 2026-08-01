@@ -17,7 +17,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	try {
 		const body = await readObject(request);
 		const thinkingLevel = requiredString(body.thinkingLevel, 'Reasoning level') as ThinkingLevel;
-		if (!thinkingLevels.has(thinkingLevel)) throw new Error('Reasoning level is invalid.');
+		if (!thinkingLevels.has(thinkingLevel)) {
+			throw new Error('Reasoning level is invalid.');
+		}
 		return json({
 			snapshot: setRuntimeThinkingLevel(requiredParam(params.runtimeId, 'Runtime'), thinkingLevel)
 		});

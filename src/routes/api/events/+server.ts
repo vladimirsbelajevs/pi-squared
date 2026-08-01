@@ -30,7 +30,9 @@ export const GET: RequestHandler = ({ request, url }) => {
 		},
 		cancel() {
 			unsubscribe?.();
-			if (heartbeat) clearInterval(heartbeat);
+			if (heartbeat) {
+				clearInterval(heartbeat);
+			}
 		}
 	});
 

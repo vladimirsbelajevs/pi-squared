@@ -10,8 +10,12 @@ class EventBroker {
 	publish(runtimeId: string, event: RuntimeEvent): void {
 		const envelope: StreamEnvelope = { id: this.#nextId++, runtimeId, event };
 		this.#replay.push(envelope);
-		if (this.#replay.length > REPLAY_LIMIT) this.#replay.shift();
-		for (const listener of this.#listeners) listener(envelope);
+		if (this.#replay.length > REPLAY_LIMIT) {
+			this.#replay.shift();
+		}
+		for (const listener of this.#listeners) {
+			listener(envelope);
+		}
 	}
 
 	subscribe(
@@ -20,7 +24,9 @@ class EventBroker {
 	): () => void {
 		if (lastEventId !== undefined) {
 			for (const event of this.#replay) {
-				if (event.id > lastEventId) listener(event);
+				if (event.id > lastEventId) {
+					listener(event);
+				}
 			}
 		}
 		this.#listeners.add(listener);

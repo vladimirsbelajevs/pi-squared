@@ -19,7 +19,9 @@
 	}
 
 	function rememberScrollPosition(event: Event): void {
-		if (restoringScroll) return;
+		if (restoringScroll) {
+			return;
+		}
 		workspace.rememberScrollPosition(
 			page.url.pathname,
 			(event.currentTarget as HTMLElement).scrollTop
@@ -28,11 +30,15 @@
 
 	function restoreScrollPosition(): void {
 		const pathname = page.url.pathname;
-		if (!scrollContainer) return;
+		if (!scrollContainer) {
+			return;
+		}
 		const scrollTop = workspace.scrollPosition(pathname);
 		restoringScroll = true;
 		void tick().then(() => {
-			if (scrollContainer && page.url.pathname === pathname) scrollContainer.scrollTop = scrollTop;
+			if (scrollContainer && page.url.pathname === pathname) {
+				scrollContainer.scrollTop = scrollTop;
+			}
 			requestAnimationFrame(() => (restoringScroll = false));
 		});
 	}
@@ -51,7 +57,9 @@
 	}
 
 	function navigateToFallback(tab: WorkspaceTab | undefined): Promise<void> {
-		if (!tab) return goto(resolve('/history'), { replaceState: true });
+		if (!tab) {
+			return goto(resolve('/history'), { replaceState: true });
+		}
 		if (tab.kind === 'new') {
 			return goto(resolve(`/new/${encodeURIComponent(tab.id)}`), { replaceState: true });
 		}

@@ -4,7 +4,9 @@ import { errorResponse, optionalString, readObject, requiredString } from '$lib/
 import { cleanupIdleRuntimes, createRuntime } from '$lib/server/runtimes';
 
 function isModel(value: unknown): value is ModelOption {
-	if (!value || typeof value !== 'object') return false;
+	if (!value || typeof value !== 'object') {
+		return false;
+	}
 	const model = value as Record<string, unknown>;
 	return typeof model.provider === 'string' && typeof model.id === 'string';
 }
@@ -14,9 +16,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		await cleanupIdleRuntimes();
 		const body = await readObject(request);
 		const mode = requiredString(body.mode, 'Mode');
-		if (mode !== 'new' && mode !== 'resume') throw new Error('Mode must be “new” or “resume”.');
+		if (mode !== 'new' && mode !== 'resume') {
+			throw new Error('Mode must be “new” or “resume”.');
+		}
 		const model = body.model;
-		if (model !== undefined && !isModel(model)) throw new Error('Model is invalid.');
+		if (model !== undefined && !isModel(model)) {
+			throw new Error('Model is invalid.');
+		}
 		const snapshot = await createRuntime({
 			mode,
 			projectId: requiredString(body.projectId, 'Project'),

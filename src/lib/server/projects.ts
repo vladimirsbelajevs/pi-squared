@@ -10,14 +10,17 @@ interface ProjectsDocument {
 }
 
 function getDataDirectory(): string {
-	if (process.env.PI_SQUARED_DATA_DIR) return resolve(process.env.PI_SQUARED_DATA_DIR);
+	if (process.env.PI_SQUARED_DATA_DIR) {
+		return resolve(process.env.PI_SQUARED_DATA_DIR);
+	}
 
 	if (platform() === 'win32') {
 		return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'pi-squared');
 	}
 
-	if (platform() === 'darwin')
+	if (platform() === 'darwin') {
 		return join(homedir(), 'Library', 'Application Support', 'pi-squared');
+	}
 
 	return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'pi-squared');
 }
@@ -27,7 +30,9 @@ function getProjectsPath(): string {
 }
 
 function isProject(value: unknown): value is Project {
-	if (!value || typeof value !== 'object') return false;
+	if (!value || typeof value !== 'object') {
+		return false;
+	}
 	const project = value as Record<string, unknown>;
 	return (
 		typeof project.id === 'string' &&
@@ -42,8 +47,9 @@ async function readDocument(): Promise<ProjectsDocument> {
 	try {
 		const contents = await readFile(getProjectsPath(), 'utf8');
 		const parsed: unknown = JSON.parse(contents);
-		if (!parsed || typeof parsed !== 'object')
+		if (!parsed || typeof parsed !== 'object') {
 			throw new Error('Project registry must be an object.');
+		}
 
 		const document = parsed as { version?: unknown; projects?: unknown };
 		if (
@@ -77,12 +83,18 @@ async function writeDocument(document: ProjectsDocument): Promise<void> {
 }
 
 async function canonicalizeDirectory(input: string): Promise<string> {
-	if (!input.trim()) throw new Error('A project directory is required.');
-	if (!isAbsolute(input)) throw new Error('Project directories must be absolute paths.');
+	if (!input.trim()) {
+		throw new Error('A project directory is required.');
+	}
+	if (!isAbsolute(input)) {
+		throw new Error('Project directories must be absolute paths.');
+	}
 
 	const cwd = await import('node:fs/promises').then(({ realpath }) => realpath(input));
 	const details = await stat(cwd);
-	if (!details.isDirectory()) throw new Error('The project path must point to a directory.');
+	if (!details.isDirectory()) {
+		throw new Error('The project path must point to a directory.');
+	}
 	return cwd;
 }
 
@@ -112,7 +124,9 @@ export async function getProject(projectId: string): Promise<Project | undefined
  */
 export async function resolveProject(projectId: string): Promise<Project> {
 	const project = await getProject(projectId);
-	if (!project) throw new Error('Project not found.');
+	if (!project) {
+		throw new Error('Project not found.');
+	}
 
 	try {
 		return { ...project, cwd: await canonicalizeDirectory(project.cwd) };
@@ -148,10 +162,14 @@ export async function updateProject(projectId: string, input: { name?: string })
 	return serialize(async () => {
 		const document = await readDocument();
 		const project = document.projects.find((candidate) => candidate.id === projectId);
-		if (!project) throw new Error('Project not found.');
+		if (!project) {
+			throw new Error('Project not found.');
+		}
 		if (input.name !== undefined) {
 			const name = input.name.trim();
-			if (!name) throw new Error('Project names cannot be empty.');
+			if (!name) {
+				throw new Error('Project names cannot be empty.');
+			}
 			project.name = name;
 		}
 		await writeDocument(document);
@@ -163,7 +181,9 @@ export async function removeProject(projectId: string): Promise<void> {
 	await serialize(async () => {
 		const document = await readDocument();
 		const projects = document.projects.filter((project) => project.id !== projectId);
-		if (projects.length === document.projects.length) throw new Error('Project not found.');
+		if (projects.length === document.projects.length) {
+			throw new Error('Project not found.');
+		}
 		await writeDocument({ version: 1, projects });
 	});
 }
@@ -172,7 +192,9 @@ export async function markProjectOpened(projectId: string): Promise<Project> {
 	return serialize(async () => {
 		const document = await readDocument();
 		const project = document.projects.find((candidate) => candidate.id === projectId);
-		if (!project) throw new Error('Project not found.');
+		if (!project) {
+			throw new Error('Project not found.');
+		}
 		project.lastOpenedAt = new Date().toISOString();
 		await writeDocument(document);
 		return project;

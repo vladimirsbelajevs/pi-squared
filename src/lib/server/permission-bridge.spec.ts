@@ -13,7 +13,9 @@ describe('PermissionBridge', () => {
 			type: 'permission_request',
 			request: { method: 'select', title: 'Permission Required', options: ['Yes', 'No'] }
 		});
-		if (request?.type !== 'permission_request') throw new Error('Expected a permission request.');
+		if (request?.type !== 'permission_request') {
+			throw new Error('Expected a permission request.');
+		}
 
 		bridge.respond({ requestId: request.request.id, value: 'Yes' });
 
@@ -41,7 +43,9 @@ describe('PermissionBridge', () => {
 		const bridge = new PermissionBridge((event) => events.push(event));
 		const selection = bridge.select('Permission Required', ['Yes', 'No']);
 		const request = events[0];
-		if (request?.type !== 'permission_request') throw new Error('Expected a permission request.');
+		if (request?.type !== 'permission_request') {
+			throw new Error('Expected a permission request.');
+		}
 
 		expect(() => bridge.respond({ requestId: request.request.id, value: 'Maybe' })).toThrow(
 			'The response does not match the pending permission request.'

@@ -87,7 +87,9 @@ const markdown = new MarkdownIt({
 	breaks: false,
 	highlight(code, language) {
 		const normalizedLanguage = language.trim().toLowerCase();
-		if (!normalizedLanguage || !hljs.getLanguage(normalizedLanguage)) return '';
+		if (!normalizedLanguage || !hljs.getLanguage(normalizedLanguage)) {
+			return '';
+		}
 
 		return hljs.highlight(code, { language: normalizedLanguage, ignoreIllegals: true }).value;
 	}

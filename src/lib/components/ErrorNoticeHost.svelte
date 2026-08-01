@@ -14,7 +14,9 @@
 	let exitTransition = $derived({ y: -18, duration: reducedMotion.current ? 0 : 180 });
 
 	function showNext(): void {
-		if (dismissing || active !== undefined || queue.length === 0) return;
+		if (dismissing || active !== undefined || queue.length === 0) {
+			return;
+		}
 
 		active = queue[0];
 		queue = queue.slice(1);
@@ -27,9 +29,13 @@
 	}
 
 	function dismiss(): void {
-		if (active === undefined || dismissing) return;
+		if (active === undefined || dismissing) {
+			return;
+		}
 
-		if (timeout !== undefined) window.clearTimeout(timeout);
+		if (timeout !== undefined) {
+			window.clearTimeout(timeout);
+		}
 		timeout = undefined;
 		dismissing = true;
 		active = undefined;
@@ -45,7 +51,9 @@
 
 		return () => {
 			unregister();
-			if (timeout !== undefined) window.clearTimeout(timeout);
+			if (timeout !== undefined) {
+				window.clearTimeout(timeout);
+			}
 		};
 	});
 </script>

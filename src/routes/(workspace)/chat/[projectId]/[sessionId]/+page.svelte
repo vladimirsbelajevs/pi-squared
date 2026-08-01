@@ -19,7 +19,9 @@
 	let observedContentKey: string | undefined;
 	let scrollAfterUpdate = false;
 	let contentKey = $derived.by(() => {
-		if (!chat?.snapshot) return undefined;
+		if (!chat?.snapshot) {
+			return undefined;
+		}
 		return JSON.stringify({
 			items: chat.snapshot.items.map((item) => [
 				item.id,
@@ -54,7 +56,9 @@
 	function ensureChatForRoute(): void {
 		const projectId = page.params.projectId;
 		const sessionId = page.params.sessionId;
-		if (!projectId || !sessionId) return;
+		if (!projectId || !sessionId) {
+			return;
+		}
 		void workspace.ensureChat(projectId, sessionId);
 		workspace.rememberTabForPathname(page.url.pathname);
 	}
@@ -67,15 +71,21 @@
 
 	$effect.pre(() => {
 		scrollAfterUpdate = false;
-		if (!chat?.snapshot || !contentKey) return;
+		if (!chat?.snapshot || !contentKey) {
+			return;
+		}
 		if (chat.id !== observedChatId) {
 			observedChatId = chat.id;
 			observedContentKey = contentKey;
 			return;
 		}
-		if (contentKey === observedContentKey) return;
+		if (contentKey === observedContentKey) {
+			return;
+		}
 		observedContentKey = contentKey;
-		if (!scrollContainer) return;
+		if (!scrollContainer) {
+			return;
+		}
 		const isPinnedToBottom =
 			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 24;
 		scrollAfterUpdate = isPinnedToBottom;
@@ -91,8 +101,9 @@
 			activeChat.id !== observedChatId ||
 			currentContentKey !== observedContentKey ||
 			!scrollContainer
-		)
+		) {
 			return;
+		}
 		scrollAfterUpdate = false;
 		scrollContainer.scrollTop = scrollContainer.scrollHeight;
 	});

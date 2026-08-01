@@ -5,7 +5,9 @@ import { setRuntimeMcpServerEnabled } from '$lib/server/runtimes';
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
 		const body = await readObject(request);
-		if (typeof body.enabled !== 'boolean') throw new Error('MCP server state must be a boolean.');
+		if (typeof body.enabled !== 'boolean') {
+			throw new Error('MCP server state must be a boolean.');
+		}
 		return json({
 			snapshot: await setRuntimeMcpServerEnabled(
 				requiredParam(params.runtimeId, 'Runtime'),
