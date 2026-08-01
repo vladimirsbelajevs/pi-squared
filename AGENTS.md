@@ -40,12 +40,7 @@ Generates a Svelte Playground link with the provided code. After completing the
 code, ask the user if they want a playground link. Only call this tool after
 user confirmation and NEVER if code was written to files in their project.
 
-### Node
-
-Node is installed using fnm if you cannot see node try to use fnm to get current
-default node
-
-### Svelte Reactivity
+## Svelte Reactivity:
 
 - Treat `$effect` as an escape hatch and avoid it by default.
 - Never use `$effect` to synchronize or derive state; prefer `$derived`, event
