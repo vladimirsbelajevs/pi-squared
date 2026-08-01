@@ -5,6 +5,7 @@
 	import { onMount } from 'svelte';
 	import { fade, fly, slide } from 'svelte/transition';
 	import ChatComposer from '$lib/components/ChatComposer/ChatComposer.svelte';
+	import Selector from '$lib/components/Selector.svelte';
 	import type { ChatSubmission } from '$lib/contracts';
 	import { workspace } from '$lib/harness/workspace.svelte';
 
@@ -100,24 +101,20 @@
 						/>
 					</div>
 
-					<div
-						class:missing={!tab.draft.projectId}
-						class="project-row"
-						in:fade={{ duration: 240, delay: 1000 }}
-					>
-						<label class="project-picker">
-							<span>Project</span>
-							<select
-								class="dropdown"
-								value={tab.draft.projectId}
-								onchange={(event) => workspace.selectNewTabProject(tab, event.currentTarget.value)}
-							>
-								<option value="" disabled>Select an added project</option>
-								{#each workspace.projects as project (project.id)}
-									<option value={project.id}>{project.name} · {project.cwd}</option>
-								{/each}
-							</select>
-						</label>
+					<div class="project-row" in:fade={{ duration: 240, delay: 1000 }}>
+						<Selector
+							label="Project"
+							value={tab.draft.projectId}
+							options={[
+								{ value: '', label: 'Select an added project', disabled: true },
+								...workspace.projects.map((project) => ({
+									value: project.id,
+									label: `${project.name} · ${project.cwd}`
+								}))
+							]}
+							invalid={!tab.draft.projectId}
+							onChange={(projectId) => workspace.selectNewTabProject(tab, projectId)}
+						/>
 						<button
 							class="add-project-button"
 							type="button"
@@ -240,30 +237,6 @@
 		font-weight: 400;
 	}
 
-	.project-picker {
-		display: flex;
-		align-items: center;
-		min-width: 0;
-	}
-
-	.project-picker span {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
-		white-space: nowrap;
-	}
-
-	.project-picker select {
-		width: auto;
-		max-width: 18rem;
-	}
-
-	.project-row.missing .project-picker select {
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 55%, transparent);
-	}
-
 	.add-project-button {
 		display: grid;
 		width: 1.9rem;
@@ -333,10 +306,6 @@
 	@media (max-width: 700px) {
 		.new-chat-center {
 			transform: none;
-		}
-
-		.project-picker select {
-			max-width: min(16rem, calc(100vw - 6rem));
 		}
 	}
 </style>

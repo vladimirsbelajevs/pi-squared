@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { workspace } from '$lib/harness/workspace.svelte';
 	import { resolve } from '$app/paths';
+	import Selector from '$lib/components/Selector.svelte';
+	import { workspace } from '$lib/harness/workspace.svelte';
 
 	let query = $state('');
 	let projectId = $state('');
@@ -34,12 +35,17 @@
 		aria-label="Search historical sessions"
 		placeholder="Search sessions"
 	/>
-	<select class="dropdown" bind:value={projectId} aria-label="Filter sessions by project">
-		<option value="">Any project</option>
-		{#each workspace.projects as project (project.id)}
-			<option value={project.id}>{project.name}</option>
-		{/each}
-	</select>
+	<Selector
+		label="Filter sessions by project"
+		value={projectId}
+		options={[
+			{ value: '', label: 'Any project' },
+			...workspace.projects.map((project) => ({ value: project.id, label: project.name }))
+		]}
+		onChange={(value) => {
+			projectId = value;
+		}}
+	/>
 </div>
 
 <div class="session-list">
@@ -79,8 +85,7 @@
 		margin: 0 0 1rem;
 	}
 
-	.history-controls .input,
-	.history-controls .dropdown {
+	.history-controls .input {
 		height: 2.5rem;
 	}
 

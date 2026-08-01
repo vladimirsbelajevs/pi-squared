@@ -13,10 +13,19 @@
 		options: Option[];
 		triggerLabel?: string;
 		disabled?: boolean;
+		invalid?: boolean;
 		onChange: (value: string) => void | Promise<void>;
 	};
 
-	let { label, value, options, triggerLabel, disabled = false, onChange }: Props = $props();
+	let {
+		label,
+		value,
+		options,
+		triggerLabel,
+		disabled = false,
+		invalid = false,
+		onChange
+	}: Props = $props();
 
 	const optionTooltipTether = Tooltip.createTether<string>();
 	let optionTooltipOpen = $state(false);
@@ -56,7 +65,8 @@
 						{...props}
 						class="selector-trigger"
 						aria-label={label}
-						data-composer-selector
+						data-selector
+						data-invalid={invalid || undefined}
 					>
 						<span class="selector-value">{displayLabel}</span>
 						<svg viewBox="0 0 12 12" aria-hidden="true">
@@ -72,32 +82,22 @@
 				{/snippet}
 			</Tooltip.Trigger>
 			<Tooltip.Portal>
-				<Tooltip.Content class="selector-tooltip" side="top" sideOffset={6} data-composer-selector>
+				<Tooltip.Content class="selector-tooltip" side="top" sideOffset={6} data-selector>
 					{label}: {displayLabel}
 				</Tooltip.Content>
 			</Tooltip.Portal>
 		</Tooltip.Root>
 
 		<Select.Portal>
-			<Select.Content
-				class="selector-menu"
-				side="top"
-				sideOffset={6}
-				align="start"
-				data-composer-selector
-			>
-				<Select.Viewport
-					class="selector-viewport"
-					onscroll={closeOptionTooltip}
-					data-composer-selector
-				>
+			<Select.Content class="selector-menu" side="top" sideOffset={6} align="start" data-selector>
+				<Select.Viewport class="selector-viewport" onscroll={closeOptionTooltip} data-selector>
 					{#each options as option (option.value)}
 						<Tooltip.Trigger tether={optionTooltipTether} payload={option.label}>
 							{#snippet child({ props })}
 								<Select.Item
 									{...props}
 									class="selector-option"
-									data-composer-selector
+									data-selector
 									value={option.value}
 									label={option.label}
 									disabled={option.disabled}
@@ -120,12 +120,7 @@
 	<Tooltip.Root tether={optionTooltipTether} bind:open={optionTooltipOpen}>
 		{#snippet children({ payload })}
 			<Tooltip.Portal>
-				<Tooltip.Content
-					class="selector-tooltip"
-					side="right"
-					sideOffset={6}
-					data-composer-selector
-				>
+				<Tooltip.Content class="selector-tooltip" side="right" sideOffset={6} data-selector>
 					{payload}
 				</Tooltip.Content>
 			</Tooltip.Portal>
@@ -134,34 +129,43 @@
 </Tooltip.Provider>
 
 <style>
-	:global([data-composer-selector].selector-trigger) {
+	:global([data-selector].selector-trigger) {
 		display: inline-flex;
 		align-items: center;
 		max-width: 15rem;
 		gap: 0.35rem;
-		border: 0;
+		border: 1px solid var(--border);
 		border-radius: 0.4rem;
-		background: transparent;
+		background: var(--surface-muted);
 		color: var(--text-muted);
 		padding: 0.3rem 0.35rem 0.3rem 0.45rem;
 		font-size: 0.72rem;
+		transition:
+			border-color 180ms ease,
+			background 180ms ease,
+			color 180ms ease;
 	}
 
-	:global([data-composer-selector].selector-trigger:hover:not(:disabled)),
-	:global([data-composer-selector].selector-trigger[data-state='open']),
-	:global([data-composer-selector].selector-trigger:focus-visible) {
-		background: var(--surface-muted);
+	:global([data-selector].selector-trigger:hover:not(:disabled)),
+	:global([data-selector].selector-trigger[data-state='open']),
+	:global([data-selector].selector-trigger:focus-visible) {
+		border-color: var(--border-strong);
+		background: var(--surface-strong);
 		color: var(--text);
 	}
 
-	:global([data-composer-selector].selector-trigger:focus-visible),
-	:global([data-composer-selector].selector-option:focus-visible) {
+	:global([data-selector].selector-trigger[data-invalid]) {
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 55%, transparent);
+	}
+
+	:global([data-selector].selector-trigger:focus-visible),
+	:global([data-selector].selector-option:focus-visible) {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
 
-	:global([data-composer-selector].selector-trigger:disabled),
-	:global([data-composer-selector].selector-option[data-disabled]) {
+	:global([data-selector].selector-trigger:disabled),
+	:global([data-selector].selector-option[data-disabled]) {
 		opacity: 0.45;
 	}
 
@@ -172,16 +176,16 @@
 		white-space: nowrap;
 	}
 
-	:global([data-composer-selector].selector-trigger svg) {
+	:global([data-selector].selector-trigger svg) {
 		width: 0.8rem;
 		height: 0.8rem;
 	}
 
-	:global([data-composer-selector].selector-trigger[data-state='open'] svg) {
+	:global([data-selector].selector-trigger[data-state='open'] svg) {
 		transform: rotate(180deg);
 	}
 
-	:global([data-composer-selector].selector-menu) {
+	:global([data-selector].selector-menu) {
 		z-index: 5;
 		min-width: max(var(--bits-select-anchor-width), 10rem);
 		max-width: min(22rem, calc(100vw - 1.5rem));
@@ -191,28 +195,26 @@
 		padding: 0.25rem;
 	}
 
-	:global([data-composer-selector].selector-viewport[data-select-viewport]) {
+	:global([data-selector].selector-viewport[data-select-viewport]) {
 		max-height: min(18rem, 45dvh);
 		overflow-y: auto;
 		scrollbar-color: var(--border-strong) transparent;
 		scrollbar-width: thin !important;
 	}
 
-	:global([data-composer-selector].selector-viewport[data-select-viewport]::-webkit-scrollbar) {
+	:global([data-selector].selector-viewport[data-select-viewport]::-webkit-scrollbar) {
 		display: block !important;
 		width: 0.5rem;
 	}
 
-	:global(
-		[data-composer-selector].selector-viewport[data-select-viewport]::-webkit-scrollbar-thumb
-	) {
+	:global([data-selector].selector-viewport[data-select-viewport]::-webkit-scrollbar-thumb) {
 		border: 2px solid transparent;
 		border-radius: 999px;
 		background: var(--border-strong);
 		background-clip: padding-box;
 	}
 
-	:global([data-composer-selector].selector-tooltip) {
+	:global([data-selector].selector-tooltip) {
 		z-index: 6;
 		max-width: min(22rem, calc(100vw - 1.5rem));
 		border: 1px solid var(--border-strong);
@@ -223,7 +225,7 @@
 		font-size: 0.7rem;
 	}
 
-	:global([data-composer-selector].selector-option) {
+	:global([data-selector].selector-option) {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -234,8 +236,8 @@
 		font-size: 0.72rem;
 	}
 
-	:global([data-composer-selector].selector-option[data-highlighted]),
-	:global([data-composer-selector].selector-option[data-selected]) {
+	:global([data-selector].selector-option[data-highlighted]),
+	:global([data-selector].selector-option[data-selected]) {
 		background: var(--surface-strong);
 		color: var(--text);
 	}
