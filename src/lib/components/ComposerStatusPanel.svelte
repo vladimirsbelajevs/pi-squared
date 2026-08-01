@@ -54,6 +54,13 @@
 			{ abbreviation: 'W', label: 'cached tokens written', value: sessionTokens.cacheWrite }
 		].filter((entry) => entry.value !== 0);
 	});
+	let cacheHitRate = $derived(
+		sessionTokens &&
+			(sessionTokens.cacheRead > 0 || sessionTokens.cacheWrite > 0) &&
+			sessionTokens.cacheHitRate !== undefined
+			? sessionTokens.cacheHitRate
+			: undefined
+	);
 	let contextText = $derived(
 		contextUsage
 			? `${hasKnownContext(contextUsage) ? `${contextUsage.percent.toFixed(1)}%` : '?'}/${formatTokens(contextUsage.contextWindow)}`
@@ -69,7 +76,7 @@
 	let usageLabel = $derived.by(() => {
 		const usage = sessionTokens
 			? usageEntries.length
-				? `Session token usage: ${usageEntries.map((entry) => `${formatFullTokens(entry.value)} ${entry.label}`).join(', ')}.`
+				? `Session token usage: ${usageEntries.map((entry) => `${formatFullTokens(entry.value)} ${entry.label}`).join(', ')}${cacheHitRate !== undefined ? `, ${cacheHitRate.toFixed(1)}% latest cache hit rate` : ''}.`
 				: 'Session token usage: no tokens used.'
 			: '';
 		const context = !contextUsage
@@ -203,6 +210,9 @@
 								>{entry.abbreviation}{formatTokens(entry.value)}</span
 							>
 						{/each}
+						{#if cacheHitRate !== undefined}
+							<span class="token-usage" aria-hidden="true">CH{cacheHitRate.toFixed(1)}%</span>
+						{/if}
 						{#if contextText}
 							<span class={['context-usage', contextTone]} aria-hidden="true">{contextText}</span>
 						{/if}

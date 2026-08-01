@@ -89,6 +89,8 @@ export interface SessionTokenUsage {
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
+	/** Cache-hit percentage for the most recent assistant response. */
+	cacheHitRate?: number;
 	total: number;
 }
 

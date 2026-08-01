@@ -220,14 +220,28 @@ describe('mapSessionEntry', () => {
 		]);
 	});
 
-	it('includes the latest MCP status snapshot when one is available', () => {
+	it('includes the latest MCP status snapshot and cache-hit rate when available', () => {
+		const latestAssistantEntry = {
+			type: 'message',
+			id: 'assistant-1',
+			parentId: null,
+			timestamp: '2026-01-01T00:00:00.000Z',
+			message: {
+				role: 'assistant',
+				content: [],
+				usage: { input: 1200, output: 300, cacheRead: 400, cacheWrite: 100 }
+			}
+		};
 		const session = {
 			model: undefined,
 			thinkingLevel: 'medium',
 			isStreaming: false,
 			sessionId: 'session-1',
 			sessionName: undefined,
-			sessionManager: { getBranch: () => [] },
+			sessionManager: {
+				getBranch: () => [latestAssistantEntry],
+				getEntries: () => [latestAssistantEntry]
+			},
 			getSessionStats: () => ({
 				tokens: { input: 1200, output: 300, cacheRead: 400, cacheWrite: 100, total: 2000 }
 			}),
@@ -257,7 +271,14 @@ describe('mapSessionEntry', () => {
 		).toMatchObject({
 			runtimeId: 'runtime-1',
 			mcpStatus: { connectedCount: 1, totalTools: 5 },
-			sessionTokens: { input: 1200, output: 300, cacheRead: 400, cacheWrite: 100, total: 2000 },
+			sessionTokens: {
+				input: 1200,
+				output: 300,
+				cacheRead: 400,
+				cacheWrite: 100,
+				cacheHitRate: (400 / 1700) * 100,
+				total: 2000
+			},
 			contextUsage: { tokens: 64000, contextWindow: 200000, percent: 32 }
 		});
 	});
@@ -269,7 +290,7 @@ describe('mapSessionEntry', () => {
 			isStreaming: false,
 			sessionId: 'session-1',
 			sessionName: undefined,
-			sessionManager: { getBranch: () => [] },
+			sessionManager: { getBranch: () => [], getEntries: () => [] },
 			getSessionStats: () => ({
 				tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
 			}),

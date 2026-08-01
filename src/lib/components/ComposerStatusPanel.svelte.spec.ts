@@ -100,6 +100,24 @@ describe('ComposerStatusPanel', () => {
 		await expect.element(screen.getByText('90.1%/200k')).toBeVisible();
 	});
 
+	it('renders the latest assistant response cache-hit rate when available', async () => {
+		const screen = render(ComposerStatusPanel, {
+			sessionTokens: {
+				input: 1_200,
+				output: 300,
+				cacheRead: 400,
+				cacheWrite: 400,
+				cacheHitRate: 20,
+				total: 2_300
+			}
+		});
+
+		await expect.element(screen.getByText('CH20.0%')).toBeVisible();
+		expect(screen.container.querySelector('.visually-hidden')?.textContent).toContain(
+			'20.0% latest cache hit rate'
+		);
+	});
+
 	it('renders a noninteractive empty state when status is missing or has no servers', async () => {
 		const screen = render(ComposerStatusPanel, {
 			projectName: 'Pi Squared',

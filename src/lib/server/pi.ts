@@ -167,6 +167,21 @@ function toolCallsFromContent(content: unknown): ChatToolCall[] | undefined {
 	return calls.length ? calls : undefined;
 }
 
+function latestCacheHitRate(entries: SessionEntry[]): number | undefined {
+	for (let index = entries.length - 1; index >= 0; index -= 1) {
+		const entry = entries[index];
+		if (entry.type !== 'message' || entry.message.role !== 'assistant') {
+			continue;
+		}
+
+		const usage = entry.message.usage;
+		const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+		return promptTokens > 0 ? (usage.cacheRead / promptTokens) * 100 : undefined;
+	}
+
+	return undefined;
+}
+
 function modelOption(model: {
 	provider: string;
 	id: string;
@@ -318,7 +333,12 @@ export function buildSnapshot(
 ): RuntimeSnapshot {
 	const currentModel = session.model;
 	const sessionStats = session.getSessionStats();
-	const sessionTokens: SessionTokenUsage = sessionStats.tokens;
+	const entries = session.sessionManager.getBranch();
+	const cacheHitRate = latestCacheHitRate(session.sessionManager.getEntries());
+	const sessionTokens: SessionTokenUsage = {
+		...sessionStats.tokens,
+		...(cacheHitRate !== undefined ? { cacheHitRate } : {})
+	};
 	const contextUsage = session.getContextUsage();
 
 	return {
@@ -329,7 +349,7 @@ export function buildSnapshot(
 		model: currentModel ? modelOption(currentModel) : undefined,
 		thinkingLevel: session.thinkingLevel as ThinkingLevel,
 		isStreaming: session.isStreaming,
-		items: session.sessionManager.getBranch().flatMap((entry) => {
+		items: entries.flatMap((entry) => {
 			const item = mapSessionEntry(entry);
 
 			return item ? [item] : [];
