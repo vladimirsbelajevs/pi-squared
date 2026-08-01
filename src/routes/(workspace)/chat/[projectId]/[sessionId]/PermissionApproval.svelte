@@ -4,125 +4,156 @@
 	import { fly } from 'svelte/transition';
 
 	type Props = {
-		request: PendingPermission;
+		requests: PendingPermission[];
 		onSelect: (request: PendingPermission, value: string) => Promise<void>;
 		onConfirm: (request: PendingPermission, confirmed: boolean) => Promise<void>;
 		onCancel: (request: PendingPermission) => Promise<void>;
-		open?: boolean;
 	};
 
-	let { request, onSelect, onConfirm, onCancel, open = true }: Props = $props();
-	let input = $state('');
+	let { requests, onSelect, onConfirm, onCancel }: Props = $props();
+	let inputs = $state<Record<string, string>>({});
+	let closingRequests = $state<Record<string, PendingPermission>>({});
+	let displayedRequests = $derived.by(() => {
+		const activeRequestIds = new Set(requests.map((request) => request.id));
 
-	function submitInput(): void {
+		return [
+			...requests,
+			...Object.values(closingRequests).filter((request) => !activeRequestIds.has(request.id))
+		];
+	});
+
+	function submitInput(request: PendingPermission): void {
+		const input = inputs[request.id] ?? '';
 		if (!input.trim()) {
 			return;
 		}
 
-		void onSelect(request, input);
+		respond(request, () => onSelect(request, input));
 	}
 
-	function handleInputKeydown(event: KeyboardEvent): void {
+	function respond(request: PendingPermission, callback: () => Promise<void>): void {
+		closingRequests[request.id] = request;
+		void callback().finally(() => {
+			if (requests.some((activeRequest) => activeRequest.id === request.id)) {
+				delete closingRequests[request.id];
+			}
+		});
+	}
+
+	function handleInput(request: PendingPermission, event: Event): void {
+		inputs[request.id] = (event.currentTarget as HTMLInputElement).value;
+	}
+
+	function handleInputKeydown(request: PendingPermission, event: KeyboardEvent): void {
 		if (event.key !== 'Enter') {
 			return;
 		}
 
 		event.preventDefault();
-		submitInput();
+		submitInput(request);
 	}
 </script>
 
-<AlertDialog.Root bind:open>
-	<AlertDialog.Portal>
-		<AlertDialog.Overlay class="permission-overlay" data-permission-approval />
-		<AlertDialog.Content forceMount onEscapeKeydown={(event) => event.preventDefault()}>
-			{#snippet child({ props, open })}
-				{#if open}
-					<div
-						{...props}
-						class="permission-content"
-						aria-busy={request.responding}
-						data-permission-approval
-						transition:fly={{ y: 16, duration: 150 }}
-					>
-						<header>
-							<span class="permission-mark" aria-hidden="true">!</span>
-							<AlertDialog.Title>Approval required</AlertDialog.Title>
-						</header>
-						<AlertDialog.Description class="permission-copy">
-							{request.title}
-							{#if request.message}<span class="permission-message">{request.message}</span>{/if}
-						</AlertDialog.Description>
+{#each displayedRequests as request (request.id)}
+	<AlertDialog.Root open={!closingRequests[request.id]}>
+		<AlertDialog.Portal>
+			<AlertDialog.Overlay class="permission-overlay" data-permission-approval />
+			<AlertDialog.Content
+				forceMount
+				restoreScrollDelay={150}
+				interactOutsideBehavior="ignore"
+				onEscapeKeydown={(event) => event.preventDefault()}
+			>
+				{#snippet child({ props, open })}
+					{#if open}
+						<div
+							{...props}
+							class="permission-content"
+							aria-busy={request.responding}
+							data-permission-approval
+							transition:fly={{ y: 16, duration: 150 }}
+							onoutroend={() => delete closingRequests[request.id]}
+						>
+							<header>
+								<span class="permission-mark" aria-hidden="true">!</span>
+								<AlertDialog.Title>Approval required</AlertDialog.Title>
+							</header>
+							<AlertDialog.Description class="permission-copy">
+								{request.title}
+								{#if request.message}<span class="permission-message">{request.message}</span>{/if}
+							</AlertDialog.Description>
 
-						{#if request.method === 'select'}
-							<div class="permission-actions">
-								{#each request.options ?? [] as option (option)}
-									<button
-										data-primary={option.startsWith('Yes') || undefined}
-										type="button"
-										disabled={request.responding}
-										onclick={() => void onSelect(request, option)}
-									>
-										{option}
-									</button>
-								{/each}
-							</div>
-						{:else if request.method === 'confirm'}
-							<div class="permission-actions">
-								<button
-									data-primary
-									type="button"
-									disabled={request.responding}
-									onclick={() => void onConfirm(request, true)}
-								>
-									Approve
-								</button>
-								<button
-									type="button"
-									disabled={request.responding}
-									onclick={() => void onConfirm(request, false)}
-								>
-									Deny
-								</button>
-							</div>
-						{:else}
-							<div class="permission-input">
-								<label>
-									<span>Reason</span>
-									<input
-										bind:value={input}
-										disabled={request.responding}
-										placeholder={request.placeholder ?? 'Reason'}
-										onkeydown={handleInputKeydown}
-									/>
-								</label>
+							{#if request.method === 'select'}
+								<div class="permission-actions">
+									{#each request.options ?? [] as option (option)}
+										<button
+											data-primary={option.startsWith('Yes') || undefined}
+											type="button"
+											disabled={request.responding}
+											onclick={() => respond(request, () => onSelect(request, option))}
+										>
+											{option}
+										</button>
+									{/each}
+								</div>
+							{:else if request.method === 'confirm'}
 								<div class="permission-actions">
 									<button
 										data-primary
 										type="button"
-										disabled={request.responding || !input.trim()}
-										onclick={submitInput}
+										disabled={request.responding}
+										onclick={() => respond(request, () => onConfirm(request, true))}
 									>
-										Submit reason
+										Approve
 									</button>
 									<button
 										type="button"
 										disabled={request.responding}
-										onclick={() => void onCancel(request)}
+										onclick={() => respond(request, () => onConfirm(request, false))}
 									>
-										Cancel
+										Deny
 									</button>
 								</div>
-							</div>
-						{/if}
+							{:else}
+								<div class="permission-input">
+									<label>
+										<span>Reason</span>
+										<input
+											value={inputs[request.id] ?? ''}
+											disabled={request.responding}
+											placeholder={request.placeholder ?? 'Reason'}
+											oninput={(event) => handleInput(request, event)}
+											onkeydown={(event) => handleInputKeydown(request, event)}
+										/>
+									</label>
+									<div class="permission-actions">
+										<button
+											data-primary
+											type="button"
+											disabled={request.responding || !(inputs[request.id] ?? '').trim()}
+											onclick={() => submitInput(request)}
+										>
+											Submit reason
+										</button>
+										<button
+											type="button"
+											disabled={request.responding}
+											onclick={() => respond(request, () => onCancel(request))}
+										>
+											Cancel
+										</button>
+									</div>
+								</div>
+							{/if}
 
-						{#if request.error}<p class="permission-error" role="alert">{request.error}</p>{/if}
-					</div>
-				{/if}
-			{/snippet}
-		</AlertDialog.Content>
-	</AlertDialog.Portal>
-</AlertDialog.Root>
+							{#if request.error}<p class="permission-error" role="alert">{request.error}</p>{/if}
+						</div>
+					{/if}
+				{/snippet}
+			</AlertDialog.Content>
+		</AlertDialog.Portal>
+	</AlertDialog.Root>
+{/each}
 
 <style>
 	:global([data-permission-approval].permission-overlay) {

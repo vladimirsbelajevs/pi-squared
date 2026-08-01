@@ -12,7 +12,7 @@ describe('PermissionApproval', () => {
 			options: ['Yes', 'Yes, for this session', 'No']
 		};
 		const screen = render(PermissionApproval, {
-			request,
+			requests: [request],
 			onSelect,
 			onConfirm: vi.fn(),
 			onCancel: vi.fn()
@@ -34,7 +34,7 @@ describe('PermissionApproval', () => {
 			placeholder: 'Reason shown back to the agent'
 		};
 		const screen = render(PermissionApproval, {
-			request,
+			requests: [request],
 			onSelect,
 			onConfirm: vi.fn(),
 			onCancel: vi.fn()

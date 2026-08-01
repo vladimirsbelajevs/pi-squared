@@ -2,17 +2,14 @@
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import type { ComponentProps } from 'svelte';
 	import { expect, fn, screen, waitFor } from 'storybook/test';
+	import type { PendingPermission } from '$lib/harness/types';
 	import PermissionApproval from './PermissionApproval.svelte';
-	import PermissionApprovalTransitionPreview from './PermissionApprovalTransitionPreview.svelte';
 
-	type PermissionApprovalStoryArgs = ComponentProps<PermissionApproval> & {
-		transitionDemo?: boolean;
-	};
+	type PermissionApprovalStoryArgs = ComponentProps<PermissionApproval>;
 
 	const { Story } = defineMeta({
 		title: 'Chat/PermissionApproval',
 		component: PermissionApproval,
-		render: permissionApprovalTemplate,
 		args: {
 			onSelect: fn(async () => undefined),
 			onConfirm: fn(async () => undefined),
@@ -43,20 +40,45 @@
 	};
 </script>
 
-{#snippet permissionApprovalTemplate({
-	transitionDemo = false,
-	...args
-}: PermissionApprovalStoryArgs)}
-	{#if transitionDemo}
-		<PermissionApprovalTransitionPreview {...args} />
-	{:else}
-		<PermissionApproval {...args} />
-	{/if}
+<script lang="ts">
+	let transitionRequests = $state<PendingPermission[]>([confirmRequest]);
+
+	function removeTransitionRequest(request: PendingPermission): void {
+		transitionRequests = transitionRequests.filter(
+			(activeRequest) => activeRequest.id !== request.id
+		);
+	}
+</script>
+
+{#snippet permissionApprovalTemplate(args: PermissionApprovalStoryArgs)}
+	<PermissionApproval {...args} />
+{/snippet}
+
+{#snippet transitionTemplate(args: PermissionApprovalStoryArgs)}
+	<PermissionApproval
+		requests={transitionRequests}
+		onSelect={(request, value) => {
+			removeTransitionRequest(request);
+
+			return args.onSelect(request, value);
+		}}
+		onConfirm={(request, confirmed) => {
+			removeTransitionRequest(request);
+
+			return args.onConfirm(request, confirmed);
+		}}
+		onCancel={(request) => {
+			removeTransitionRequest(request);
+
+			return args.onCancel(request);
+		}}
+	/>
 {/snippet}
 
 <Story
 	name="Select option"
-	args={{ request: selectRequest }}
+	template={permissionApprovalTemplate}
+	args={{ requests: [selectRequest] }}
 	play={async ({ args, userEvent }) => {
 		await userEvent.click(screen.getByRole('button', { name: 'Yes, for this session' }));
 		await expect(args.onSelect).toHaveBeenCalledWith(selectRequest, 'Yes, for this session');
@@ -65,7 +87,8 @@
 
 <Story
 	name="Confirmation"
-	args={{ request: confirmRequest }}
+	template={permissionApprovalTemplate}
+	args={{ requests: [confirmRequest] }}
 	play={async ({ args, userEvent }) => {
 		await userEvent.click(screen.getByRole('button', { name: 'Deny' }));
 		await expect(args.onConfirm).toHaveBeenCalledWith(confirmRequest, false);
@@ -74,7 +97,8 @@
 
 <Story
 	name="Reason required"
-	args={{ request: inputRequest }}
+	template={permissionApprovalTemplate}
+	args={{ requests: [inputRequest] }}
 	play={async ({ args, userEvent }) => {
 		await userEvent.type(
 			screen.getByRole('textbox', { name: 'Reason' }),
@@ -90,12 +114,15 @@
 
 <Story
 	name="Responding with error"
+	template={permissionApprovalTemplate}
 	args={{
-		request: {
-			...confirmRequest,
-			responding: true,
-			error: 'The permission request has expired.'
-		}
+		requests: [
+			{
+				...confirmRequest,
+				responding: true,
+				error: 'The permission request has expired.'
+			}
+		]
 	}}
 	play={async () => {
 		await expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
@@ -105,7 +132,8 @@
 
 <Story
 	name="Requires a decision"
-	args={{ request: confirmRequest, onConfirm: fn(async () => undefined) }}
+	template={permissionApprovalTemplate}
+	args={{ requests: [confirmRequest], onConfirm: fn(async () => undefined) }}
 	play={async ({ args, userEvent }) => {
 		await expect(screen.getByRole('alertdialog', { name: 'Approval required' })).toBeVisible();
 
@@ -121,15 +149,17 @@
 
 <Story
 	name="Transitions"
-	args={{ transitionDemo: true, request: confirmRequest }}
+	template={transitionTemplate}
+	args={{ requests: [confirmRequest] }}
 	play={async ({ userEvent }) => {
-		await userEvent.click(screen.getByRole('button', { name: 'Open permission approval' }));
 		await waitFor(() =>
 			expect(screen.getByRole('alertdialog', { name: 'Approval required' })).toBeVisible()
 		);
 
-		await userEvent.click(screen.getByRole('button', { name: 'Close permission approval' }));
-		await expect(screen.getByRole('alertdialog', { name: 'Approval required' })).toBeVisible();
+		await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+		await expect(
+			screen.getByRole('alertdialog', { name: 'Approval required' })
+		).toBeInTheDocument();
 		await waitFor(() =>
 			expect(
 				screen.queryByRole('alertdialog', { name: 'Approval required' })

@@ -169,15 +169,13 @@
 						notices={chat.transientNotices}
 						onClear={() => workspace.clearTransientNotices(chat)}
 					/>
-					{#each chat.permissionRequests as request (request.id)}
-						<PermissionApproval
-							{request}
-							onSelect={(request, value) => workspace.respondToPermission(chat, request, value)}
-							onConfirm={(request, confirmed) =>
-								workspace.confirmPermission(chat, request, confirmed)}
-							onCancel={(request) => workspace.cancelPermission(chat, request)}
-						/>
-					{/each}
+					<PermissionApproval
+						requests={chat.permissionRequests}
+						onSelect={(request, value) => workspace.respondToPermission(chat, request, value)}
+						onConfirm={(request, confirmed) =>
+							workspace.confirmPermission(chat, request, confirmed)}
+						onCancel={(request) => workspace.cancelPermission(chat, request)}
+					/>
 				{/snippet}
 			</ChatComposer>
 		</div>
