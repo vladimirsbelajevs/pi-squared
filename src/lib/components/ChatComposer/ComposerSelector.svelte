@@ -59,15 +59,6 @@
 						data-composer-selector
 					>
 						<span class="selector-value">{displayLabel}</span>
-						<svg viewBox="0 0 12 12" aria-hidden="true">
-							<path
-								d="m3 4.5 3 3 3-3"
-								fill="none"
-								stroke="currentColor"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						</svg>
 					</Select.Trigger>
 				{/snippet}
 			</Tooltip.Trigger>
@@ -147,10 +138,12 @@
 		font-size: 0.72rem;
 	}
 
-	:global([data-composer-selector].selector-trigger:hover:not(:disabled)),
+	:global([data-composer-selector].selector-trigger:hover:not(:disabled)) {
+		color: var(--text);
+	}
+
 	:global([data-composer-selector].selector-trigger[data-state='open']),
 	:global([data-composer-selector].selector-trigger:focus-visible) {
-		background: var(--surface-muted);
 		color: var(--text);
 	}
 
@@ -170,15 +163,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	:global([data-composer-selector].selector-trigger svg) {
-		width: 0.8rem;
-		height: 0.8rem;
-	}
-
-	:global([data-composer-selector].selector-trigger[data-state='open'] svg) {
-		transform: rotate(180deg);
 	}
 
 	:global([data-composer-selector].selector-menu) {

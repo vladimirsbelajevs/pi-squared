@@ -68,22 +68,24 @@
 			/>
 		</svg>
 	</button>
-	<ComposerSelector
-		label="Model"
-		value={modelKey}
-		options={modelOptions}
-		triggerLabel={selectedModel?.name}
-		disabled={isStreaming || submitting || !models.length}
-		onChange={onModelChange}
-	/>
-
-	<ComposerSelector
-		label="Reasoning"
-		value={thinkingLevel}
-		options={thinkingOptions}
-		disabled={isStreaming || submitting || selectedModel?.reasoning === false}
-		onChange={(level) => onThinkingChange(level as ThinkingLevel)}
-	/>
+	<div class="model-controls">
+		<ComposerSelector
+			label="Model"
+			value={modelKey}
+			options={modelOptions}
+			triggerLabel={selectedModel?.name}
+			disabled={isStreaming || submitting || !models.length}
+			onChange={onModelChange}
+		/>
+		<span class="selector-separator" aria-hidden="true">·</span>
+		<ComposerSelector
+			label="Reasoning"
+			value={thinkingLevel}
+			options={thinkingOptions}
+			disabled={isStreaming || submitting || selectedModel?.reasoning === false}
+			onChange={(level) => onThinkingChange(level as ThinkingLevel)}
+		/>
+	</div>
 
 	{#if isStreaming}
 		<ComposerSelector
@@ -146,6 +148,16 @@
 		min-width: 0;
 		border-top: 1px solid var(--border);
 		padding: 0.25rem 0.65rem;
+	}
+
+	.model-controls {
+		display: flex;
+		align-items: center;
+		gap: 0;
+	}
+
+	.selector-separator {
+		color: var(--text-muted);
 	}
 
 	.keyboard-hint {
