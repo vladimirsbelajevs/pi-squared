@@ -137,6 +137,18 @@ describe('ComposerStatusPanel', () => {
 		expect(screen.container.querySelector('.mcp-summary')).toBeNull();
 	});
 
+	it('marks the MCP summary when a server has failed', async () => {
+		const screen = render(ComposerStatusPanel, {
+			status: { ...status, servers: [{ ...status.servers[0], state: 'failed' }] }
+		});
+		const errorIndicator = screen.container.querySelector('.mcp-error-indicator');
+
+		await expect.element(screen.getByText('!')).toBeVisible();
+		await expect
+			.element(errorIndicator as HTMLElement)
+			.toHaveAttribute('title', 'One or more MCP servers failed');
+	});
+
 	it('shows enabled servers out of configured servers and expands to show every server status and tool count', async () => {
 		const screen = render(ComposerStatusPanel, {
 			status,

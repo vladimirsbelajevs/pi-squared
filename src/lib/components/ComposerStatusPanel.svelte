@@ -32,6 +32,7 @@
 	let expanded = $state(false);
 	let servers = $derived(status?.servers ?? []);
 	let enabledCount = $derived(servers.filter((server) => !server.disabled).length);
+	let hasFailedServers = $derived(servers.some((server) => server.state === 'failed'));
 	let usageEntries = $derived.by((): UsageEntry[] => {
 		if (!sessionTokens) {
 			return [];
@@ -136,6 +137,11 @@
 					/>
 				</svg>
 				<span>MCP: {enabledCount}/{servers.length}</span>
+				{#if hasFailedServers}
+					<span class="mcp-error-indicator" title="One or more MCP servers failed">
+						!<span class="visually-hidden"> One or more MCP servers failed</span>
+					</span>
+				{/if}
 			</button>
 		{:else}
 			<span class="mcp-empty">MCP: No servers configured</span>
@@ -235,6 +241,11 @@
 		color: inherit;
 		font-size: 0.74rem;
 		font-weight: 650;
+	}
+
+	.mcp-error-indicator {
+		color: var(--danger);
+		font-weight: 800;
 	}
 
 	.mcp-summary:focus-visible {
