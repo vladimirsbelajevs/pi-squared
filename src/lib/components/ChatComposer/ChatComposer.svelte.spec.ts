@@ -230,13 +230,11 @@ describe('ChatComposer', () => {
 				projectCwd: '/workspace/pi-squared'
 			})
 		);
-		await expect
-			.element(withStatus.getByRole('button', { name: 'MCP: 1 server enabled' }))
-			.toBeVisible();
+		await expect.element(withStatus.getByRole('button', { name: 'MCP: 1/1' })).toBeVisible();
 		const project = withStatus.container.querySelector('.thread-project');
 		expect(project?.getAttribute('title')).toBe('/workspace/pi-squared');
 		expect(project?.textContent).toContain('Pi Squared');
-		const statusContainer = withStatus.container.querySelector('.composer-stack > .mcp-status');
+		const statusContainer = withStatus.container.querySelector('.composer-stack > .status-panel');
 		const composerShell = withStatus.container.querySelector('.composer-shell');
 		expect(statusContainer).not.toBeNull();
 		expect(getComputedStyle(statusContainer as HTMLElement).marginBottom).toBe('-32px');
@@ -255,7 +253,7 @@ describe('ChatComposer', () => {
 	it('does not render the MCP status row when showStatusPanel is false', () => {
 		const screen = render(ChatComposer, props({ showStatusPanel: false, mcpStatus }));
 
-		expect(screen.container.querySelector('.mcp-status')).toBeNull();
+		expect(screen.container.querySelector('.status-panel')).toBeNull();
 	});
 
 	it('shows only a stop action while streaming and queues with Enter', async () => {

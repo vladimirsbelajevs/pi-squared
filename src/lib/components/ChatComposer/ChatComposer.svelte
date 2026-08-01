@@ -325,7 +325,7 @@
 		margin: 0;
 	}
 
-	.composer-stack > :global(.mcp-status) {
+	.composer-stack > :global(.status-panel) {
 		margin-bottom: -2rem;
 	}
 
