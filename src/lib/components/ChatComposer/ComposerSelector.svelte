@@ -109,6 +109,7 @@
 		aria-controls={isOpen ? listboxId : undefined}
 		aria-expanded={isOpen}
 		aria-haspopup="listbox"
+		title={selectedOption?.label ?? `No ${label.toLowerCase()} selected`}
 		{disabled}
 		onclick={toggle}
 		onkeydown={handleTriggerKeydown}
@@ -136,6 +137,7 @@
 					type="button"
 					role="option"
 					aria-selected={option.value === value}
+					title={option.label}
 					disabled={option.disabled}
 					onclick={() => select(option)}
 				>
