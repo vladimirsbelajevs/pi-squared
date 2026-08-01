@@ -38,6 +38,7 @@
 	<Selector
 		label="Filter sessions by project"
 		value={projectId}
+		alignment="end"
 		options={[
 			{ value: '', label: 'Any project' },
 			...workspace.projects.map((project) => ({ value: project.id, label: project.name }))

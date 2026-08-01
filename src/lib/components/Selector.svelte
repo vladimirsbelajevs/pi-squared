@@ -14,6 +14,7 @@
 		triggerLabel?: string;
 		disabled?: boolean;
 		invalid?: boolean;
+		alignment?: 'start' | 'end';
 		onChange: (value: string) => void | Promise<void>;
 	};
 
@@ -24,6 +25,7 @@
 		triggerLabel,
 		disabled = false,
 		invalid = false,
+		alignment = 'start',
 		onChange
 	}: Props = $props();
 
@@ -66,6 +68,7 @@
 						class="selector-trigger"
 						aria-label={label}
 						data-selector
+						data-align={alignment}
 						data-invalid={invalid || undefined}
 					>
 						<span class="selector-value">{displayLabel}</span>
@@ -89,7 +92,13 @@
 		</Tooltip.Root>
 
 		<Select.Portal>
-			<Select.Content class="selector-menu" side="top" sideOffset={6} align="start" data-selector>
+			<Select.Content
+				class="selector-menu"
+				side="top"
+				sideOffset={6}
+				align={alignment}
+				data-selector
+			>
 				<Select.Viewport class="selector-viewport" onscroll={closeOptionTooltip} data-selector>
 					{#each options as option (option.value)}
 						<Tooltip.Trigger tether={optionTooltipTether} payload={option.label}>
@@ -98,6 +107,7 @@
 									{...props}
 									class="selector-option"
 									data-selector
+									data-align={alignment}
 									value={option.value}
 									label={option.label}
 									disabled={option.disabled}
@@ -156,6 +166,11 @@
 
 	:global([data-selector].selector-trigger[data-invalid]) {
 		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 55%, transparent);
+	}
+
+	:global([data-selector].selector-trigger[data-align='end']) {
+		justify-content: flex-end;
+		text-align: right;
 	}
 
 	:global([data-selector].selector-trigger:focus-visible),
@@ -240,6 +255,15 @@
 	:global([data-selector].selector-option[data-selected]) {
 		background: var(--surface-strong);
 		color: var(--text);
+	}
+
+	:global([data-selector].selector-option[data-align='end']) {
+		justify-content: flex-end;
+		text-align: right;
+	}
+
+	:global([data-selector].selector-option[data-align='end'] .selector-check) {
+		margin-left: 0;
 	}
 
 	.selector-check {
