@@ -1,11 +1,15 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
-	import { expect, fn } from 'storybook/test';
+	import type { ComponentProps } from 'svelte';
+	import { expect, fn, waitFor } from 'storybook/test';
 	import PermissionApproval from './PermissionApproval.svelte';
+
+	type PermissionApprovalStoryArgs = ComponentProps<PermissionApproval> & { open?: boolean };
 
 	const { Story } = defineMeta({
 		title: 'Chat/PermissionApproval',
 		component: PermissionApproval,
+		render: permissionApprovalTemplate,
 		args: {
 			onSelect: fn(async () => undefined),
 			onConfirm: fn(async () => undefined),
@@ -35,6 +39,12 @@
 		placeholder: 'Reason shown back to the agent'
 	};
 </script>
+
+{#snippet permissionApprovalTemplate({ open = true, ...args }: PermissionApprovalStoryArgs)}
+	{#if open}
+		<PermissionApproval {...args} />
+	{/if}
+{/snippet}
 
 <Story
 	name="Select option"
@@ -82,5 +92,22 @@
 	play={async ({ canvas }) => {
 		await expect(canvas.getByRole('button', { name: 'Approve' })).toBeDisabled();
 		await expect(canvas.getByText('The permission request has expired.')).toBeVisible();
+	}}
+/>
+
+<Story
+	name="Opens and closes"
+	args={{ open: false, request: confirmRequest, onConfirm: fn(async () => undefined) }}
+	play={async ({ args, canvas, updateArgs, userEvent }) => {
+		await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+
+		updateArgs({ open: true });
+		await waitFor(() => expect(canvas.getByRole('alert')).toBeVisible());
+
+		await userEvent.click(canvas.getByRole('button', { name: 'Approve' }));
+		await expect(args.onConfirm).toHaveBeenCalledWith(confirmRequest, true);
+
+		updateArgs({ open: false });
+		await waitFor(() => expect(canvas.queryByRole('alert')).not.toBeInTheDocument());
 	}}
 />
