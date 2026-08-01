@@ -16,6 +16,11 @@
   browser-side integration; keep any such effect narrowly scoped and do not
   write reactive state from it.
 
+## Bits UI Documentation
+
+- For Bits UI development, configuration, troubleshooting, or API questions,
+  read and follow [`.agents/skills/bits-ui-docs/SKILL.md`](.agents/skills/bits-ui-docs/SKILL.md).
+
 ## Validation
 
 - After making any edits, run `npm run lint` before responding. Report any
