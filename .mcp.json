@@ -1,10 +1,17 @@
 {
-	"mcpServers": {
-		"svelte": {
-			"type": "stdio",
-			"command": "npx",
-			"env": {},
-			"args": ["-y", "@sveltejs/mcp"]
-		}
-	}
+  "mcpServers": {
+    "svelte": {
+      "type": "stdio",
+      "command": "npx",
+      "env": {},
+      "args": [
+        "-y",
+        "@sveltejs/mcp"
+      ]
+    },
+    "pi-squared-storybook-mcp": {
+      "url": "http://localhost:6006/mcp",
+      "type": "http"
+    }
+  }
 }

@@ -3,7 +3,7 @@
 - **Language**: TypeScript
 - **Package Manager**: npm
 - **Add-ons**: prettier, eslint, vitest, playwright, tailwindcss, mcp,
-  sveltekit-adapter
+  sveltekit-adapter, storybook ([Svelte component tests](https://svelte.dev/docs/svelte/testing#Component-tests-with-Storybook))
 
 ## Svelte Reactivity:
 
