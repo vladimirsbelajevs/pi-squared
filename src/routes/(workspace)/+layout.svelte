@@ -114,7 +114,7 @@
 		onscroll={rememberScrollPosition}
 	>
 		{#if workspace.initializing}
-			<section class="loading-state"><span class="pulse"></span>Loading local harness…</section>
+			<section class="loading-state"><span class="pulse"></span>Loading harness…</section>
 		{:else if workspace.error}
 			<div class="app-error" role="alert">{workspace.error}</div>
 		{:else}
