@@ -145,7 +145,7 @@
 		gap: 0.45rem;
 		min-width: 0;
 		border-top: 1px solid var(--border);
-		padding: 0.55rem 0.65rem;
+		padding: 0.25rem 0.65rem;
 	}
 
 	.keyboard-hint {
