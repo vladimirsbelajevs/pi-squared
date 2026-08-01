@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { THINKING_LEVELS, type ModelOption, type ThinkingLevel } from '$lib/contracts';
+	import ComposerSelector from './ComposerSelector.svelte';
 
 	type QueueMode = 'followUp' | 'steer';
 
@@ -35,6 +36,11 @@
 		onQueueModeChange
 	}: Props = $props();
 
+	let modelOptions = $derived(
+		models.map((model) => ({ value: keyForModel(model), label: model.name }))
+	);
+	let thinkingOptions = $derived(THINKING_LEVELS.map((level) => ({ value: level, label: level })));
+
 	function keyForModel(model: Pick<ModelOption, 'provider' | 'id'>): string {
 		return `${model.provider}::${model.id}`;
 	}
@@ -59,47 +65,32 @@
 			/>
 		</svg>
 	</button>
-	<label class="composer-picker">
-		<span>Model</span>
-		<select
-			class="dropdown"
-			value={modelKey}
-			disabled={isStreaming || submitting || !models.length}
-			onchange={(event) => void onModelChange(event.currentTarget.value)}
-		>
-			<option value="" disabled>No model selected</option>
-			{#each models as model (keyForModel(model))}
-				<option value={keyForModel(model)}>{model.name} · {model.provider}</option>
-			{/each}
-		</select>
-	</label>
+	<ComposerSelector
+		label="Model"
+		value={modelKey}
+		options={modelOptions}
+		disabled={isStreaming || submitting || !models.length}
+		onChange={onModelChange}
+	/>
 
-	<label class="composer-picker">
-		<span>Reasoning</span>
-		<select
-			class="dropdown"
-			value={thinkingLevel}
-			disabled={isStreaming || submitting || selectedModel?.reasoning === false}
-			onchange={(event) => void onThinkingChange(event.currentTarget.value as ThinkingLevel)}
-		>
-			{#each THINKING_LEVELS as level (level)}
-				<option value={level}>{level}</option>
-			{/each}
-		</select>
-	</label>
+	<ComposerSelector
+		label="Reasoning"
+		value={thinkingLevel}
+		options={thinkingOptions}
+		disabled={isStreaming || submitting || selectedModel?.reasoning === false}
+		onChange={(level) => onThinkingChange(level as ThinkingLevel)}
+	/>
 
 	{#if isStreaming}
-		<label class="composer-picker queue-picker">
-			<span>Queue</span>
-			<select
-				class="dropdown"
-				value={queueMode}
-				onchange={(event) => onQueueModeChange(event.currentTarget.value as QueueMode)}
-			>
-				<option value="followUp">follow-up</option>
-				<option value="steer">steer</option>
-			</select>
-		</label>
+		<ComposerSelector
+			label="Queue"
+			value={queueMode}
+			options={[
+				{ value: 'followUp', label: 'follow-up' },
+				{ value: 'steer', label: 'steer' }
+			]}
+			onChange={(mode) => onQueueModeChange(mode as QueueMode)}
+		/>
 	{/if}
 
 	<span class="keyboard-hint">Enter to send · Shift Enter for a new line</span>
@@ -153,32 +144,6 @@
 		padding: 0.55rem 0.65rem;
 	}
 
-	.composer-picker {
-		display: flex;
-		align-items: center;
-		min-width: 0;
-		gap: 0.25rem;
-		color: var(--text-muted);
-		font-size: 0.72rem;
-	}
-
-	.composer-picker span {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0, 0, 0, 0);
-	}
-
-	.composer-picker select {
-		width: auto;
-		max-width: 15rem;
-	}
-
-	.queue-picker select {
-		color: var(--accent);
-	}
-
 	.keyboard-hint {
 		margin-left: auto;
 		color: var(--text-muted);
@@ -189,14 +154,6 @@
 	@media (max-width: 700px) {
 		.composer-footer {
 			flex-wrap: wrap;
-		}
-
-		.composer-picker {
-			max-width: calc(50% - 0.25rem);
-		}
-
-		.composer-picker select {
-			max-width: 100%;
 		}
 
 		.keyboard-hint {

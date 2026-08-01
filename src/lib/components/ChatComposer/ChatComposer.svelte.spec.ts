@@ -73,8 +73,25 @@ describe('ChatComposer', () => {
 		await expect.element(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
 		await expect
 			.element(screen.getByRole('combobox', { name: 'Model' }))
-			.toHaveValue('openai::gpt-test');
-		await expect.element(screen.getByRole('combobox', { name: 'Reasoning' })).toHaveValue('medium');
+			.toHaveTextContent('GPT Test');
+		await expect
+			.element(screen.getByRole('combobox', { name: 'Reasoning' }))
+			.toHaveTextContent('medium');
+		expect(screen.container.textContent).not.toContain('openai');
+	});
+
+	it('uses custom model and reasoning selectors', async () => {
+		const onModelChange = vi.fn();
+		const onThinkingChange = vi.fn();
+		const screen = render(ChatComposer, props({ onModelChange, onThinkingChange }));
+
+		await screen.getByRole('combobox', { name: 'Model' }).click();
+		await screen.getByRole('option', { name: 'Plain Test' }).click();
+		expect(onModelChange).toHaveBeenCalledWith('example::plain-test');
+
+		await screen.getByRole('combobox', { name: 'Reasoning' }).click();
+		await screen.getByRole('option', { name: 'high', exact: true }).click();
+		expect(onThinkingChange).toHaveBeenCalledWith('high');
 	});
 
 	it('trims and sends with Enter while Shift Enter remains a newline', async () => {
@@ -251,7 +268,9 @@ describe('ChatComposer', () => {
 		);
 
 		await expect.element(screen.getByRole('button', { name: 'Stop response' })).toBeVisible();
-		await expect.element(screen.getByRole('combobox', { name: 'Queue' })).toHaveValue('followUp');
+		await expect
+			.element(screen.getByRole('combobox', { name: 'Queue' }))
+			.toHaveTextContent('follow-up');
 		expect(screen.container.querySelectorAll('.composer-actions button')).toHaveLength(1);
 		await expect.element(screen.getByRole('button', { name: 'Attach files' })).toBeVisible();
 		expect(screen.container.querySelector('.send-action')).toBeNull();
