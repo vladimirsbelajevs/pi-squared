@@ -42,6 +42,7 @@ function base64Bytes(data: string): Uint8Array {
 	for (let index = 0; index < binary.length; index += 1) {
 		bytes[index] = binary.charCodeAt(index);
 	}
+
 	return bytes;
 }
 
@@ -51,9 +52,11 @@ function attachmentOnlyInstruction(attachments: readonly PromptAttachment[]): st
 	if (hasImages && hasTextFiles) {
 		return 'Review the attached files and images.';
 	}
+
 	if (hasImages) {
 		return 'Describe the attached image or images.';
 	}
+
 	return 'Review the attached file or files.';
 }
 
@@ -65,7 +68,9 @@ export function promptWithAttachments(
 	if (!attachments.length) {
 		return visibleText;
 	}
+
 	const basePrompt = visibleText || attachmentOnlyInstruction(attachments);
+
 	return `${basePrompt}${START}${JSON.stringify(attachmentManifest(visibleText, attachments))}${END}`;
 }
 
@@ -73,6 +78,7 @@ function manifestFrom(value: unknown): AttachmentManifest | undefined {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		return undefined;
 	}
+
 	const manifest = value as Record<string, unknown>;
 	if (
 		manifest.version !== 1 ||
@@ -81,11 +87,13 @@ function manifestFrom(value: unknown): AttachmentManifest | undefined {
 	) {
 		return undefined;
 	}
+
 	const attachments: AttachmentManifest['attachments'] = manifest.attachments.flatMap(
 		(attachment) => {
 			if (!attachment || typeof attachment !== 'object' || Array.isArray(attachment)) {
 				return [];
 			}
+
 			const item = attachment as Record<string, unknown>;
 			if (
 				typeof item.id !== 'string' ||
@@ -99,6 +107,7 @@ function manifestFrom(value: unknown): AttachmentManifest | undefined {
 			) {
 				return [];
 			}
+
 			return [
 				{
 					id: item.id,
@@ -111,6 +120,7 @@ function manifestFrom(value: unknown): AttachmentManifest | undefined {
 			];
 		}
 	);
+
 	return attachments.length === manifest.attachments.length
 		? { version: 1, visibleText: manifest.visibleText, attachments }
 		: undefined;
@@ -124,15 +134,18 @@ export function userPromptFromStoredText(text: string): {
 	if (start === -1 || !text.endsWith(END)) {
 		return { text, attachments: [] };
 	}
+
 	let manifest: AttachmentManifest | undefined;
 	try {
 		manifest = manifestFrom(JSON.parse(text.slice(start + START.length, -END.length)) as unknown);
 	} catch {
 		return { text, attachments: [] };
 	}
+
 	if (!manifest) {
 		return { text, attachments: [] };
 	}
+
 	return {
 		text: manifest.visibleText,
 		attachments: manifest.attachments.map(({ id, kind, name, mimeType, size }) => ({

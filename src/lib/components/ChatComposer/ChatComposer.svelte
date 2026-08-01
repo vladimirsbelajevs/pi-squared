@@ -96,6 +96,7 @@
 
 	function captureFileInput(element: HTMLInputElement): () => void {
 		fileInput = element;
+
 		return () => {
 			if (fileInput === element) {
 				fileInput = undefined;
@@ -142,7 +143,9 @@
 			if (item.kind !== 'file') {
 				return [];
 			}
+
 			const file = item.getAsFile();
+
 			return file ? [file] : [];
 		});
 		void addFiles(files);
@@ -164,11 +167,13 @@
 		if ((!text && !previousAttachments.length) || submitDisabled) {
 			return;
 		}
+
 		if (
 			previousAttachments.some((attachment) => attachment.kind === 'image') &&
 			!selectedModelAllowsImages
 		) {
 			errorNotices.show('The selected model does not support image attachments.');
+
 			return;
 		}
 

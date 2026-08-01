@@ -27,6 +27,7 @@ function normalizeQuery(query: string): string {
 	if (query.length > MAX_QUERY_LENGTH) {
 		throw new Error('File query is too long.');
 	}
+
 	return query.trim().replaceAll('\\', '/').replace(/^\.\//, '').toLowerCase();
 }
 
@@ -41,11 +42,13 @@ function prefixIgnorePattern(pattern: string, directory: string): string | undef
 	if (!body) {
 		return undefined;
 	}
+
 	if (!directory) {
 		return `${negated ? '!' : ''}${body}`;
 	}
 
 	const scoped = body.includes('/') ? body : `**/${body}`;
+
 	return `${negated ? '!' : ''}${directory}/${scoped}`;
 }
 
@@ -73,25 +76,32 @@ function scorePath(path: string, query: string): number | undefined {
 	if (!query) {
 		return 7;
 	}
+
 	const name = basename(path).toLowerCase();
 	if (path === query) {
 		return 0;
 	}
+
 	if (path.startsWith(query)) {
 		return 1;
 	}
+
 	if (name.startsWith(query)) {
 		return 2;
 	}
+
 	if (path.includes(`/${query}`)) {
 		return 3;
 	}
+
 	if (name.includes(query)) {
 		return 4;
 	}
+
 	if (path.includes(query)) {
 		return 5;
 	}
+
 	return undefined;
 }
 
@@ -123,6 +133,7 @@ export async function searchProjectFiles(
 		if (!directory) {
 			break;
 		}
+
 		await addIgnoreFile(ignored, directory);
 
 		let entries;
@@ -137,6 +148,7 @@ export async function searchProjectFiles(
 			if (scannedEntries++ >= MAX_SCANNED_ENTRIES) {
 				break;
 			}
+
 			const relativePath = directory.relativePath
 				? `${directory.relativePath}/${entry.name}`
 				: entry.name;
@@ -145,12 +157,15 @@ export async function searchProjectFiles(
 			if (entry.isSymbolicLink()) {
 				continue;
 			}
+
 			if (entry.isDirectory()) {
 				if (!SKIPPED_DIRECTORIES.has(entry.name)) {
 					directories.push({ absolutePath, relativePath });
 				}
+
 				continue;
 			}
+
 			if (!entry.isFile() || isIgnored(ignored, relativePath)) {
 				continue;
 			}

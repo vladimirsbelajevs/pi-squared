@@ -7,6 +7,7 @@
 	let sessions = $derived(
 		workspace.sessions.filter((session) => {
 			const needle = query.trim().toLowerCase();
+
 			return (
 				(!projectId || session.projectId === projectId) &&
 				(!needle ||

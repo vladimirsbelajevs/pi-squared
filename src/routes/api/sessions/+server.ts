@@ -12,6 +12,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const sessions = (await Promise.all(projects.map(listHistoricalSessions)))
 			.flat()
 			.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+
 		return json({ sessions });
 	} catch (error) {
 		return errorResponse(error, 500);

@@ -18,6 +18,7 @@ export function registerErrorNoticeHost(register: ErrorNoticeHost): () => void {
 	for (const message of pending) {
 		register(message);
 	}
+
 	pending = [];
 
 	return () => {

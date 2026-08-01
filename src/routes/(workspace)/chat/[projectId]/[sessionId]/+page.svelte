@@ -22,6 +22,7 @@
 		if (!chat?.snapshot) {
 			return undefined;
 		}
+
 		return JSON.stringify({
 			items: chat.snapshot.items.map((item) => [
 				item.id,
@@ -59,6 +60,7 @@
 		if (!projectId || !sessionId) {
 			return;
 		}
+
 		void workspace.ensureChat(projectId, sessionId);
 		workspace.rememberTabForPathname(page.url.pathname);
 	}
@@ -74,18 +76,23 @@
 		if (!chat?.snapshot || !contentKey) {
 			return;
 		}
+
 		if (chat.id !== observedChatId) {
 			observedChatId = chat.id;
 			observedContentKey = contentKey;
+
 			return;
 		}
+
 		if (contentKey === observedContentKey) {
 			return;
 		}
+
 		observedContentKey = contentKey;
 		if (!scrollContainer) {
 			return;
 		}
+
 		const isPinnedToBottom =
 			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 24;
 		scrollAfterUpdate = isPinnedToBottom;
@@ -104,6 +111,7 @@
 		) {
 			return;
 		}
+
 		scrollAfterUpdate = false;
 		scrollContainer.scrollTop = scrollContainer.scrollHeight;
 	});

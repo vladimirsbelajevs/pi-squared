@@ -36,6 +36,7 @@
 		if (timeout !== undefined) {
 			window.clearTimeout(timeout);
 		}
+
 		timeout = undefined;
 		dismissing = true;
 		active = undefined;

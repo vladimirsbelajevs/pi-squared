@@ -31,6 +31,7 @@ let modelRuntimePromise: Promise<ModelRuntime> | undefined;
 
 export function getModelRuntime(): Promise<ModelRuntime> {
 	modelRuntimePromise ??= ModelRuntime.create();
+
 	return modelRuntimePromise;
 }
 
@@ -42,6 +43,7 @@ function textFromContent(content: unknown, includeThinking = false): string {
 	if (typeof content === 'string') {
 		return content;
 	}
+
 	if (!Array.isArray(content)) {
 		return '';
 	}
@@ -52,12 +54,15 @@ function textFromContent(content: unknown, includeThinking = false): string {
 			if (!item) {
 				return '';
 			}
+
 			if (typeof item.text === 'string') {
 				return item.text;
 			}
+
 			if (includeThinking && typeof item.thinking === 'string') {
 				return item.thinking;
 			}
+
 			return '';
 		})
 		.filter(Boolean)
@@ -68,6 +73,7 @@ function imagesFromContent(content: unknown): Array<{ data: string; mimeType: st
 	if (!Array.isArray(content)) {
 		return [];
 	}
+
 	return content.flatMap((block) => {
 		const item = record(block);
 		if (
@@ -79,6 +85,7 @@ function imagesFromContent(content: unknown): Array<{ data: string; mimeType: st
 		) {
 			return [];
 		}
+
 		return [{ data: item.data, mimeType: item.mimeType }];
 	});
 }
@@ -94,7 +101,9 @@ function userAttachmentsFromContent(content: unknown): {
 		if (attachment.kind !== 'image') {
 			return attachment;
 		}
+
 		const image = images[imageIndex++];
+
 		return image && image.mimeType === attachment.mimeType
 			? { ...attachment, data: image.data }
 			: attachment;
@@ -121,10 +130,12 @@ function thinkingFromContent(content: unknown): string | undefined {
 	if (!Array.isArray(content)) {
 		return undefined;
 	}
+
 	const thinking = content
 		.map((block) => record(block)?.thinking)
 		.filter((value): value is string => typeof value === 'string')
 		.join('\n');
+
 	return thinking || undefined;
 }
 
@@ -132,6 +143,7 @@ function toolCallsFromContent(content: unknown): ChatToolCall[] | undefined {
 	if (!Array.isArray(content)) {
 		return undefined;
 	}
+
 	const calls = content.flatMap((block) => {
 		const item = record(block);
 		if (
@@ -142,6 +154,7 @@ function toolCallsFromContent(content: unknown): ChatToolCall[] | undefined {
 		) {
 			return [];
 		}
+
 		return [
 			{
 				id: item.id,
@@ -150,6 +163,7 @@ function toolCallsFromContent(content: unknown): ChatToolCall[] | undefined {
 			}
 		];
 	});
+
 	return calls.length ? calls : undefined;
 }
 
@@ -173,6 +187,7 @@ function modelOption(model: {
 
 export async function listAvailableModels(): Promise<ModelOption[]> {
 	const runtime = await getModelRuntime();
+
 	return (await runtime.getAvailable()).map((model) => modelOption(model));
 }
 
@@ -185,6 +200,7 @@ export async function resolveModel(provider: string, id: string) {
 	if (!model) {
 		throw new Error('The selected model is not available with the configured credentials.');
 	}
+
 	return model;
 }
 
@@ -194,6 +210,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 		const role = message.role;
 		if (role === 'user') {
 			const userContent = userAttachmentsFromContent(message.content);
+
 			return {
 				id: entry.id,
 				kind: 'message',
@@ -203,6 +220,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				...(userContent.attachments ? { attachments: userContent.attachments } : {})
 			};
 		}
+
 		if (role === 'assistant') {
 			return {
 				id: entry.id,
@@ -222,6 +240,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				...(message.stopReason === 'aborted' ? { stopReason: 'aborted' as const } : {})
 			};
 		}
+
 		if (role === 'toolResult') {
 			return {
 				id: entry.id,
@@ -234,6 +253,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				isError: message.isError === true
 			};
 		}
+
 		if (role === 'bashExecution') {
 			return {
 				id: entry.id,
@@ -246,6 +266,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 					message.cancelled === true || (message.exitCode !== undefined && message.exitCode !== 0)
 			};
 		}
+
 		if (role === 'custom') {
 			return {
 				id: entry.id,
@@ -255,6 +276,7 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 				timestamp: entry.timestamp
 			};
 		}
+
 		return undefined;
 	}
 
@@ -265,15 +287,19 @@ export function mapSessionEntry(entry: SessionEntry): ChatItem | undefined {
 			text: `Model changed to ${entry.provider}/${entry.modelId}`
 		};
 	}
+
 	if (entry.type === 'thinking_level_change') {
 		return { id: entry.id, kind: 'notice', text: `Reasoning changed to ${entry.thinkingLevel}` };
 	}
+
 	if (entry.type === 'compaction') {
 		return { id: entry.id, kind: 'notice', text: `Context compacted: ${entry.summary}` };
 	}
+
 	if (entry.type === 'branch_summary') {
 		return { id: entry.id, kind: 'notice', text: `Branch summary: ${entry.summary}` };
 	}
+
 	if (entry.type === 'session_info') {
 		return entry.name
 			? { id: entry.id, kind: 'notice', text: `Session named “${entry.name}”` }
@@ -294,6 +320,7 @@ export function buildSnapshot(
 	const sessionStats = session.getSessionStats();
 	const sessionTokens: SessionTokenUsage = sessionStats.tokens;
 	const contextUsage = session.getContextUsage();
+
 	return {
 		runtimeId,
 		project,
@@ -304,6 +331,7 @@ export function buildSnapshot(
 		isStreaming: session.isStreaming,
 		items: session.sessionManager.getBranch().flatMap((entry) => {
 			const item = mapSessionEntry(entry);
+
 			return item ? [item] : [];
 		}),
 		...(mcpStatus ? { mcpStatus } : {}),
@@ -351,6 +379,7 @@ export async function createPiSession(options: {
 		settingsManager,
 		resourceLoader
 	});
+
 	return { ...created, extensionEvents };
 }
 
@@ -369,6 +398,7 @@ export function listSessionSlashCommands(session: AgentSession): SlashCommand[] 
 		if (commands.has(template.name)) {
 			continue;
 		}
+
 		commands.set(template.name, {
 			name: template.name,
 			description: template.description,
@@ -381,6 +411,7 @@ export function listSessionSlashCommands(session: AgentSession): SlashCommand[] 
 		if (commands.has(name)) {
 			continue;
 		}
+
 		commands.set(name, { name, description: skill.description, source: 'skill' });
 	}
 
@@ -399,6 +430,7 @@ export async function listProjectSlashCommands(project: Project): Promise<SlashC
 
 export async function listHistoricalSessions(project: Project): Promise<HistoricalSession[]> {
 	const sessions = await SessionManager.list(project.cwd);
+
 	return sessions.map((session) => ({
 		projectId: project.id,
 		projectName: project.name,
@@ -418,6 +450,7 @@ export async function resolveSessionPath(project: Project, sessionId: string): P
 	if (!session) {
 		throw new Error('Session not found in this project.');
 	}
+
 	return session.path;
 }
 
@@ -433,9 +466,11 @@ export function normalizePiEvent(
 		if (update.type === 'text_delta') {
 			return { type: 'assistant_delta', text: update.delta };
 		}
+
 		if (update.type === 'thinking_delta') {
 			return { type: 'assistant_delta', thinking: update.delta };
 		}
+
 		if (update.type === 'error') {
 			return { type: 'notice', message: 'The model returned an error.' };
 		}
@@ -463,8 +498,10 @@ export function normalizePiEvent(
 	if (event.type === 'compaction_start') {
 		return { type: 'notice', message: 'Compacting context…' };
 	}
+
 	if (event.type === 'auto_retry_start') {
 		return { type: 'notice', message: 'Retrying model request…' };
 	}
+
 	return undefined;
 }

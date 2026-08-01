@@ -93,6 +93,7 @@
 					activeToolEntry = undefined;
 					currentToolEntry = undefined;
 				}
+
 				continue;
 			}
 
@@ -104,6 +105,7 @@
 				if (item.thinking) {
 					appendThinking(activeToolEntry, item.thinking);
 				}
+
 				continue;
 			}
 
@@ -166,9 +168,11 @@
 		if (tool.result) {
 			return tool.result.isError ? 'failed' : 'completed';
 		}
+
 		if (tool.stream?.isError) {
 			return 'failed';
 		}
+
 		return tool.stream ? 'running' : 'pending';
 	}
 
@@ -193,10 +197,12 @@
 		if (!timestamp) {
 			return undefined;
 		}
+
 		const date = new Date(timestamp);
 		if (Number.isNaN(date.getTime())) {
 			return undefined;
 		}
+
 		return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
 	}
 
@@ -220,11 +226,14 @@
 			if (!navigator.clipboard?.writeText) {
 				throw new Error('Clipboard access is unavailable.');
 			}
+
 			await navigator.clipboard.writeText(text);
 			copyError = undefined;
+
 			return true;
 		} catch (error) {
 			copyError = error instanceof Error ? error.message : fallbackError;
+
 			return false;
 		}
 	}
@@ -238,6 +247,7 @@
 		if (copiedMessageTimer) {
 			clearTimeout(copiedMessageTimer);
 		}
+
 		copiedMessageTimer = setTimeout(() => {
 			copiedMessageId = undefined;
 		}, 1600);
@@ -252,6 +262,7 @@
 		if (previousTimer) {
 			clearTimeout(previousTimer);
 		}
+
 		button.classList.add('copied');
 		button.setAttribute('aria-label', 'Copied code');
 		button.title = 'Copied code';

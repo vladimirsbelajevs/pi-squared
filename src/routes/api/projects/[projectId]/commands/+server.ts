@@ -7,6 +7,7 @@ export const GET: RequestHandler = async ({ params }) => {
 		const commands = await listProjectRuntimeSlashCommands(
 			requiredParam(params.projectId, 'Project')
 		);
+
 		return json({ commands });
 	} catch (error) {
 		return errorResponse(error);

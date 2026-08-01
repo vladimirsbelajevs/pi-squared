@@ -119,10 +119,13 @@ export class HarnessWorkspace {
 	async start(): Promise<void> {
 		if (this.#started) {
 			this.#connectEvents();
+
 			return this.#startPromise;
 		}
+
 		this.#started = true;
 		this.#startPromise = this.#initialize();
+
 		return this.#startPromise;
 	}
 
@@ -135,6 +138,7 @@ export class HarnessWorkspace {
 		if (this.#persistTimer) {
 			clearTimeout(this.#persistTimer);
 		}
+
 		this.#persistTimer = setTimeout(() => {
 			this.#persistTimer = undefined;
 			this.persist();
@@ -163,6 +167,7 @@ export class HarnessWorkspace {
 
 	activeTabHref(): string | undefined {
 		const tab = this.tabs.find((candidate) => candidate.id === this.activeTabId);
+
 		return tab ? this.hrefForTab(tab) : undefined;
 	}
 
@@ -171,6 +176,7 @@ export class HarnessWorkspace {
 		if (!tab || tab.id === this.activeTabId) {
 			return;
 		}
+
 		this.activeTabId = tab.id;
 		this.persist();
 	}
@@ -180,6 +186,7 @@ export class HarnessWorkspace {
 		if (existing) {
 			return existing;
 		}
+
 		const tab: NewTab = {
 			id: tabId,
 			kind: 'new',
@@ -191,6 +198,7 @@ export class HarnessWorkspace {
 		};
 		this.tabs.push(tab);
 		this.persist();
+
 		return tab;
 	}
 
@@ -199,6 +207,7 @@ export class HarnessWorkspace {
 		if (existing || this.tabs.some((tab) => tab.id === tabId)) {
 			return existing;
 		}
+
 		return this.createNewTab(tabId);
 	}
 
@@ -223,11 +232,13 @@ export class HarnessWorkspace {
 		if (!model) {
 			return;
 		}
+
 		localStorage.setItem(LAST_MODEL_KEY, key);
 		if (model.reasoning === false) {
 			tab.draft.thinkingLevel = 'off';
 			localStorage.setItem(LAST_THINKING_LEVEL_KEY, 'off');
 		}
+
 		this.persist();
 	}
 
@@ -242,6 +253,7 @@ export class HarnessWorkspace {
 		if (this.projects.some((project) => project.id === projectId)) {
 			localStorage.setItem(LAST_PROJECT_KEY, projectId);
 		}
+
 		this.persist();
 	}
 
@@ -256,9 +268,11 @@ export class HarnessWorkspace {
 			tab.addingProject = false;
 			await this.refreshSessions();
 			this.persist();
+
 			return true;
 		} catch (error) {
 			tab.projectError = error instanceof Error ? error.message : 'Unable to add the project.';
+
 			return false;
 		}
 	}
@@ -288,7 +302,9 @@ export class HarnessWorkspace {
 			if (!accepted) {
 				chat.draft = openingPrompt.text;
 			}
+
 			this.persist();
+
 			return chat;
 		} catch (error) {
 			throw normalizeError(error, 'Unable to start the chat.');
@@ -334,6 +350,7 @@ export class HarnessWorkspace {
 			.then(() => chat)
 			.catch((error: unknown) => {
 				chat.error = error instanceof Error ? error.message : 'Unable to open this session.';
+
 				return undefined;
 			})
 			.finally(() => {
@@ -342,6 +359,7 @@ export class HarnessWorkspace {
 				this.persist();
 			});
 		this.#chatLoads.set(key, load);
+
 		return load;
 	}
 
@@ -350,6 +368,7 @@ export class HarnessWorkspace {
 		if ((!message && !submission.attachments.length) || !chat.runtimeId) {
 			return false;
 		}
+
 		const knownUserItemIds = this.#userItemIds(chat.snapshot);
 		try {
 			const result = await promptRuntime(chat.runtimeId, {
@@ -368,7 +387,9 @@ export class HarnessWorkspace {
 				// An entry can arrive over SSE before the prompt response does.
 				this.#reconcilePendingUserMessages(chat);
 			}
+
 			this.persist();
+
 			return true;
 		} catch (error) {
 			throw normalizeError(error, 'Unable to send the message.');
@@ -379,6 +400,7 @@ export class HarnessWorkspace {
 		if (!chat.runtimeId) {
 			return;
 		}
+
 		try {
 			await abortRuntime(chat.runtimeId);
 		} catch (error) {
@@ -390,6 +412,7 @@ export class HarnessWorkspace {
 		if (!chat.runtimeId) {
 			throw new Error('Chat tab is no longer active.');
 		}
+
 		const response = await setRuntimeMcpServerEnabled(chat.runtimeId, { serverName, enabled });
 		this.#applySnapshot(chat, response.snapshot);
 	}
@@ -406,6 +429,7 @@ export class HarnessWorkspace {
 		if (!chat.runtimeId || request.responding) {
 			return;
 		}
+
 		request.error = undefined;
 		request.responding = true;
 		try {
@@ -429,6 +453,7 @@ export class HarnessWorkspace {
 		if (!chat.runtimeId || request.responding) {
 			return;
 		}
+
 		request.error = undefined;
 		request.responding = true;
 		try {
@@ -448,6 +473,7 @@ export class HarnessWorkspace {
 		if (!chat.runtimeId || request.responding) {
 			return;
 		}
+
 		request.error = undefined;
 		request.responding = true;
 		try {
@@ -468,6 +494,7 @@ export class HarnessWorkspace {
 		if (!model || !chat.runtimeId) {
 			return;
 		}
+
 		try {
 			const { snapshot } = await setRuntimeModel(chat.runtimeId, model);
 			this.#applySnapshot(chat, snapshot);
@@ -484,6 +511,7 @@ export class HarnessWorkspace {
 		if (!chat.runtimeId) {
 			return;
 		}
+
 		try {
 			const { snapshot } = await setRuntimeThinking(chat.runtimeId, thinkingLevel);
 			this.#applySnapshot(chat, snapshot);
@@ -499,6 +527,7 @@ export class HarnessWorkspace {
 		if (this.activeTabId === tab.id) {
 			this.activeTabId = this.tabs[index]?.id ?? this.tabs[index - 1]?.id;
 		}
+
 		this.persist();
 		if (tab.kind === 'chat' && tab.runtimeId) {
 			try {
@@ -543,6 +572,7 @@ export class HarnessWorkspace {
 				: isThinkingLevel(rememberedThinking)
 					? rememberedThinking
 					: 'medium';
+
 		return {
 			projectId,
 			modelKey: model ? modelKey(model) : '',
@@ -582,6 +612,7 @@ export class HarnessWorkspace {
 		if (this.#events) {
 			return;
 		}
+
 		this.#events = openEventStream(this.#lastEventId, (event) => this.#handleEvent(event));
 	}
 
@@ -599,13 +630,17 @@ export class HarnessWorkspace {
 		if (event.type === 'snapshot') {
 			this.#applySnapshot(chat, event.snapshot);
 			this.persist();
+
 			return;
 		}
+
 		if (event.type === 'assistant_delta') {
 			chat.streamText += event.text ?? '';
 			chat.streamThinking += event.thinking ?? '';
+
 			return;
 		}
+
 		if (event.type === 'tool_update') {
 			const tool = chat.streamTools.find((candidate) => candidate.id === event.toolCallId);
 			if (tool) {
@@ -619,42 +654,55 @@ export class HarnessWorkspace {
 					isError: event.isError
 				});
 			}
+
 			return;
 		}
+
 		if (event.type === 'state') {
 			if (chat.snapshot) {
 				chat.snapshot.isStreaming = event.isStreaming;
 			}
+
 			return;
 		}
+
 		if (event.type === 'mcp_status') {
 			if (chat.snapshot) {
 				chat.snapshot.mcpStatus = event.mcpStatus;
 			}
+
 			return;
 		}
+
 		if (event.type === 'notice') {
 			if (!event.message.trim()) {
 				return;
 			}
+
 			chat.transientNotices.push({ id: `notice-${envelope.id}`, message: event.message });
 			if (chat.transientNotices.length > 20) {
 				chat.transientNotices.splice(0, 1);
 			}
+
 			return;
 		}
+
 		if (event.type === 'permission_request') {
 			if (!chat.permissionRequests.some((request) => request.id === event.request.id)) {
 				chat.permissionRequests.push({ ...event.request });
 			}
+
 			return;
 		}
+
 		if (event.type === 'permission_resolved') {
 			chat.permissionRequests = chat.permissionRequests.filter(
 				(request) => request.id !== event.requestId
 			);
+
 			return;
 		}
+
 		if (event.type === 'error') {
 			errorNotices.show(event.message);
 		}
@@ -675,6 +723,7 @@ export class HarnessWorkspace {
 				chat.runtimeId = undefined;
 			}
 		}
+
 		if (!snapshot) {
 			const response = await createRuntime({
 				mode: 'resume',
@@ -683,6 +732,7 @@ export class HarnessWorkspace {
 			});
 			snapshot = response.snapshot;
 		}
+
 		this.#applySnapshot(chat, snapshot);
 	}
 
@@ -726,6 +776,7 @@ export class HarnessWorkspace {
 		if (!chat.snapshot || !chat.pendingUserMessages.length) {
 			return;
 		}
+
 		chat.pendingUserMessages = reconcilePendingUserMessages(
 			chat.pendingUserMessages,
 			chat.snapshot.items
@@ -736,7 +787,9 @@ export class HarnessWorkspace {
 		if (snapshot.sessionName) {
 			return snapshot.sessionName;
 		}
+
 		const firstMessage = snapshot.items.find((item) => item.role === 'user')?.text;
+
 		return firstMessage ? firstMessage.slice(0, 42) : 'New chat';
 	}
 
@@ -760,6 +813,7 @@ export class HarnessWorkspace {
 		if (!restored) {
 			return;
 		}
+
 		this.#lastEventId = restored.lastEventId;
 		const tabs: WorkspaceTab[] = [];
 		const tabIds = new SvelteSet<string>();
@@ -768,16 +822,20 @@ export class HarnessWorkspace {
 			if (tabIds.has(tab.id)) {
 				continue;
 			}
+
 			if (tab.kind === 'chat') {
 				const sessionKey = `${tab.projectId}:${tab.sessionId}`;
 				if (chatSessions.has(sessionKey)) {
 					continue;
 				}
+
 				chatSessions.add(sessionKey);
 			}
+
 			tabIds.add(tab.id);
 			tabs.push(tab.kind === 'new' ? this.#fromStoredNew(tab) : this.#fromStoredChat(tab));
 		}
+
 		this.tabs = tabs;
 		this.activeTabId = tabs.some((tab) => tab.id === restored.activeTabId)
 			? restored.activeTabId
@@ -794,6 +852,7 @@ export class HarnessWorkspace {
 				const parsed: unknown = JSON.parse(raw);
 				if (isRecord(parsed) && parsed.version === 1 && Array.isArray(parsed.tabs)) {
 					const tabs = parsed.tabs.flatMap((tab) => this.#parseStoredTab(tab));
+
 					return {
 						version: 1,
 						lastEventId: typeof parsed.lastEventId === 'number' ? parsed.lastEventId : undefined,
@@ -807,10 +866,12 @@ export class HarnessWorkspace {
 			if (!legacyRaw) {
 				return undefined;
 			}
+
 			const legacy: unknown = JSON.parse(legacyRaw);
 			if (!Array.isArray(legacy)) {
 				return undefined;
 			}
+
 			const seen = new SvelteSet<string>();
 			const tabs: StoredChatTab[] = [];
 			for (const value of legacy) {
@@ -821,10 +882,12 @@ export class HarnessWorkspace {
 				) {
 					continue;
 				}
+
 				const key = `${value.projectId}:${value.sessionId}`;
 				if (seen.has(key)) {
 					continue;
 				}
+
 				seen.add(key);
 				tabs.push({
 					kind: 'chat',
@@ -836,12 +899,15 @@ export class HarnessWorkspace {
 					queueMode: 'followUp'
 				});
 			}
+
 			const migrated: StoredWorkspaceV1 = { version: 1, tabs };
 			this.#writeStoredWorkspace(migrated);
 			localStorage.removeItem(LEGACY_OPEN_CHATS_KEY);
+
 			return migrated;
 		} catch {
 			localStorage.removeItem(STORAGE_KEY);
+
 			return undefined;
 		}
 	}
@@ -855,6 +921,7 @@ export class HarnessWorkspace {
 		) {
 			return [];
 		}
+
 		if (value.kind === 'new' && isRecord(value.draft)) {
 			const draft = value.draft;
 			if (
@@ -878,6 +945,7 @@ export class HarnessWorkspace {
 				];
 			}
 		}
+
 		if (
 			value.kind === 'chat' &&
 			typeof value.projectId === 'string' &&
@@ -898,6 +966,7 @@ export class HarnessWorkspace {
 				}
 			];
 		}
+
 		return [];
 	}
 
@@ -944,6 +1013,7 @@ export class HarnessWorkspace {
 				if (tab.kind === 'new') {
 					return { kind: 'new', id: tab.id, title: tab.title, draft: tab.draft };
 				}
+
 				return {
 					kind: 'chat',
 					id: tab.id,

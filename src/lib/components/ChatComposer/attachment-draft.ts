@@ -23,6 +23,7 @@ export function classifyAttachment(
 	if (!kind || !resolvedMimeType) {
 		return undefined;
 	}
+
 	return { kind, mimeType: resolvedMimeType };
 }
 
@@ -64,6 +65,7 @@ export async function readFileAsBase64(file: File): Promise<string> {
 		for (let start = 0; start < bytes.length; start += chunkSize) {
 			binary += String.fromCharCode(...bytes.subarray(start, start + chunkSize));
 		}
+
 		return btoa(binary);
 	} catch {
 		throw new Error(`Unable to read “${file.name}”.`);
@@ -84,6 +86,7 @@ export async function createPromptAttachmentDrafts(
 			errors.push(`“${file.name}” is not a supported image or UTF-8 text/code file.`);
 			continue;
 		}
+
 		if (supported.kind === 'image' && !allowsImages) {
 			errors.push('The selected model does not support image attachments.');
 			continue;
@@ -103,6 +106,7 @@ export async function createPromptAttachmentDrafts(
 			if (supported.kind === 'text') {
 				await verifyUtf8Text(file);
 			}
+
 			const attachment: PromptAttachment = {
 				id: crypto.randomUUID(),
 				kind: supported.kind,
@@ -125,9 +129,11 @@ function formatFileSize(bytes: number): string {
 	if (!Number.isFinite(bytes) || bytes <= 0) {
 		return '0 B';
 	}
+
 	const units = ['B', 'KB', 'MB', 'GB'];
 	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
 	const value = bytes / 1024 ** exponent;
+
 	return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${
 		units[exponent]
 	}`;

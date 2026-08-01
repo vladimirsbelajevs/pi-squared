@@ -52,6 +52,7 @@ function attachmentsMatch(
 		pending.length === authoritative.length &&
 		pending.every((attachment, index) => {
 			const item = authoritative[index];
+
 			return (
 				attachment.id === item?.id &&
 				attachment.kind === item.kind &&

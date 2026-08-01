@@ -17,6 +17,7 @@
 		if (!id) {
 			return;
 		}
+
 		workspace.ensureNewTab(id);
 		workspace.rememberTabForPathname(page.url.pathname);
 	}
@@ -32,12 +33,14 @@
 				if (page.url.pathname !== pathname) {
 					return;
 				}
+
 				const scrollContainer = document.getElementById('workspace-content');
 				if (scrollContainer) {
 					scrollContainer.scrollTop = workspace.scrollPosition(pathname);
 				}
 			});
 		});
+
 		return () => {
 			cancelAnimationFrame(introFrame);
 			if (restoreFrame) {
@@ -50,14 +53,17 @@
 		if (!tab) {
 			return false;
 		}
+
 		const chat = await workspace.startChat(tab, submission);
 		if (!chat) {
 			return false;
 		}
+
 		await goto(
 			resolve(`/chat/${encodeURIComponent(chat.projectId)}/${encodeURIComponent(chat.sessionId)}`),
 			{ replaceState: true }
 		);
+
 		return true;
 	}
 

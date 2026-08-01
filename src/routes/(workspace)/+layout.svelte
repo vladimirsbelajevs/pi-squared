@@ -13,6 +13,7 @@
 
 	function rememberScrollContainer(element: HTMLElement): () => void {
 		scrollContainer = element;
+
 		return () => {
 			scrollContainer = undefined;
 		};
@@ -22,6 +23,7 @@
 		if (restoringScroll) {
 			return;
 		}
+
 		workspace.rememberScrollPosition(
 			page.url.pathname,
 			(event.currentTarget as HTMLElement).scrollTop
@@ -33,12 +35,14 @@
 		if (!scrollContainer) {
 			return;
 		}
+
 		const scrollTop = workspace.scrollPosition(pathname);
 		restoringScroll = true;
 		void tick().then(() => {
 			if (scrollContainer && page.url.pathname === pathname) {
 				scrollContainer.scrollTop = scrollTop;
 			}
+
 			requestAnimationFrame(() => (restoringScroll = false));
 		});
 	}
@@ -53,6 +57,7 @@
 
 	function fallbackTab(tab: WorkspaceTab): WorkspaceTab | undefined {
 		const index = workspace.tabs.findIndex((candidate) => candidate.id === tab.id);
+
 		return workspace.tabs[index + 1] ?? workspace.tabs[index - 1];
 	}
 
@@ -60,9 +65,11 @@
 		if (!tab) {
 			return goto(resolve('/history'), { replaceState: true });
 		}
+
 		if (tab.kind === 'new') {
 			return goto(resolve(`/new/${encodeURIComponent(tab.id)}`), { replaceState: true });
 		}
+
 		return goto(
 			resolve(`/chat/${encodeURIComponent(tab.projectId)}/${encodeURIComponent(tab.sessionId)}`),
 			{ replaceState: true }
@@ -76,14 +83,17 @@
 		const fallback = fallbackTab(tab);
 		if (wasActive) {
 			void navigateToFallback(fallback).then(() => workspace.closeTab(tab));
+
 			return;
 		}
+
 		void workspace.closeTab(tab);
 	}
 
 	onMount(() => {
 		void workspace.start();
 		restoreScrollPosition();
+
 		return () => workspace.disposeConnection();
 	});
 </script>

@@ -20,6 +20,7 @@ async function makeTemporaryDirectory(label: string): Promise<string> {
 	const { mkdtemp } = await import('node:fs/promises');
 	const directory = await mkdtemp(join(tmpdir(), `pi-squared-${label}-`));
 	temporaryDirectories.push(directory);
+
 	return directory;
 }
 

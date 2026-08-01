@@ -13,6 +13,7 @@ class EventBroker {
 		if (this.#replay.length > REPLAY_LIMIT) {
 			this.#replay.shift();
 		}
+
 		for (const listener of this.#listeners) {
 			listener(envelope);
 		}
@@ -29,7 +30,9 @@ class EventBroker {
 				}
 			}
 		}
+
 		this.#listeners.add(listener);
+
 		return () => this.#listeners.delete(listener);
 	}
 }

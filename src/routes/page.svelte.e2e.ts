@@ -204,6 +204,7 @@ test('opens a historical session without reselecting its tab', async ({ page }) 
 		if (route.request().method() !== 'POST') {
 			return route.fallback();
 		}
+
 		await route.fulfill({ json: { snapshot } });
 	});
 
@@ -250,6 +251,7 @@ test('restores each tab scroll position without animating to the bottom', async 
 		if (!container) {
 			throw new Error('Workspace scroll container is missing.');
 		}
+
 		container.style.paddingBottom = '1200px';
 		container.scrollTop = 180;
 		container.dispatchEvent(new Event('scroll'));
@@ -305,6 +307,7 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 		if (route.request().method() !== 'POST') {
 			return route.fallback();
 		}
+
 		await route.fulfill({ json: { snapshot } });
 	});
 
@@ -315,6 +318,7 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 		if (!container) {
 			throw new Error('Workspace scroll container is missing.');
 		}
+
 		container.style.paddingBottom = '1200px';
 		container.scrollTop = container.scrollHeight;
 	});
@@ -335,6 +339,7 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 			.poll(() =>
 				page.evaluate(() => {
 					const container = document.getElementById('workspace-content');
+
 					return (
 						!!container &&
 						container.scrollHeight - container.scrollTop - container.clientHeight <= 1
@@ -393,6 +398,7 @@ test('keeps a bottom-pinned chat stable while response content streams', async (
 		if (!container) {
 			throw new Error('Workspace scroll container is missing.');
 		}
+
 		container.scrollTop = 0;
 	});
 	await emit({
@@ -433,6 +439,7 @@ test('starting a chat does not recreate its draft tab', async ({ page }) => {
 		if (route.request().method() !== 'GET') {
 			return route.fallback();
 		}
+
 		await route.fulfill({ json: { projects: [project] } });
 	});
 	await page.route('**/api/models', (route) => route.fulfill({ json: { models: [model] } }));
@@ -441,6 +448,7 @@ test('starting a chat does not recreate its draft tab', async ({ page }) => {
 		if (route.request().method() !== 'POST') {
 			return route.fallback();
 		}
+
 		await route.fulfill({ json: { snapshot } });
 	});
 	await page.route('**/api/runtimes/runtime-1/prompt', (route) =>

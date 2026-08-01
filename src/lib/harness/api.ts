@@ -16,7 +16,9 @@ function isStreamEnvelope(value: unknown): value is StreamEnvelope {
 	if (!value || typeof value !== 'object') {
 		return false;
 	}
+
 	const envelope = value as Record<string, unknown>;
+
 	return (
 		typeof envelope.id === 'number' &&
 		typeof envelope.runtimeId === 'string' &&
@@ -38,6 +40,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 				: 'Request failed.';
 		throw new Error(message);
 	}
+
 	return body as T;
 }
 
@@ -70,6 +73,7 @@ export function searchProjectFiles(
 	signal?: AbortSignal
 ): Promise<{ files: ProjectFileSuggestion[] }> {
 	const parameters = new URLSearchParams({ q: query });
+
 	return request(`/api/projects/${encodeURIComponent(projectId)}/files?${parameters}`, { signal });
 }
 
@@ -172,5 +176,6 @@ export function openEventStream(
 			// EventSource reconnects automatically after a malformed or interrupted event.
 		}
 	};
+
 	return source;
 }

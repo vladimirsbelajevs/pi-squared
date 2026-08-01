@@ -76,6 +76,7 @@
 		if (!isFocused || isComposing || !detectedAutocompleteToken) {
 			return undefined;
 		}
+
 		return tokenKey(detectedAutocompleteToken) === dismissedToken
 			? undefined
 			: detectedAutocompleteToken;
@@ -85,6 +86,7 @@
 		if (activeAutocompleteToken?.kind !== 'file' || !projectId) {
 			return undefined;
 		}
+
 		return fileRequestKey(activeAutocompleteToken);
 	});
 	let autocompleteSuggestions = $derived.by((): AutocompleteSuggestion[] => {
@@ -92,6 +94,7 @@
 			if (loadedCommandKey !== expectedCommandKey) {
 				return [];
 			}
+
 			return rankSlashCommands(commands, activeAutocompleteToken.query).map((command) => ({
 				kind: 'command',
 				command
@@ -125,6 +128,7 @@
 		if (autoFocus && window.matchMedia('(min-width: 641px)').matches) {
 			textarea?.focus();
 		}
+
 		resizeTextarea();
 
 		return () => window.clearInterval(interval);
@@ -139,12 +143,14 @@
 		if (!textarea) {
 			return;
 		}
+
 		textarea.style.height = 'auto';
 		textarea.style.height = `${Math.min(textarea.scrollHeight, 192)}px`;
 	}
 
 	function captureTextarea(element: HTMLTextAreaElement): () => void {
 		textarea = element;
+
 		return () => {
 			if (textarea === element) {
 				textarea = undefined;
@@ -158,8 +164,10 @@
 		dismissedToken = undefined;
 		if (isComposing) {
 			resizeTextarea();
+
 			return;
 		}
+
 		selectedAutocompleteIndex = 0;
 		syncAutocomplete(target);
 		resizeTextarea();
@@ -169,10 +177,12 @@
 		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
 			return;
 		}
+
 		event.preventDefault();
 		if (!draft.trim() && !hasAttachments) {
 			return;
 		}
+
 		(event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
 	}
 
@@ -184,9 +194,11 @@
 		if (runtimeId) {
 			return `runtime:${runtimeId}`;
 		}
+
 		if (projectId) {
 			return `project:${projectId}`;
 		}
+
 		return undefined;
 	}
 
@@ -202,6 +214,7 @@
 		if (fileDebounce !== undefined) {
 			window.clearTimeout(fileDebounce);
 		}
+
 		fileDebounce = undefined;
 		fileController?.abort();
 		fileController = undefined;
@@ -226,6 +239,7 @@
 			if (!response || controller.signal.aborted || requestKey !== commandRequestKey()) {
 				return;
 			}
+
 			commands = response.commands;
 			loadedCommandKey = requestKey;
 			selectedAutocompleteIndex = 0;
@@ -242,6 +256,7 @@
 		if (!projectId) {
 			return;
 		}
+
 		cancelFileSearch();
 		const searchProjectId = projectId;
 		const requestKey = fileRequestKey(token);
@@ -259,6 +274,7 @@
 				) {
 					return;
 				}
+
 				fileSuggestions = response.files;
 				loadedFileKey = requestKey;
 				selectedAutocompleteIndex = 0;
@@ -317,6 +333,7 @@
 		if (event.key === 'Escape' && activeAutocompleteToken) {
 			dismissedToken = tokenKey(activeAutocompleteToken);
 			cancelFileSearch();
+
 			return;
 		}
 
@@ -324,18 +341,23 @@
 			if (event.key === 'ArrowDown') {
 				event.preventDefault();
 				selectedAutocompleteIndex = normalizedAutocompleteIndex + 1;
+
 				return;
 			}
+
 			if (event.key === 'ArrowUp') {
 				event.preventDefault();
 				selectedAutocompleteIndex = normalizedAutocompleteIndex - 1;
+
 				return;
 			}
+
 			if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
 				event.preventDefault();
 				if (activeSuggestion) {
 					void selectAutocompleteSuggestion(activeSuggestion);
 				}
+
 				return;
 			}
 		}
@@ -357,6 +379,7 @@
 		} else {
 			return;
 		}
+
 		onDraftChange(insertion.value);
 		caret = insertion.caret;
 		selectedAutocompleteIndex = 0;

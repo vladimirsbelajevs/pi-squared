@@ -33,7 +33,9 @@ function isProject(value: unknown): value is Project {
 	if (!value || typeof value !== 'object') {
 		return false;
 	}
+
 	const project = value as Record<string, unknown>;
+
 	return (
 		typeof project.id === 'string' &&
 		typeof project.name === 'string' &&
@@ -86,6 +88,7 @@ async function canonicalizeDirectory(input: string): Promise<string> {
 	if (!input.trim()) {
 		throw new Error('A project directory is required.');
 	}
+
 	if (!isAbsolute(input)) {
 		throw new Error('Project directories must be absolute paths.');
 	}
@@ -95,6 +98,7 @@ async function canonicalizeDirectory(input: string): Promise<string> {
 	if (!details.isDirectory()) {
 		throw new Error('The project path must point to a directory.');
 	}
+
 	return cwd;
 }
 
@@ -106,11 +110,13 @@ function serialize<T>(operation: () => Promise<T>): Promise<T> {
 		() => undefined,
 		() => undefined
 	);
+
 	return result;
 }
 
 export async function listProjects(): Promise<Project[]> {
 	const document = await readDocument();
+
 	return [...document.projects].sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt));
 }
 
@@ -154,6 +160,7 @@ export async function addProject(input: { cwd: string; name?: string }): Promise
 
 		document.projects.push(project);
 		await writeDocument(document);
+
 		return project;
 	});
 }
@@ -165,14 +172,18 @@ export async function updateProject(projectId: string, input: { name?: string })
 		if (!project) {
 			throw new Error('Project not found.');
 		}
+
 		if (input.name !== undefined) {
 			const name = input.name.trim();
 			if (!name) {
 				throw new Error('Project names cannot be empty.');
 			}
+
 			project.name = name;
 		}
+
 		await writeDocument(document);
+
 		return project;
 	});
 }
@@ -184,6 +195,7 @@ export async function removeProject(projectId: string): Promise<void> {
 		if (projects.length === document.projects.length) {
 			throw new Error('Project not found.');
 		}
+
 		await writeDocument({ version: 1, projects });
 	});
 }
@@ -195,8 +207,10 @@ export async function markProjectOpened(projectId: string): Promise<Project> {
 		if (!project) {
 			throw new Error('Project not found.');
 		}
+
 		project.lastOpenedAt = new Date().toISOString();
 		await writeDocument(document);
+
 		return project;
 	});
 }

@@ -12,6 +12,7 @@ export async function readObject(request: Request): Promise<Record<string, unkno
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('Expected a JSON object.');
 	}
+
 	return value as Record<string, unknown>;
 }
 
@@ -19,6 +20,7 @@ export function requiredString(value: unknown, name: string): string {
 	if (typeof value !== 'string' || !value.trim()) {
 		throw new Error(`${name} is required.`);
 	}
+
 	return value;
 }
 
@@ -26,9 +28,11 @@ export function optionalString(value: unknown, name: string): string | undefined
 	if (value === undefined) {
 		return undefined;
 	}
+
 	if (typeof value !== 'string') {
 		throw new Error(`${name} must be a string.`);
 	}
+
 	return value;
 }
 
@@ -36,5 +40,6 @@ export function requiredParam(value: string | undefined, name: string): string {
 	if (!value) {
 		throw new Error(`${name} is required.`);
 	}
+
 	return value;
 }

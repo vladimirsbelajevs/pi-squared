@@ -20,6 +20,7 @@ export function parseMcpStatusSnapshot(value: unknown): McpStatusSnapshot | unde
 	if (!value || typeof value !== 'object') {
 		return undefined;
 	}
+
 	const snapshot = value as Record<string, unknown>;
 	if (
 		snapshot.version !== 1 ||
@@ -36,6 +37,7 @@ export function parseMcpStatusSnapshot(value: unknown): McpStatusSnapshot | unde
 		if (!value || typeof value !== 'object') {
 			return undefined;
 		}
+
 		const server = value as Record<string, unknown>;
 		if (
 			typeof server.name !== 'string' ||
@@ -47,9 +49,11 @@ export function parseMcpStatusSnapshot(value: unknown): McpStatusSnapshot | unde
 		) {
 			return undefined;
 		}
+
 		if (server.resourceCount !== undefined && !numberAtLeastZero(server.resourceCount)) {
 			return undefined;
 		}
+
 		if (server.failedAgoSeconds !== undefined && !numberAtLeastZero(server.failedAgoSeconds)) {
 			return undefined;
 		}
@@ -70,6 +74,7 @@ export function parseMcpStatusSnapshot(value: unknown): McpStatusSnapshot | unde
 	if (validServers.length !== snapshot.servers.length) {
 		return undefined;
 	}
+
 	return {
 		servers: validServers,
 		totalTools: snapshot.totalTools,

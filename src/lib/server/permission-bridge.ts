@@ -38,6 +38,7 @@ export class PermissionBridge {
 					type: 'notice',
 					message: 'This extension dialog is only available in the Pi terminal UI.'
 				});
+
 				return undefined;
 			},
 			pasteToEditor: () => undefined,
@@ -65,6 +66,7 @@ export class PermissionBridge {
 			{ method: 'select', title, options },
 			requestOptions?.signal
 		);
+
 		return 'value' in response ? response.value : undefined;
 	}
 
@@ -73,6 +75,7 @@ export class PermissionBridge {
 			{ method: 'confirm', title, message },
 			requestOptions?.signal
 		);
+
 		return 'confirmed' in response ? response.confirmed : false;
 	}
 
@@ -85,6 +88,7 @@ export class PermissionBridge {
 			{ method: 'input', title, placeholder },
 			requestOptions?.signal
 		);
+
 		return 'value' in response ? response.value : undefined;
 	}
 
@@ -97,6 +101,7 @@ export class PermissionBridge {
 		if (!this.#isValidResponse(pending.request, response)) {
 			throw new Error('The response does not match the pending permission request.');
 		}
+
 		this.#settle(response.requestId, response);
 	}
 
@@ -112,13 +117,16 @@ export class PermissionBridge {
 	): Promise<PermissionResponse> {
 		const id = randomUUID();
 		const pendingRequest = { ...request, id };
+
 		return new Promise((resolve) => {
 			const abort = () => this.#settle(id, { requestId: id, cancelled: true });
 			this.#pending.set(id, { request: pendingRequest, resolve, signal, abort });
 			if (signal?.aborted) {
 				abort();
+
 				return;
 			}
+
 			signal?.addEventListener('abort', abort, { once: true });
 			this.publish({ type: 'permission_request', request: pendingRequest });
 		});
@@ -129,10 +137,12 @@ export class PermissionBridge {
 		if (!pending) {
 			return;
 		}
+
 		this.#pending.delete(requestId);
 		if (pending.signal && pending.abort) {
 			pending.signal.removeEventListener('abort', pending.abort);
 		}
+
 		this.publish({ type: 'permission_resolved', requestId });
 		pending.resolve(response);
 	}
@@ -141,12 +151,15 @@ export class PermissionBridge {
 		if ('cancelled' in response) {
 			return response.cancelled;
 		}
+
 		if (request.method === 'select') {
 			return 'value' in response && request.options?.includes(response.value) === true;
 		}
+
 		if (request.method === 'confirm') {
 			return 'confirmed' in response;
 		}
+
 		return 'value' in response;
 	}
 }

@@ -10,12 +10,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (streamingBehavior && streamingBehavior !== 'steer' && streamingBehavior !== 'followUp') {
 			throw new Error('Streaming behavior must be “steer” or “followUp”.');
 		}
+
 		const result = promptRuntime(
 			requiredParam(params.runtimeId, 'Runtime'),
 			optionalString(body.text, 'Message') ?? '',
 			validatePromptAttachments(body.attachments),
 			streamingBehavior as 'steer' | 'followUp' | undefined
 		);
+
 		return json(result);
 	} catch (error) {
 		return errorResponse(error);

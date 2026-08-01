@@ -16,6 +16,7 @@
 		if (!input.trim()) {
 			return;
 		}
+
 		void onSelect(request, input);
 	}
 </script>

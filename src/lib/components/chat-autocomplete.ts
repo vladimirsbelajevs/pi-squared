@@ -54,6 +54,7 @@ export function getLeadingSlashCommandToken(
 	while (start < value.length && isWhitespace(value[start])) {
 		start += 1;
 	}
+
 	if (value[start] !== '/') {
 		return undefined;
 	}
@@ -62,6 +63,7 @@ export function getLeadingSlashCommandToken(
 	while (end < value.length && !isWhitespace(value[end])) {
 		end += 1;
 	}
+
 	if (position <= start || position > end) {
 		return undefined;
 	}
@@ -82,6 +84,7 @@ export function getFileAutocompleteToken(
 	while (trigger >= 0 && isProjectPathCharacter(value[trigger])) {
 		trigger -= 1;
 	}
+
 	if (value[trigger] !== '@' || !isMentionBoundary(value[trigger - 1])) {
 		return undefined;
 	}
@@ -107,21 +110,27 @@ function commandScore(command: SlashCommandSuggestion, query: string): number | 
 	if (!query) {
 		return 0;
 	}
+
 	if (name === query) {
 		return 0;
 	}
+
 	if (name.startsWith(query)) {
 		return 1;
 	}
+
 	if (name.split(/[-_/.]/u).some((part) => part.startsWith(query))) {
 		return 2;
 	}
+
 	if (name.includes(query)) {
 		return 3;
 	}
+
 	if (description.includes(query)) {
 		return 4;
 	}
+
 	return undefined;
 }
 
@@ -131,6 +140,7 @@ export function rankSlashCommands<T extends SlashCommandSuggestion>(
 	query: string
 ): T[] {
 	const normalizedQuery = query.trim().toLocaleLowerCase();
+
 	return commands
 		.map((command, index) => ({ command, index, score: commandScore(command, normalizedQuery) }))
 		.filter(
@@ -147,6 +157,7 @@ function replaceToken(
 ): AutocompleteInsertion {
 	const needsTrailingSpace = token.end === value.length;
 	const inserted = `${replacement}${needsTrailingSpace ? ' ' : ''}`;
+
 	return {
 		value: `${value.slice(0, token.start)}${inserted}${value.slice(token.end)}`,
 		caret: token.start + inserted.length

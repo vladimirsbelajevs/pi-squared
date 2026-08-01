@@ -17,6 +17,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			cwd: requiredString(body.cwd, 'Project directory'),
 			name: optionalString(body.name, 'Project name')
 		});
+
 		return json({ project }, { status: 201 });
 	} catch (error) {
 		return errorResponse(error);

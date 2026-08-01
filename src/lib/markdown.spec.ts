@@ -77,6 +77,7 @@ describe('renderAssistantMarkdown', () => {
 		for (const [label, url] of allowed) {
 			expect(html).toContain(`<a href="${url}">${label}</a>`);
 		}
+
 		expect(html).not.toContain('target=');
 	});
 
