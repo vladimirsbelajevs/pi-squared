@@ -17,6 +17,13 @@ export class PermissionBridge {
 
 	constructor(private readonly publish: (event: RuntimeEvent) => void) {}
 
+	get pendingRequests(): PermissionRequest[] {
+		return [...this.#pending.values()].map(({ request }) => ({
+			...request,
+			...(request.options ? { options: [...request.options] } : {})
+		}));
+	}
+
 	get extensionUI(): ExtensionUIContext {
 		return {
 			select: (title, options, requestOptions) => this.select(title, options, requestOptions),

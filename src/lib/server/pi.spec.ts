@@ -266,7 +266,15 @@ describe('mapSessionEntry', () => {
 					totalResources: 0,
 					connectedCount: 1,
 					disabledCount: 0
-				}
+				},
+				[
+					{
+						id: 'permission-1',
+						method: 'confirm',
+						title: 'Approve command?',
+						message: 'pwd'
+					}
+				]
 			)
 		).toMatchObject({
 			runtimeId: 'runtime-1',
@@ -279,7 +287,10 @@ describe('mapSessionEntry', () => {
 				cacheHitRate: (400 / 1700) * 100,
 				total: 2000
 			},
-			contextUsage: { tokens: 64000, contextWindow: 200000, percent: 32 }
+			contextUsage: { tokens: 64000, contextWindow: 200000, percent: 32 },
+			permissionRequests: [
+				{ id: 'permission-1', method: 'confirm', title: 'Approve command?', message: 'pwd' }
+			]
 		});
 	});
 

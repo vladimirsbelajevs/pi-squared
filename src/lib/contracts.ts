@@ -147,6 +147,8 @@ export interface RuntimeSnapshot {
 	sessionTokens?: SessionTokenUsage;
 	contextUsage?: ContextUsageSnapshot;
 	modelFallbackMessage?: string;
+	/** Permission requests awaiting a response from the user. */
+	permissionRequests: PermissionRequest[];
 }
 
 /** Result returned after a prompt has been accepted by a runtime. */

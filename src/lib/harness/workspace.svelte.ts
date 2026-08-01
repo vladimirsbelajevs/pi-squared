@@ -732,6 +732,7 @@ export class HarnessWorkspace {
 
 	#applySnapshot(chat: ChatTab, snapshot: RuntimeSnapshot): void {
 		chat.snapshot = snapshot;
+		chat.permissionRequests = snapshot.permissionRequests.map((request) => ({ ...request }));
 		this.#reconcilePendingUserMessages(chat);
 		chat.runtimeId = snapshot.runtimeId;
 		chat.title = this.#chatTitle(snapshot);

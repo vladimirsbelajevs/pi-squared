@@ -24,7 +24,8 @@ function chat(overrides: Partial<ChatTab> = {}): ChatTab {
 			sessionId: 'session-1',
 			thinkingLevel: 'medium',
 			isStreaming: true,
-			items: []
+			items: [],
+			permissionRequests: []
 		},
 		hydrating: false,
 		draft: '',

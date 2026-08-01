@@ -154,7 +154,8 @@ function publishSnapshot(record: RuntimeRecord): RuntimeSnapshot {
 		record.project,
 		record.session,
 		record.modelFallbackMessage,
-		record.mcpStatus
+		record.mcpStatus,
+		record.permissions.pendingRequests
 	);
 	publish(record, { type: 'snapshot', snapshot });
 
@@ -275,7 +276,8 @@ export async function createRuntime(input: {
 		record.project,
 		record.session,
 		record.modelFallbackMessage,
-		record.mcpStatus
+		record.mcpStatus,
+		record.permissions.pendingRequests
 	);
 }
 
@@ -291,7 +293,8 @@ export function getRuntimeSnapshot(runtimeId: string): RuntimeSnapshot {
 		record.project,
 		record.session,
 		record.modelFallbackMessage,
-		record.mcpStatus
+		record.mcpStatus,
+		record.permissions.pendingRequests
 	);
 }
 

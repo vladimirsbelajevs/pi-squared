@@ -17,6 +17,7 @@ import type {
 	ChatToolCall,
 	HistoricalSession,
 	ModelOption,
+	PermissionRequest,
 	Project,
 	RuntimeSnapshot,
 	SessionTokenUsage,
@@ -330,7 +331,8 @@ export function buildSnapshot(
 	project: Project,
 	session: AgentSession,
 	modelFallbackMessage?: string,
-	mcpStatus?: McpStatusSnapshot
+	mcpStatus?: McpStatusSnapshot,
+	permissionRequests: PermissionRequest[] = []
 ): RuntimeSnapshot {
 	const currentModel = session.model;
 	const sessionStats = session.getSessionStats();
@@ -358,7 +360,8 @@ export function buildSnapshot(
 		...(mcpStatus ? { mcpStatus } : {}),
 		sessionTokens,
 		...(contextUsage ? { contextUsage } : {}),
-		modelFallbackMessage
+		modelFallbackMessage,
+		permissionRequests
 	};
 }
 

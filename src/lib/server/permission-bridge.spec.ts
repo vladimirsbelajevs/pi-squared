@@ -23,6 +23,25 @@ describe('PermissionBridge', () => {
 		expect(events.at(-1)).toEqual({ type: 'permission_resolved', requestId: request.request.id });
 	});
 
+	it('lists unresolved requests for runtime snapshots', async () => {
+		const bridge = new PermissionBridge(() => undefined);
+		const selection = bridge.select('Permission Required', ['Yes', 'No']);
+
+		expect(bridge.pendingRequests).toMatchObject([
+			{ method: 'select', title: 'Permission Required', options: ['Yes', 'No'] }
+		]);
+
+		const [request] = bridge.pendingRequests;
+		if (!request) {
+			throw new Error('Expected a pending permission request.');
+		}
+
+		bridge.respond({ requestId: request.id, value: 'Yes' });
+
+		await expect(selection).resolves.toBe('Yes');
+		expect(bridge.pendingRequests).toEqual([]);
+	});
+
 	it('cancels a pending confirmation when the agent aborts it', async () => {
 		const events: RuntimeEvent[] = [];
 		const bridge = new PermissionBridge((event) => events.push(event));
