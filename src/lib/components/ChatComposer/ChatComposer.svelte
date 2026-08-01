@@ -81,6 +81,7 @@
 	let selectedImage = $state<ImageViewerImage>();
 	let readingAttachmentCount = $state(0);
 	let fileInput: HTMLInputElement | undefined;
+	let textInput = $state<{ resetAutocomplete: (value?: string) => void }>();
 	let selectedModel = $derived(
 		models.find((model) => `${model.provider}::${model.id}` === modelKey)
 	);
@@ -107,6 +108,11 @@
 	function updateDraft(value: string): void {
 		draft = value;
 		onDraftChange?.(value);
+	}
+
+	function resetDraft(value: string): void {
+		updateDraft(value);
+		textInput?.resetAutocomplete(value);
 	}
 
 	async function addFiles(files: readonly File[]): Promise<void> {
@@ -178,18 +184,18 @@
 		}
 
 		submitting = true;
-		updateDraft('');
+		resetDraft('');
 		attachments = [];
 
 		try {
 			validatePromptAttachments(previousAttachments);
 			if (!(await onSend({ text, attachments: previousAttachments }))) {
-				updateDraft(previousDraft);
+				resetDraft(previousDraft);
 				attachments = previousAttachments;
 				errorNotices.show('Message was not accepted. Please try again.');
 			}
 		} catch (sendError) {
-			updateDraft(previousDraft);
+			resetDraft(previousDraft);
 			attachments = previousAttachments;
 			errorNotices.show(
 				sendError instanceof Error ? sendError.message : 'Unable to send this message.'
@@ -229,6 +235,7 @@
 		{/if}
 		<div class="composer-shell">
 			<ComposerTextInput
+				bind:this={textInput}
 				{inputId}
 				{draft}
 				{projectId}

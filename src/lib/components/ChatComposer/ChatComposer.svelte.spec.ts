@@ -287,6 +287,53 @@ describe('ChatComposer', () => {
 		expect(onSend).not.toHaveBeenCalled();
 	});
 
+	it('clears autocomplete and textarea ARIA state when sending resets the draft', async () => {
+		autocompleteApi.listProjectSlashCommands.mockResolvedValue({
+			commands: [{ name: 'review', description: 'Review current changes', source: 'prompt' }]
+		});
+		const onSend = vi.fn().mockResolvedValue(true);
+		const screen = render(ChatComposer, props({ projectId: 'project-1', onSend }));
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await userEvent.click(textbox);
+		await textbox.fill('/rev');
+		await expect.element(screen.getByRole('listbox')).toBeVisible();
+		expect(textbox.element().getAttribute('aria-controls')).toMatch(/-autocomplete$/);
+		expect(textbox.element().getAttribute('aria-activedescendant')).toMatch(/-option-0$/);
+
+		await screen.getByRole('button', { name: 'Send message' }).click();
+
+		await expect.element(textbox).toHaveValue('');
+		expect(screen.container.querySelector('[role="listbox"]')).toBeNull();
+		expect(textbox.element().hasAttribute('aria-controls')).toBe(false);
+		expect(textbox.element().hasAttribute('aria-activedescendant')).toBe(false);
+		expect(onSend).toHaveBeenCalledWith({ text: '/rev', attachments: [] });
+	});
+
+	it('keeps textarea ARIA selection in sync and clears it with Escape', async () => {
+		autocompleteApi.listProjectSlashCommands.mockResolvedValue({
+			commands: [
+				{ name: 'review', description: 'Review current changes', source: 'prompt' },
+				{ name: 'refactor', description: 'Refactor selected code', source: 'skill' }
+			]
+		});
+		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await userEvent.click(textbox);
+		await textbox.fill('/');
+		await expect.element(screen.getByRole('listbox')).toBeVisible();
+		expect(textbox.element().getAttribute('aria-activedescendant')).toMatch(/-option-0$/);
+
+		await userEvent.keyboard('{ArrowDown}');
+		expect(textbox.element().getAttribute('aria-activedescendant')).toMatch(/-option-1$/);
+
+		await userEvent.keyboard('{Escape}');
+		expect(screen.container.querySelector('[role="listbox"]')).toBeNull();
+		expect(textbox.element().hasAttribute('aria-controls')).toBe(false);
+		expect(textbox.element().hasAttribute('aria-activedescendant')).toBe(false);
+	});
+
 	it('inserts an @ file path with Tab', async () => {
 		autocompleteApi.searchProjectFiles.mockResolvedValue({ files: [{ path: 'src/lib/chat.ts' }] });
 		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
@@ -307,5 +354,31 @@ describe('ChatComposer', () => {
 		await userEvent.keyboard('{Tab}');
 
 		await expect.element(textbox).toHaveValue('Inspect @src/lib/chat.ts ');
+	});
+
+	it('keeps file suggestions mounted while a refined search is debounced', async () => {
+		autocompleteApi.searchProjectFiles.mockReset();
+		autocompleteApi.searchProjectFiles.mockResolvedValue({ files: [{ path: 'src/lib/chat.ts' }] });
+		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await userEvent.click(textbox);
+		await textbox.fill('Inspect @cha');
+		await vi.waitFor(() =>
+			expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledWith(
+				'project-1',
+				'cha',
+				expect.any(AbortSignal)
+			)
+		);
+		await expect.element(screen.getByRole('listbox')).toBeVisible();
+		const listbox = screen.container.querySelector('[role="listbox"]');
+		expect(listbox).not.toBeNull();
+
+		await userEvent.keyboard('t');
+
+		await expect.element(screen.getByRole('listbox')).toBeVisible();
+		expect(screen.container.querySelector('[role="listbox"]')).toBe(listbox);
+		expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledOnce();
 	});
 });
