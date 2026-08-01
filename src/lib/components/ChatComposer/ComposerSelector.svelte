@@ -23,7 +23,11 @@
 		triggerLabel ?? selectedOption?.label ?? `No ${label.toLowerCase()} selected`
 	);
 
-	function handleValueChange(nextValue: string): void {
+	function getValue(): string {
+		return value;
+	}
+
+	function setValue(nextValue: string): void {
 		if (nextValue !== value) {
 			void onChange(nextValue);
 		}
@@ -32,11 +36,10 @@
 
 <Select.Root
 	type="single"
-	{value}
+	bind:value={getValue, setValue}
 	items={options}
 	{disabled}
 	scrollAlignment="nearest"
-	onValueChange={handleValueChange}
 >
 	<Select.Trigger class="selector-trigger" aria-label={label} title={displayLabel}>
 		<span class="selector-value">{displayLabel}</span>
