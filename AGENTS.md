@@ -5,6 +5,17 @@
 - **Add-ons**: prettier, eslint, vitest, playwright, tailwindcss, mcp,
   sveltekit-adapter
 
+## Svelte Reactivity:
+
+- Treat `$effect` as an escape hatch and avoid it by default.
+- Never use `$effect` to synchronize or derive state; prefer `$derived`, event
+  handlers, function bindings, or explicit methods instead.
+- Prefer `{@attach}` for DOM lifecycle work and SvelteKit navigation hooks such
+  as `afterNavigate` for route lifecycle work.
+- Use `$effect` only when no declarative or lifecycle API expresses the required
+  browser-side integration; keep any such effect narrowly scoped and do not
+  write reactive state from it.
+
 ## Validation
 
 - After making any edits, run `npm run lint` before responding. Report any
@@ -44,14 +55,3 @@ until no issues or suggestions are returned.
 Generates a Svelte Playground link with the provided code. After completing the
 code, ask the user if they want a playground link. Only call this tool after
 user confirmation and NEVER if code was written to files in their project.
-
-## Svelte Reactivity:
-
-- Treat `$effect` as an escape hatch and avoid it by default.
-- Never use `$effect` to synchronize or derive state; prefer `$derived`, event
-  handlers, function bindings, or explicit methods instead.
-- Prefer `{@attach}` for DOM lifecycle work and SvelteKit navigation hooks such
-  as `afterNavigate` for route lifecycle work.
-- Use `$effect` only when no declarative or lifecycle API expresses the required
-  browser-side integration; keep any such effect narrowly scoped and do not
-  write reactive state from it.
