@@ -22,6 +22,12 @@
 					"endsPattern": "\\bLocal:\\s+http://127\\.0\\.0\\.1:5173/"
 				}
 			}
+		},
+		{
+			"label": "Stop SvelteKit dev server",
+			"type": "shell",
+			"command": "fuser --kill 5173/tcp || true",
+			"problemMatcher": []
 		}
 	]
 }

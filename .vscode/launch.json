@@ -10,7 +10,8 @@
 			"userDataDir": "${env:HOME}/.var/app/com.google.Chrome/cache/vscode-debug",
 			"webRoot": "${workspaceFolder}",
 			"resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
-			"preLaunchTask": "Start SvelteKit dev server"
+			"preLaunchTask": "Start SvelteKit dev server",
+			"postDebugTask": "Stop SvelteKit dev server"
 		}
 	]
 }
