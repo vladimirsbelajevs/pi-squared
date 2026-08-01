@@ -41,7 +41,7 @@
 </script>
 
 <script lang="ts">
-	let transitionRequests = $state<PendingPermission[]>([confirmRequest]);
+	let transitionRequests = $state<PendingPermission[]>([confirmRequest, selectRequest]);
 
 	function removeTransitionRequest(request: PendingPermission): void {
 		transitionRequests = transitionRequests.filter(
@@ -80,6 +80,7 @@
 	template={permissionApprovalTemplate}
 	args={{ requests: [selectRequest] }}
 	play={async ({ args, userEvent }) => {
+		await expect(screen.queryByLabelText('Approval progress')).not.toBeInTheDocument();
 		await userEvent.click(screen.getByRole('button', { name: 'Yes, for this session' }));
 		await expect(args.onSelect).toHaveBeenCalledWith(selectRequest, 'Yes, for this session');
 	}}
@@ -148,18 +149,18 @@
 />
 
 <Story
-	name="Transitions"
+	name="Queued approvals"
 	template={transitionTemplate}
 	args={{ requests: [confirmRequest] }}
 	play={async ({ userEvent }) => {
-		await waitFor(() =>
-			expect(screen.getByRole('alertdialog', { name: 'Approval required' })).toBeVisible()
-		);
+		await expect(screen.getByRole('alertdialog', { name: 'Approval required' })).toBeVisible();
+		await expect(screen.getByLabelText('Approval progress')).toHaveTextContent('1/2');
 
 		await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
-		await expect(
-			screen.getByRole('alertdialog', { name: 'Approval required' })
-		).toBeInTheDocument();
+		await expect(screen.getByText('Allow `pwd`?')).toBeVisible();
+		await expect(screen.getByLabelText('Approval progress')).toHaveTextContent('2/2');
+
+		await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
 		await waitFor(() =>
 			expect(
 				screen.queryByRole('alertdialog', { name: 'Approval required' })

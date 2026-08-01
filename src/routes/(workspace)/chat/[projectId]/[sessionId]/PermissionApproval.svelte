@@ -12,148 +12,158 @@
 
 	let { requests, onSelect, onConfirm, onCancel }: Props = $props();
 	let inputs = $state<Record<string, string>>({});
-	let closingRequests = $state<Record<string, PendingPermission>>({});
-	let displayedRequests = $derived.by(() => {
-		const activeRequestIds = new Set(requests.map((request) => request.id));
+	let completedApprovals = $state(0);
+	let currentRequest = $derived(requests[0]);
+	let totalApprovals = $derived(completedApprovals + requests.length);
+	let currentApproval = $derived(completedApprovals + 1);
 
-		return [
-			...requests,
-			...Object.values(closingRequests).filter((request) => !activeRequestIds.has(request.id))
-		];
-	});
-
-	function submitInput(request: PendingPermission): void {
-		const input = inputs[request.id] ?? '';
-		if (!input.trim()) {
+	function respond(callback: (request: PendingPermission) => Promise<void>): void {
+		if (!currentRequest) {
 			return;
 		}
 
-		respond(request, () => onSelect(request, input));
-	}
-
-	function respond(request: PendingPermission, callback: () => Promise<void>): void {
-		closingRequests[request.id] = request;
-		void callback().finally(() => {
-			if (requests.some((activeRequest) => activeRequest.id === request.id)) {
-				delete closingRequests[request.id];
+		const request = currentRequest;
+		void callback(request).finally(() => {
+			if (!requests.some((activeRequest) => activeRequest.id === request.id)) {
+				completedApprovals = requests.length === 0 ? 0 : completedApprovals + 1;
 			}
 		});
 	}
 
-	function handleInput(request: PendingPermission, event: Event): void {
-		inputs[request.id] = (event.currentTarget as HTMLInputElement).value;
-	}
-
-	function handleInputKeydown(request: PendingPermission, event: KeyboardEvent): void {
-		if (event.key !== 'Enter') {
+	function submitInput(): void {
+		if (!currentRequest) {
 			return;
 		}
 
-		event.preventDefault();
-		submitInput(request);
+		const input = inputs[currentRequest.id] ?? '';
+		if (input.trim()) {
+			respond((request) => onSelect(request, input));
+		}
+	}
+
+	function resetProgress(): void {
+		if (!currentRequest) {
+			completedApprovals = 0;
+		}
 	}
 </script>
 
-{#each displayedRequests as request (request.id)}
-	<AlertDialog.Root open={!closingRequests[request.id]}>
-		<AlertDialog.Portal>
-			<AlertDialog.Overlay class="permission-overlay" data-permission-approval />
-			<AlertDialog.Content
-				forceMount
-				restoreScrollDelay={150}
-				interactOutsideBehavior="ignore"
-				onEscapeKeydown={(event) => event.preventDefault()}
-			>
-				{#snippet child({ props, open })}
-					{#if open}
-						<div
-							{...props}
-							class="permission-content"
-							aria-busy={request.responding}
-							data-permission-approval
-							transition:fly={{ y: 16, duration: 150 }}
-							onoutroend={() => delete closingRequests[request.id]}
-						>
-							<header>
-								<span class="permission-mark" aria-hidden="true">!</span>
-								<AlertDialog.Title>Approval required</AlertDialog.Title>
-							</header>
-							<AlertDialog.Description class="permission-copy">
-								{request.title}
-								{#if request.message}<span class="permission-message">{request.message}</span>{/if}
-							</AlertDialog.Description>
+<AlertDialog.Root open={currentRequest !== undefined}>
+	<AlertDialog.Portal>
+		<AlertDialog.Overlay class="permission-overlay" data-permission-approval />
+		<AlertDialog.Content
+			forceMount
+			restoreScrollDelay={150}
+			interactOutsideBehavior="ignore"
+			onEscapeKeydown={(event) => event.preventDefault()}
+		>
+			{#snippet child({ props, open })}
+				{#if open && currentRequest}
+					<div
+						{...props}
+						class="permission-content"
+						aria-busy={currentRequest.responding}
+						data-permission-approval
+						transition:fly={{ y: 16, duration: 150 }}
+						onoutroend={resetProgress}
+					>
+						<header>
+							<span class="permission-mark" aria-hidden="true">!</span>
+							<AlertDialog.Title>Approval required</AlertDialog.Title>
+						</header>
+						<AlertDialog.Description class="permission-copy">
+							{currentRequest.title}
+							{#if currentRequest.message}
+								<span class="permission-message">{currentRequest.message}</span>
+							{/if}
+						</AlertDialog.Description>
 
-							{#if request.method === 'select'}
-								<div class="permission-actions">
-									{#each request.options ?? [] as option (option)}
-										<button
-											data-primary={option.startsWith('Yes') || undefined}
-											type="button"
-											disabled={request.responding}
-											onclick={() => respond(request, () => onSelect(request, option))}
-										>
-											{option}
-										</button>
-									{/each}
-								</div>
-							{:else if request.method === 'confirm'}
+						{#if currentRequest.method === 'select'}
+							<div class="permission-actions">
+								{#each currentRequest.options ?? [] as option (option)}
+									<button
+										data-primary={option.startsWith('Yes') || undefined}
+										type="button"
+										disabled={currentRequest.responding}
+										onclick={() => respond((request) => onSelect(request, option))}
+									>
+										{option}
+									</button>
+								{/each}
+							</div>
+						{:else if currentRequest.method === 'confirm'}
+							<div class="permission-actions">
+								<button
+									data-primary
+									type="button"
+									disabled={currentRequest.responding}
+									onclick={() => respond((request) => onConfirm(request, true))}
+								>
+									Approve
+								</button>
+								<button
+									type="button"
+									disabled={currentRequest.responding}
+									onclick={() => respond((request) => onConfirm(request, false))}
+								>
+									Deny
+								</button>
+							</div>
+						{:else}
+							<div class="permission-input">
+								<label>
+									<span>Reason</span>
+									<input
+										value={inputs[currentRequest.id] ?? ''}
+										disabled={currentRequest.responding}
+										placeholder={currentRequest.placeholder ?? 'Reason'}
+										oninput={(event) => {
+											inputs[currentRequest.id] = (event.currentTarget as HTMLInputElement).value;
+										}}
+										onkeydown={(event) => {
+											if (event.key === 'Enter') {
+												event.preventDefault();
+												submitInput();
+											}
+										}}
+									/>
+								</label>
 								<div class="permission-actions">
 									<button
 										data-primary
 										type="button"
-										disabled={request.responding}
-										onclick={() => respond(request, () => onConfirm(request, true))}
+										disabled={currentRequest.responding ||
+											!(inputs[currentRequest.id] ?? '').trim()}
+										onclick={submitInput}
 									>
-										Approve
+										Submit reason
 									</button>
 									<button
 										type="button"
-										disabled={request.responding}
-										onclick={() => respond(request, () => onConfirm(request, false))}
+										disabled={currentRequest.responding}
+										onclick={() => respond((request) => onCancel(request))}
 									>
-										Deny
+										Cancel
 									</button>
 								</div>
-							{:else}
-								<div class="permission-input">
-									<label>
-										<span>Reason</span>
-										<input
-											value={inputs[request.id] ?? ''}
-											disabled={request.responding}
-											placeholder={request.placeholder ?? 'Reason'}
-											oninput={(event) => handleInput(request, event)}
-											onkeydown={(event) => handleInputKeydown(request, event)}
-										/>
-									</label>
-									<div class="permission-actions">
-										<button
-											data-primary
-											type="button"
-											disabled={request.responding || !(inputs[request.id] ?? '').trim()}
-											onclick={() => submitInput(request)}
-										>
-											Submit reason
-										</button>
-										<button
-											type="button"
-											disabled={request.responding}
-											onclick={() => respond(request, () => onCancel(request))}
-										>
-											Cancel
-										</button>
-									</div>
-								</div>
-							{/if}
+							</div>
+						{/if}
 
-							{#if request.error}<p class="permission-error" role="alert">{request.error}</p>{/if}
-						</div>
-					{/if}
-				{/snippet}
-			</AlertDialog.Content>
-		</AlertDialog.Portal>
-	</AlertDialog.Root>
-{/each}
+						{#if currentRequest.error}
+							<p class="permission-error" role="alert">{currentRequest.error}</p>
+						{/if}
+
+						{#if totalApprovals > 1}
+							<output class="permission-progress" aria-label="Approval progress">
+								{currentApproval}/{totalApprovals}
+							</output>
+						{/if}
+					</div>
+				{/if}
+			{/snippet}
+		</AlertDialog.Content>
+	</AlertDialog.Portal>
+</AlertDialog.Root>
 
 <style>
 	:global([data-permission-approval].permission-overlay) {
@@ -281,6 +291,14 @@
 		margin-top: 0.8rem;
 		color: var(--danger);
 		font-size: 0.8rem;
+	}
+
+	:global([data-permission-approval] .permission-progress) {
+		display: block;
+		margin-top: 1rem;
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		text-align: right;
 	}
 
 	@media (max-width: 700px) {
