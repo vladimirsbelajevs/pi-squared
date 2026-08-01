@@ -49,7 +49,7 @@
 </script>
 
 <AlertDialog.Root open={currentRequest !== undefined}>
-	<AlertDialog.Portal>
+	<AlertDialog.Portal disabled>
 		<AlertDialog.Overlay class="permission-overlay" data-permission-approval />
 		<AlertDialog.Content
 			forceMount
@@ -174,11 +174,9 @@
 	}
 
 	:global([data-permission-approval].permission-content) {
-		position: fixed;
-		top: 50%;
-		left: 50%;
+		position: relative;
 		z-index: 6;
-		width: min(54rem, calc(100vw - 2rem));
+		width: 100%;
 		box-sizing: border-box;
 		border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
 		border-radius: 0.75rem;
@@ -186,7 +184,7 @@
 		box-shadow: 0 0.75rem 2rem var(--shadow);
 		color: var(--text);
 		padding: 1rem;
-		transform: translate(-50%, -50%);
+		transform: none;
 	}
 
 	:global([data-permission-approval] header) {
@@ -299,11 +297,5 @@
 		color: var(--text-muted);
 		font-size: 0.8rem;
 		text-align: right;
-	}
-
-	@media (max-width: 700px) {
-		:global([data-permission-approval].permission-content) {
-			width: calc(100vw - 1.5rem);
-		}
 	}
 </style>
