@@ -8,3 +8,12 @@ bun.lockb
 # Miscellaneous
 /static/
 /.pi/
+
+# Tooling configuration excluded from linting
+.mcp.json
+.vscode/
+.storybook/
+eslint.config.js
+opencode.json
+vite.config.ts
+vitest.shims.d.ts
