@@ -1,7 +1,7 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import type { ComponentProps } from 'svelte';
-	import { expect, fn, waitFor } from 'storybook/test';
+	import { expect, fn, screen, waitFor } from 'storybook/test';
 	import PermissionApproval from './PermissionApproval.svelte';
 
 	type PermissionApprovalStoryArgs = ComponentProps<PermissionApproval> & { open?: boolean };
@@ -49,8 +49,8 @@
 <Story
 	name="Select option"
 	args={{ request: selectRequest }}
-	play={async ({ args, canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole('button', { name: 'Yes, for this session' }));
+	play={async ({ args, userEvent }) => {
+		await userEvent.click(screen.getByRole('button', { name: 'Yes, for this session' }));
 		await expect(args.onSelect).toHaveBeenCalledWith(selectRequest, 'Yes, for this session');
 	}}
 />
@@ -58,8 +58,8 @@
 <Story
 	name="Confirmation"
 	args={{ request: confirmRequest }}
-	play={async ({ args, canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole('button', { name: 'Deny' }));
+	play={async ({ args, userEvent }) => {
+		await userEvent.click(screen.getByRole('button', { name: 'Deny' }));
 		await expect(args.onConfirm).toHaveBeenCalledWith(confirmRequest, false);
 	}}
 />
@@ -67,12 +67,12 @@
 <Story
 	name="Reason required"
 	args={{ request: inputRequest }}
-	play={async ({ args, canvas, userEvent }) => {
+	play={async ({ args, userEvent }) => {
 		await userEvent.type(
-			canvas.getByRole('textbox', { name: 'Reason' }),
+			screen.getByRole('textbox', { name: 'Reason' }),
 			'Use the documented project command instead.'
 		);
-		await userEvent.click(canvas.getByRole('button', { name: 'Submit reason' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Submit reason' }));
 		await expect(args.onSelect).toHaveBeenCalledWith(
 			inputRequest,
 			'Use the documented project command instead.'
@@ -89,25 +89,31 @@
 			error: 'The permission request has expired.'
 		}
 	}}
-	play={async ({ canvas }) => {
-		await expect(canvas.getByRole('button', { name: 'Approve' })).toBeDisabled();
-		await expect(canvas.getByText('The permission request has expired.')).toBeVisible();
+	play={async () => {
+		await expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+		await expect(screen.getByText('The permission request has expired.')).toBeVisible();
 	}}
 />
 
 <Story
 	name="Opens and closes"
 	args={{ open: false, request: confirmRequest, onConfirm: fn(async () => undefined) }}
-	play={async ({ args, canvas, updateArgs, userEvent }) => {
-		await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+	play={async ({ args, updateArgs, userEvent }) => {
+		await expect(
+			screen.queryByRole('dialog', { name: 'Permission approval' })
+		).not.toBeInTheDocument();
 
 		updateArgs({ open: true });
-		await waitFor(() => expect(canvas.getByRole('alert')).toBeVisible());
+		await waitFor(() =>
+			expect(screen.getByRole('dialog', { name: 'Permission approval' })).toBeVisible()
+		);
 
-		await userEvent.click(canvas.getByRole('button', { name: 'Approve' }));
+		await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
 		await expect(args.onConfirm).toHaveBeenCalledWith(confirmRequest, true);
 
 		updateArgs({ open: false });
-		await waitFor(() => expect(canvas.queryByRole('alert')).not.toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.queryByRole('dialog', { name: 'Permission approval' })).not.toBeInTheDocument()
+		);
 	}}
 />

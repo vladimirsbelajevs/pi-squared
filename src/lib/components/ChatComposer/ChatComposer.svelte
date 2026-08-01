@@ -321,8 +321,7 @@
 		overflow-y: auto;
 	}
 
-	.composer-popups :global(.transient-notice-popup),
-	.composer-popups :global(.permission-request) {
+	.composer-popups :global(.transient-notice-popup) {
 		margin: 0;
 	}
 
