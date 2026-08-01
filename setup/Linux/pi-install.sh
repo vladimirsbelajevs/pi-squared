@@ -14,4 +14,5 @@ pi install npm:pi-web-access
 
 
 # Adjust permissions for PI
-./pi-permission-adjust.sh
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+"${script_dir}/pi-permission-adjust.sh"

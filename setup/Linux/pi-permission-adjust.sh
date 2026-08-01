@@ -4,7 +4,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-source_file="${script_dir}/configs/permissions.json"
+source_file="${script_dir}/../configs/permissions.json"
 
 agent_dir="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}"
 target_dir="${agent_dir}/extensions/pi-permission-system"
