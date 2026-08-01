@@ -21,6 +21,16 @@
 - For Bits UI development, configuration, troubleshooting, or API questions,
   read and follow [`.agents/skills/bits-ui-docs/SKILL.md`](.agents/skills/bits-ui-docs/SKILL.md).
 
+## Bits UI Portal Styling
+
+- Bits UI portal primitives (for example, `Select.Content`, `Select.Viewport`,
+  and `Tooltip.Content`) render outside their source component. Regular Svelte
+  scoped selectors may not reach their generated DOM nodes.
+- When styling them, add a component-specific `data-*` attribute to the
+  primitive and qualify any required `:global(...)` selector with that
+  attribute. Do not use unqualified global class selectors.
+- Keep styles for direct DOM children as normal scoped CSS.
+
 ## Validation
 
 - After making any edits, run `npm run lint` before responding. Report any

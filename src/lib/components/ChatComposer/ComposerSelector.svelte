@@ -52,7 +52,12 @@
 		<Tooltip.Root>
 			<Tooltip.Trigger>
 				{#snippet child({ props })}
-					<Select.Trigger {...props} class="selector-trigger" aria-label={label}>
+					<Select.Trigger
+						{...props}
+						class="selector-trigger"
+						aria-label={label}
+						data-composer-selector
+					>
 						<span class="selector-value">{displayLabel}</span>
 						<svg viewBox="0 0 12 12" aria-hidden="true">
 							<path
@@ -67,21 +72,32 @@
 				{/snippet}
 			</Tooltip.Trigger>
 			<Tooltip.Portal>
-				<Tooltip.Content class="selector-tooltip" side="top" sideOffset={6}>
+				<Tooltip.Content class="selector-tooltip" side="top" sideOffset={6} data-composer-selector>
 					{label}: {displayLabel}
 				</Tooltip.Content>
 			</Tooltip.Portal>
 		</Tooltip.Root>
 
 		<Select.Portal>
-			<Select.Content class="selector-menu" side="top" sideOffset={6} align="start">
-				<Select.Viewport class="selector-viewport" onscroll={closeOptionTooltip}>
+			<Select.Content
+				class="selector-menu"
+				side="top"
+				sideOffset={6}
+				align="start"
+				data-composer-selector
+			>
+				<Select.Viewport
+					class="selector-viewport"
+					onscroll={closeOptionTooltip}
+					data-composer-selector
+				>
 					{#each options as option (option.value)}
 						<Tooltip.Trigger tether={optionTooltipTether} payload={option.label}>
 							{#snippet child({ props })}
 								<Select.Item
 									{...props}
 									class="selector-option"
+									data-composer-selector
 									value={option.value}
 									label={option.label}
 									disabled={option.disabled}
@@ -104,7 +120,12 @@
 	<Tooltip.Root tether={optionTooltipTether} bind:open={optionTooltipOpen}>
 		{#snippet children({ payload })}
 			<Tooltip.Portal>
-				<Tooltip.Content class="selector-tooltip" side="right" sideOffset={6}>
+				<Tooltip.Content
+					class="selector-tooltip"
+					side="right"
+					sideOffset={6}
+					data-composer-selector
+				>
 					{payload}
 				</Tooltip.Content>
 			</Tooltip.Portal>
@@ -113,7 +134,7 @@
 </Tooltip.Provider>
 
 <style>
-	:global(.selector-trigger) {
+	:global([data-composer-selector].selector-trigger) {
 		display: inline-flex;
 		align-items: center;
 		max-width: 15rem;
@@ -126,41 +147,41 @@
 		font-size: 0.72rem;
 	}
 
-	:global(.selector-trigger:hover:not(:disabled)),
-	:global(.selector-trigger[data-state='open']),
-	:global(.selector-trigger:focus-visible) {
+	:global([data-composer-selector].selector-trigger:hover:not(:disabled)),
+	:global([data-composer-selector].selector-trigger[data-state='open']),
+	:global([data-composer-selector].selector-trigger:focus-visible) {
 		background: var(--surface-muted);
 		color: var(--text);
 	}
 
-	:global(.selector-trigger:focus-visible),
-	:global(.selector-option:focus-visible) {
+	:global([data-composer-selector].selector-trigger:focus-visible),
+	:global([data-composer-selector].selector-option:focus-visible) {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
 
-	:global(.selector-trigger:disabled),
-	:global(.selector-option[data-disabled]) {
+	:global([data-composer-selector].selector-trigger:disabled),
+	:global([data-composer-selector].selector-option[data-disabled]) {
 		opacity: 0.45;
 	}
 
-	:global(.selector-value),
-	:global(.selector-option-label) {
+	.selector-value,
+	.selector-option-label {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	:global(.selector-trigger svg) {
+	:global([data-composer-selector].selector-trigger svg) {
 		width: 0.8rem;
 		height: 0.8rem;
 	}
 
-	:global(.selector-trigger[data-state='open'] svg) {
+	:global([data-composer-selector].selector-trigger[data-state='open'] svg) {
 		transform: rotate(180deg);
 	}
 
-	:global(.selector-menu) {
+	:global([data-composer-selector].selector-menu) {
 		z-index: 5;
 		min-width: max(var(--bits-select-anchor-width), 10rem);
 		max-width: min(22rem, calc(100vw - 1.5rem));
@@ -170,26 +191,28 @@
 		padding: 0.25rem;
 	}
 
-	:global(.selector-viewport[data-select-viewport]) {
+	:global([data-composer-selector].selector-viewport[data-select-viewport]) {
 		max-height: min(18rem, 45dvh);
 		overflow-y: auto;
 		scrollbar-color: var(--border-strong) transparent;
 		scrollbar-width: thin !important;
 	}
 
-	:global(.selector-viewport[data-select-viewport]::-webkit-scrollbar) {
+	:global([data-composer-selector].selector-viewport[data-select-viewport]::-webkit-scrollbar) {
 		display: block !important;
 		width: 0.5rem;
 	}
 
-	:global(.selector-viewport[data-select-viewport]::-webkit-scrollbar-thumb) {
+	:global(
+		[data-composer-selector].selector-viewport[data-select-viewport]::-webkit-scrollbar-thumb
+	) {
 		border: 2px solid transparent;
 		border-radius: 999px;
 		background: var(--border-strong);
 		background-clip: padding-box;
 	}
 
-	:global(.selector-tooltip) {
+	:global([data-composer-selector].selector-tooltip) {
 		z-index: 6;
 		max-width: min(22rem, calc(100vw - 1.5rem));
 		border: 1px solid var(--border-strong);
@@ -200,7 +223,7 @@
 		font-size: 0.7rem;
 	}
 
-	:global(.selector-option) {
+	:global([data-composer-selector].selector-option) {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -210,13 +233,13 @@
 		font-size: 0.72rem;
 	}
 
-	:global(.selector-option[data-highlighted]),
-	:global(.selector-option[data-selected]) {
+	:global([data-composer-selector].selector-option[data-highlighted]),
+	:global([data-composer-selector].selector-option[data-selected]) {
 		background: var(--surface-strong);
 		color: var(--text);
 	}
 
-	:global(.selector-check) {
+	.selector-check {
 		margin-left: auto;
 		color: var(--accent);
 	}
