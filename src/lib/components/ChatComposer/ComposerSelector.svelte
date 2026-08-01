@@ -18,6 +18,9 @@
 
 	let { label, value, options, triggerLabel, disabled = false, onChange }: Props = $props();
 
+	const optionTooltipTether = Tooltip.createTether<string>();
+	let optionTooltipOpen = $state(false);
+
 	let selectedOption = $derived(options.find((option) => option.value === value));
 	let displayLabel = $derived(
 		triggerLabel ?? selectedOption?.label ?? `No ${label.toLowerCase()} selected`
@@ -32,19 +35,23 @@
 			void onChange(nextValue);
 		}
 	}
+
+	function closeOptionTooltip(): void {
+		optionTooltipOpen = false;
+	}
 </script>
 
 <Tooltip.Provider delayDuration={400}>
-	<Tooltip.Root>
-		<Tooltip.Trigger>
-			{#snippet child({ props })}
-				<Select.Root
-					type="single"
-					bind:value={getValue, setValue}
-					items={options}
-					{disabled}
-					scrollAlignment="nearest"
-				>
+	<Select.Root
+		type="single"
+		bind:value={getValue, setValue}
+		items={options}
+		{disabled}
+		scrollAlignment="nearest"
+	>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
 					<Select.Trigger {...props} class="selector-trigger" aria-label={label}>
 						<span class="selector-value">{displayLabel}</span>
 						<svg viewBox="0 0 12 12" aria-hidden="true">
@@ -57,37 +64,51 @@
 							/>
 						</svg>
 					</Select.Trigger>
+				{/snippet}
+			</Tooltip.Trigger>
+			<Tooltip.Portal>
+				<Tooltip.Content class="selector-tooltip" side="top" sideOffset={6}>
+					{label}: {displayLabel}
+				</Tooltip.Content>
+			</Tooltip.Portal>
+		</Tooltip.Root>
 
-					<Select.Portal>
-						<Select.Content class="selector-menu" side="top" sideOffset={6} align="start">
-							<Select.Viewport class="selector-viewport">
-								{#each options as option (option.value)}
-									<Select.Item
-										class="selector-option"
-										value={option.value}
-										label={option.label}
-										title={option.label}
-										disabled={option.disabled}
-									>
-										{#snippet children({ selected })}
-											<span class="selector-option-label">{option.label}</span>
-											{#if selected}
-												<span class="selector-check" aria-hidden="true">✓</span>
-											{/if}
-										{/snippet}
-									</Select.Item>
-								{/each}
-							</Select.Viewport>
-						</Select.Content>
-					</Select.Portal>
-				</Select.Root>
-			{/snippet}
-		</Tooltip.Trigger>
-		<Tooltip.Portal>
-			<Tooltip.Content class="selector-tooltip" side="top" sideOffset={6}>
-				{label}: {displayLabel}
-			</Tooltip.Content>
-		</Tooltip.Portal>
+		<Select.Portal>
+			<Select.Content class="selector-menu" side="top" sideOffset={6} align="start">
+				<Select.Viewport class="selector-viewport" onscroll={closeOptionTooltip}>
+					{#each options as option (option.value)}
+						<Tooltip.Trigger tether={optionTooltipTether} payload={option.label}>
+							{#snippet child({ props })}
+								<Select.Item
+									{...props}
+									class="selector-option"
+									value={option.value}
+									label={option.label}
+									disabled={option.disabled}
+								>
+									{#snippet children({ selected })}
+										<span class="selector-option-label">{option.label}</span>
+										{#if selected}
+											<span class="selector-check" aria-hidden="true">✓</span>
+										{/if}
+									{/snippet}
+								</Select.Item>
+							{/snippet}
+						</Tooltip.Trigger>
+					{/each}
+				</Select.Viewport>
+			</Select.Content>
+		</Select.Portal>
+	</Select.Root>
+
+	<Tooltip.Root tether={optionTooltipTether} bind:open={optionTooltipOpen}>
+		{#snippet children({ payload })}
+			<Tooltip.Portal>
+				<Tooltip.Content class="selector-tooltip" side="right" sideOffset={6}>
+					{payload}
+				</Tooltip.Content>
+			</Tooltip.Portal>
+		{/snippet}
 	</Tooltip.Root>
 </Tooltip.Provider>
 
