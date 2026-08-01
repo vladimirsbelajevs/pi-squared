@@ -7,7 +7,7 @@
 
 ---
 
-You are able to use the Svelte MCP server (svelte mcp is also installed as dev dependency in this project as fallback in case if there are problems with MCP config), where you have access to
+You are able to use the Svelte MCP server, where you have access to
 comprehensive Svelte 5 and SvelteKit documentation. Here's how to use the
 available tools effectively:
 
