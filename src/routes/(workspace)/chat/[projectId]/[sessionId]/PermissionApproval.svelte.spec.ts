@@ -18,7 +18,9 @@ describe('PermissionApproval', () => {
 			onCancel: vi.fn()
 		});
 
-		await expect.element(screen.getByRole('dialog', { name: 'Permission approval' })).toBeVisible();
+		await expect
+			.element(screen.getByRole('alertdialog', { name: 'Approval required' }))
+			.toBeVisible();
 		await screen.getByRole('button', { name: 'Yes, for this session' }).click();
 		expect(onSelect).toHaveBeenCalledWith(request, 'Yes, for this session');
 	});
