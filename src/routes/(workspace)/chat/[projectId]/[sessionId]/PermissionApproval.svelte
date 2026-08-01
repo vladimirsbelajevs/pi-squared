@@ -11,13 +11,21 @@
 	let { request, onSelect, onConfirm, onCancel }: Props = $props();
 	let input = $state('');
 
-	function submitInput(event: SubmitEvent): void {
-		event.preventDefault();
+	function submitInput(): void {
 		if (!input.trim()) {
 			return;
 		}
 
 		void onSelect(request, input);
+	}
+
+	function handleInputKeydown(event: KeyboardEvent): void {
+		if (event.key !== 'Enter') {
+			return;
+		}
+
+		event.preventDefault();
+		submitInput();
 	}
 </script>
 
@@ -63,24 +71,30 @@
 			</button>
 		</div>
 	{:else}
-		<form class="permission-input" onsubmit={submitInput}>
+		<div class="permission-input">
 			<label>
 				<span>Reason</span>
 				<input
 					bind:value={input}
 					disabled={request.responding}
 					placeholder={request.placeholder ?? 'Reason'}
+					onkeydown={handleInputKeydown}
 				/>
 			</label>
 			<div class="permission-options">
-				<button class="approve" type="submit" disabled={request.responding || !input.trim()}>
+				<button
+					class="approve"
+					type="button"
+					disabled={request.responding || !input.trim()}
+					onclick={submitInput}
+				>
 					Submit reason
 				</button>
 				<button type="button" disabled={request.responding} onclick={() => void onCancel(request)}>
 					Cancel
 				</button>
 			</div>
-		</form>
+		</div>
 	{/if}
 
 	{#if request.error}<p class="permission-error">{request.error}</p>{/if}

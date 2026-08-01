@@ -60,7 +60,7 @@
 		</button>
 	{:else}
 		<span class="attachment-preview-file-icon" aria-hidden="true"
-			>{attachment.kind === 'image' ? 'Image' : '&lt;/&gt;'}</span
+			>{attachment.kind === 'image' ? 'Image' : '</>'}</span
 		>
 	{/if}
 	<span class="attachment-preview-details">

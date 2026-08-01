@@ -22,6 +22,7 @@
 				class:chosen={workspace.theme === value}
 				class={`theme-choice theme-${value}`}
 				type="button"
+				aria-pressed={workspace.theme === value}
 				onclick={() => workspace.applyTheme(value as Theme)}
 			>
 				<span></span>{label}
