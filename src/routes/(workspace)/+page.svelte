@@ -24,6 +24,13 @@
 			return;
 		}
 
+		if (workspace.tabs.length === 0) {
+			const newTab = workspace.createNewTab();
+			await goto(resolve(`/new/${encodeURIComponent(newTab.id)}`), { replaceState: true });
+
+			return;
+		}
+
 		await goto(resolve('/history'), { replaceState: true });
 	});
 </script>

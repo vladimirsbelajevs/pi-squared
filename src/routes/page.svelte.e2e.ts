@@ -1,15 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-test('renders the tab-first harness shell', async ({ page }) => {
+test('opens a new tab from a fresh workspace', async ({ page }) => {
 	await page.goto('/');
-	await expect(page).toHaveURL(/\/history$/);
+	await expect(page).toHaveURL(/\/new\/[^/]+$/);
 
 	await expect(
 		page.getByRole('tab', { name: 'Historical sessions and harness settings' })
 	).toBeVisible();
-	await expect(page.getByRole('textbox', { name: 'Search historical sessions' })).toBeVisible();
-	await page.getByRole('button', { name: 'New chat tab' }).click();
-	await expect(page).toHaveURL(/\/new\/.+$/);
 	await expect(page.getByRole('heading', { name: 'Pi²' })).toBeVisible();
 	await expect(page.getByRole('textbox', { name: 'Message Pi' })).toBeVisible();
 	await expect(page.getByRole('combobox', { name: 'Model' })).toBeVisible();
@@ -21,6 +18,7 @@ test('renders the tab-first harness shell', async ({ page }) => {
 
 	await page.getByRole('tab', { name: 'Historical sessions and harness settings' }).click();
 	await expect(page).toHaveURL(/\/history$/);
+	await expect(page.getByRole('textbox', { name: 'Search historical sessions' })).toBeVisible();
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await expect(page).toHaveURL(/\/settings$/);
 	await expect(page.getByRole('heading', { name: 'Theme' })).toBeVisible();
