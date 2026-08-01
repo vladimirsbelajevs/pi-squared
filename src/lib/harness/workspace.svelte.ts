@@ -165,12 +165,6 @@ export class HarnessWorkspace {
 		return tab.kind === 'new' ? this.newHref(tab.id) : this.chatHref(tab.projectId, tab.sessionId);
 	}
 
-	activeTabHref(): string | undefined {
-		const tab = this.tabs.find((candidate) => candidate.id === this.activeTabId);
-
-		return tab ? this.hrefForTab(tab) : undefined;
-	}
-
 	rememberTabForPathname(pathname: string): void {
 		const tab = this.tabs.find((candidate) => this.hrefForTab(candidate) === pathname);
 		if (!tab || tab.id === this.activeTabId) {

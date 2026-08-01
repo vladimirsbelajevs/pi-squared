@@ -1,0 +1,55 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start SvelteKit dev server",
+			"type": "shell",
+			"command": "eval \"$(fnm env)\" && npm run dev -- --host 127.0.0.1 --port 5173",
+			"isBackground": true,
+			"problemMatcher": {
+				"owner": "vite",
+				"pattern": [
+					{
+						"regexp": "^(?!.*)((.*))$",
+						"kind": "file",
+						"file": 1,
+						"message": 2
+					}
+				],
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*",
+					"endsPattern": "\\bLocal:\\s+http://127\\.0\\.0\\.1:5173/"
+				}
+			}
+		},
+		{
+			"label": "Start Flatpak Chrome debugger",
+			"type": "shell",
+			"command": "flatpak run com.google.Chrome --remote-debugging-port=9222 --user-data-dir=\"${env:HOME}/.var/app/com.google.Chrome/cache/vscode-debug\" http://127.0.0.1:5173",
+			"isBackground": true,
+			"problemMatcher": {
+				"owner": "chrome",
+				"pattern": [
+					{
+						"regexp": "^(?!.*)((.*))$",
+						"kind": "file",
+						"file": 1,
+						"message": 2
+					}
+				],
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*",
+					"endsPattern": "DevTools listening on ws://127\\.0\\.0\\.1:9222/"
+				}
+			}
+		},
+		{
+			"label": "Start SvelteKit debugger",
+			"dependsOrder": "sequence",
+			"dependsOn": ["Start SvelteKit dev server", "Start Flatpak Chrome debugger"],
+			"problemMatcher": []
+		}
+	]
+}
