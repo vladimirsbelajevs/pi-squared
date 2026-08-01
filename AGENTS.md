@@ -16,20 +16,15 @@
   browser-side integration; keep any such effect narrowly scoped and do not
   write reactive state from it.
 
-## Bits UI Documentation
+## Bits UI
 
 - For Bits UI development, configuration, troubleshooting, or API questions,
-  read and follow [`.agents/skills/bits-ui-docs/SKILL.md`](.agents/skills/bits-ui-docs/SKILL.md).
+  read and follow [`.agents/skills/bits-ui/SKILL.md`](.agents/skills/bits-ui/SKILL.md).
 
-## Bits UI Portal Styling
+## Storybook component testing
 
-- Bits UI portal primitives (for example, `Select.Content`, `Select.Viewport`,
-  and `Tooltip.Content`) render outside their source component. Regular Svelte
-  scoped selectors may not reach their generated DOM nodes.
-- When styling them, add a component-specific `data-*` attribute to the
-  primitive and qualify any required `:global(...)` selector with that
-  attribute. Do not use unqualified global class selectors.
-- Keep styles for direct DOM children as normal scoped CSS.
+- For UI component stories and Storybook component tests, read and follow
+  [`.agents/skills/storybook-tests/SKILL.md`](.agents/skills/storybook-tests/SKILL.md).
 
 ## Validation
 

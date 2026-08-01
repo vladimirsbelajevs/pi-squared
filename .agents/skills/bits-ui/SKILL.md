@@ -1,5 +1,5 @@
 ---
-name: bits-ui-docs
+name: bits-ui
 description: Use when developing, configuring, debugging, or answering questions about Bits UI components in this project.
 ---
 
@@ -25,3 +25,14 @@ When reviewing Bits UI examples, ignore demo CSS class names unless styling is
 relevant to the task.
 
 Source: <https://www.bits-ui.com/docs/llms/llms.txt>
+
+## Portal styling
+
+Bits UI portal primitives (for example, `Select.Content`, `Select.Viewport`,
+and `Tooltip.Content`) render outside their source component. Regular Svelte
+scoped selectors may not reach their generated DOM nodes.
+
+- Add a component-specific `data-*` attribute to the portal primitive.
+- Qualify required `:global(...)` selectors with that attribute; do not use
+  unqualified global class selectors.
+- Keep styles for direct DOM children as normal scoped CSS.
