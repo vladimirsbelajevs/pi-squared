@@ -13,16 +13,26 @@ Pi Squared is a web UI using [Pi SDK](https://pi.dev/docs/latest/sdk).
 - Pi CLI harness installed
 - Pi provider credentials configured for the local user
 
-You must have those extensions for PI installed:
+## Linux Setup Scripts
+
+The Linux setup scripts are in [`setup/Linux/`](setup/Linux/):
+
+- [`pi-install.sh`](setup/Linux/pi-install.sh) installs Pi, the required extensions, and the permission configuration.
+- [`pi-permission-adjust.sh`](setup/Linux/pi-permission-adjust.sh) copies [`setup/configs/permissions.json`](setup/configs/permissions.json) to the `pi-permission-system` extension configuration.
+
+Run the installer from the repository root (or any directory):
 
 ```sh
-pi install npm:@gotgenes/pi-permission-system
-pi install npm:pi-subagents
-pi install npm:@narumitw/pi-plan-mode
-pi install npm:@narumitw/pi-lsp
-pi install npm:pi-mcp-adapter
-pi install npm:pi-web-access
+./setup/Linux/pi-install.sh
 ```
+
+To apply only the permission configuration, run:
+
+```sh
+./setup/Linux/pi-permission-adjust.sh
+```
+
+By default, the permission configuration is installed to `~/.pi/agent/extensions/pi-permission-system/config.json`. Set `PI_CODING_AGENT_DIR` to use a different Pi agent directory, or `PI_PERMISSION_SYSTEM_CONFIG_PATH` to set the exact destination file.
 
 Pi reads models and credentials from its standard locations, including `~/.pi/agent/auth.json` and `~/.pi/agent/models.json`. Configure a provider with Pi before starting a model-backed chat.
 
@@ -68,13 +78,3 @@ Pi owns credentials, settings, and session JSONL files under `~/.pi/agent/` by d
 Adding a project explicitly trusts its Pi project resources. Pi can then load that project's `.pi` settings, extensions, prompts, and skills. Pi has no built-in sandbox: its tools can read files, edit files, and execute commands with the permissions of the process running this application.
 
 Only add projects you trust. For untrusted repositories or remote deployment, run the harness in a properly isolated container, VM, or sandbox with restricted files, credentials, and networking.
-
-## Verification
-
-```sh
-npm run check
-npm run lint
-npm run test:unit -- --run
-npm run test:e2e
-npm run build
-```
