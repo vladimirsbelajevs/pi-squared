@@ -12,7 +12,7 @@
 	import { validatePromptAttachments } from '$lib/attachments';
 	import { errorNotices } from '$lib/error-notices';
 	import AttachmentPreview from '../AttachmentPreview.svelte';
-	import ComposerStatusPanel from '../ComposerStatusPanel.svelte';
+	import ComposerStatusPanel from '../ComposerStatusPanel/ComposerStatusPanel.svelte';
 	import ImageViewer, { type ImageViewerImage } from '../ImageViewer.svelte';
 	import ComposerFooter from './ComposerFooter.svelte';
 	import ComposerTextInput from './ComposerTextInput.svelte';
