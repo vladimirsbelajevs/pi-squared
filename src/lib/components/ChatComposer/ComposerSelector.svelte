@@ -235,6 +235,7 @@
 	}
 
 	.selector-option {
+		position: relative;
 		width: 100%;
 		overflow: hidden;
 		border: 0;
@@ -254,10 +255,17 @@
 		color: var(--text);
 	}
 
+	.selector-option.selected {
+		padding-right: 1.8rem;
+	}
+
 	.selector-option.selected::after {
-		float: right;
+		position: absolute;
+		top: 50%;
+		right: 0.55rem;
 		color: var(--accent);
 		content: '✓';
+		transform: translateY(-50%);
 	}
 
 	.selector-option:focus-visible {
