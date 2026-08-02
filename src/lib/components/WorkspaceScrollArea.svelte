@@ -84,6 +84,7 @@
 	}
 
 	function observeViewport(element: HTMLDivElement): ReturnType<Attachment> {
+		let contentResized = false;
 		let scrollDirty = false;
 
 		function flush(): void {
@@ -92,6 +93,8 @@
 			}
 
 			const key = activeKey;
+			const resized = contentResized;
+			contentResized = false;
 			if (!key) {
 				return;
 			}
@@ -118,7 +121,7 @@
 			}
 
 			const state = scrollState(key);
-			if (state?.pinnedToBottom && !restoring) {
+			if (resized && state?.pinnedToBottom && !restoring) {
 				element.scrollTop = element.scrollHeight;
 			}
 		}
@@ -134,6 +137,8 @@
 		}
 
 		function handleResize(): void {
+			contentResized = true;
+
 			const restoreRequest = pendingRestore;
 			if (restoreRequest && restoreRequest.key === activeKey) {
 				restoreRequest.sawResize = true;
@@ -213,7 +218,11 @@
 		</div>
 	</ScrollArea.Viewport>
 
-	<ScrollArea.Scrollbar class="workspace-scrollbar" orientation="vertical">
+	<ScrollArea.Scrollbar
+		class="workspace-scrollbar"
+		data-testid="workspace-scrollbar"
+		orientation="vertical"
+	>
 		<ScrollArea.Thumb class="workspace-scroll-thumb" />
 	</ScrollArea.Scrollbar>
 	<ScrollArea.Corner />
@@ -243,7 +252,7 @@
 		grid-template-rows: minmax(0, 1fr);
 	}
 
-	:global([data-scroll-area-scrollbar-y].workspace-scrollbar) {
+	:global([data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar) {
 		display: flex;
 		width: 0.625rem;
 		touch-action: none;
@@ -258,23 +267,25 @@
 			opacity 200ms ease;
 	}
 
-	:global([data-scroll-area-scrollbar-y].workspace-scrollbar:hover) {
+	:global([data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar:hover) {
 		width: 0.75rem;
 		background: var(--surface-strong);
 	}
 
-	:global([data-scroll-area-scrollbar-y].workspace-scrollbar[data-state='hidden']) {
+	:global(
+		[data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar[data-state='hidden']
+	) {
 		opacity: 0;
 	}
 
-	:global([data-scroll-area-thumb-y].workspace-scroll-thumb) {
+	:global([data-scroll-area-thumb].workspace-scroll-thumb) {
 		min-height: 2.75rem;
 		flex: 1;
 		border-radius: inherit;
 		background: color-mix(in srgb, var(--text-muted) 70%, transparent);
 	}
 
-	:global([data-scroll-area-thumb-y].workspace-scroll-thumb:hover) {
+	:global([data-scroll-area-thumb].workspace-scroll-thumb:hover) {
 		background: var(--text-muted);
 	}
 </style>
