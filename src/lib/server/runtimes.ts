@@ -13,6 +13,7 @@ import type {
 } from '$lib/contracts';
 import { validatePromptAttachments } from '$lib/attachments';
 import { promptWithAttachments } from '$lib/prompt-attachments';
+import { AssistantDeltaBatcher } from '$lib/server/assistant-delta-batcher';
 import { eventBroker } from '$lib/server/event-broker';
 import { PermissionBridge } from '$lib/server/permission-bridge';
 import { getProject, markProjectOpened, resolveProject } from '$lib/server/projects';
@@ -44,6 +45,7 @@ interface RuntimeRecord {
 	lastAccessedAt: number;
 	promptActive: boolean;
 	permissions: PermissionBridge;
+	assistantDeltaBatcher: AssistantDeltaBatcher;
 	mcpStatus?: McpStatusSnapshot;
 	unsubscribeMcpStatus: () => void;
 	mcpToggle?: Promise<void>;
@@ -109,8 +111,32 @@ export function subscribeToMcpStatus(
 	});
 }
 
+export type RuntimeEventRecord = {
+	id: string;
+	assistantDeltaBatcher: AssistantDeltaBatcher;
+};
+
+/**
+ * Publishes runtime events in source order. Assistant deltas are append-only and
+ * may wait briefly; every other event is a causal boundary and flushes them.
+ */
+export function publishRuntimeEvent(
+	record: RuntimeEventRecord,
+	event: RuntimeEvent,
+	broker: Pick<typeof eventBroker, 'publish'> = eventBroker
+): void {
+	if (event.type === 'assistant_delta') {
+		record.assistantDeltaBatcher.queue(event);
+
+		return;
+	}
+
+	record.assistantDeltaBatcher.flush();
+	broker.publish(record.id, event);
+}
+
 function publish(record: RuntimeRecord, event: RuntimeEvent): void {
-	eventBroker.publish(record.id, event);
+	publishRuntimeEvent(record, event);
 }
 
 /**
@@ -229,15 +255,24 @@ export async function createRuntime(input: {
 	const id = randomUUID();
 	const recordRef: { current?: RuntimeRecord } = {};
 	const permissions = new PermissionBridge((event) => {
+		const record = recordRef.current;
 		if (
-			recordRef.current?.suppressMcpReloadNotice &&
+			record?.suppressMcpReloadNotice &&
 			event.type === 'notice' &&
 			event.message.includes('run /reload to apply')
 		) {
 			return;
 		}
 
-		eventBroker.publish(id, event);
+		// This direct path is only reachable during record construction, before a
+		// batcher can have received session output.
+		if (!record) {
+			eventBroker.publish(id, event);
+
+			return;
+		}
+
+		publish(record, event);
 	});
 	const record: RuntimeRecord = {
 		id,
@@ -248,6 +283,7 @@ export async function createRuntime(input: {
 		lastAccessedAt: Date.now(),
 		promptActive: false,
 		permissions,
+		assistantDeltaBatcher: new AssistantDeltaBatcher((event) => eventBroker.publish(id, event)),
 		unsubscribeMcpStatus: () => undefined
 	};
 	recordRef.current = record;
@@ -259,7 +295,7 @@ export async function createRuntime(input: {
 		await bindRuntimeExtensions(
 			created.session,
 			permissions.extensionUI,
-			(message) => eventBroker.publish(id, { type: 'error', message }),
+			(message) => publish(record, { type: 'error', message }),
 			() => void disposeRuntime(id)
 		);
 	} catch (error) {
@@ -463,14 +499,18 @@ export async function disposeRuntime(runtimeId: string): Promise<void> {
 		return;
 	}
 
-	runtimes.delete(runtimeId);
 	record.permissions.cancelAll();
 	if (record.session.isStreaming) {
 		await record.session.abort();
 	}
 
+	// Deliver output produced before teardown, then prevent a timer from
+	// publishing after this runtime disappears.
+	record.assistantDeltaBatcher.flush();
 	record.unsubscribe();
 	record.unsubscribeMcpStatus();
+	record.assistantDeltaBatcher.cancel();
+	runtimes.delete(runtimeId);
 	await shutdownRuntimeSession(record.session);
 }
 

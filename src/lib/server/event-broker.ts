@@ -2,7 +2,7 @@ import type { RuntimeEvent, StreamEnvelope } from '$lib/contracts';
 
 const REPLAY_LIMIT = 300;
 
-class EventBroker {
+export class EventBroker {
 	#nextId = 1;
 	#replay: StreamEnvelope[] = [];
 	#listeners = new Set<(event: StreamEnvelope) => void>();

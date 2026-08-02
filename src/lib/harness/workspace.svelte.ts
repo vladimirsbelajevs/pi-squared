@@ -25,6 +25,7 @@ import {
 } from '$lib/harness/api';
 import { errorNotices } from '$lib/error-notices';
 import { reconcilePendingUserMessages } from '$lib/harness/pending-user-messages';
+import { StreamUpdateBatcher } from '$lib/harness/stream-update-batcher';
 import {
 	modelKey,
 	type ChatTab,
@@ -120,11 +121,10 @@ export class HarnessWorkspace {
 	#lastEventId: number | undefined;
 	#chatLoads = new SvelteMap<string, Promise<ChatTab | undefined>>();
 	#scrollStates = new SvelteMap<string, ScrollState>();
-	#pendingStreamUpdates = new SvelteMap<
-		string,
-		{ chat: ChatTab; text: string; thinking: string; tools: SvelteMap<string, StreamingTool> }
-	>();
-	#streamFrame: number | undefined;
+	#streamUpdates = new StreamUpdateBatcher(
+		(callback) => requestAnimationFrame(callback),
+		() => this.schedulePersist()
+	);
 	#persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 	async start(): Promise<void> {
@@ -143,6 +143,7 @@ export class HarnessWorkspace {
 	disposeConnection(): void {
 		this.#events?.close();
 		this.#events = undefined;
+		this.#streamUpdates.discardAll();
 	}
 
 	schedulePersist(): void {
@@ -538,7 +539,7 @@ export class HarnessWorkspace {
 		}
 
 		this.removeScrollState(`tab:${tab.id}`);
-		this.#discardPendingStreamUpdate(tab.id);
+		this.#streamUpdates.discard(tab.id);
 		this.persist();
 		if (tab.kind === 'chat' && tab.runtimeId) {
 			try {
@@ -638,7 +639,7 @@ export class HarnessWorkspace {
 
 		const event = envelope.event;
 		if (event.type === 'snapshot') {
-			this.#discardPendingStreamUpdate(chat.id);
+			this.#streamUpdates.discard(chat.id);
 			this.#applySnapshot(chat, event.snapshot);
 			this.persist();
 
@@ -741,66 +742,15 @@ export class HarnessWorkspace {
 	}
 
 	#queueAssistantDelta(chat: ChatTab, text: string, thinking: string): void {
-		const pending = this.#pendingStreamUpdateFor(chat);
-		pending.text += text;
-		pending.thinking += thinking;
-		this.#scheduleStreamFlush();
+		this.#streamUpdates.queueAssistantDelta(chat, text, thinking);
 	}
 
 	#queueToolUpdate(chat: ChatTab, tool: StreamingTool): void {
-		const pending = this.#pendingStreamUpdateFor(chat);
-		pending.tools.set(tool.id, tool);
-		this.#scheduleStreamFlush();
-	}
-
-	#pendingStreamUpdateFor(chat: ChatTab): {
-		chat: ChatTab;
-		text: string;
-		thinking: string;
-		tools: SvelteMap<string, StreamingTool>;
-	} {
-		let pending = this.#pendingStreamUpdates.get(chat.id);
-		if (!pending) {
-			pending = { chat, text: '', thinking: '', tools: new SvelteMap() };
-			this.#pendingStreamUpdates.set(chat.id, pending);
-		}
-
-		return pending;
-	}
-
-	#scheduleStreamFlush(): void {
-		if (this.#streamFrame !== undefined) {
-			return;
-		}
-
-		this.#streamFrame = requestAnimationFrame(() => {
-			this.#streamFrame = undefined;
-			for (const pending of this.#pendingStreamUpdates.values()) {
-				pending.chat.streamText += pending.text;
-				pending.chat.streamThinking += pending.thinking;
-				for (const tool of pending.tools.values()) {
-					const current = pending.chat.streamTools.find((candidate) => candidate.id === tool.id);
-					if (current) {
-						current.text = tool.text;
-						current.isError = tool.isError;
-					} else {
-						pending.chat.streamTools.push(tool);
-					}
-				}
-			}
-
-			this.#pendingStreamUpdates.clear();
-
-			this.schedulePersist();
-		});
-	}
-
-	#discardPendingStreamUpdate(chatId: string): void {
-		this.#pendingStreamUpdates.delete(chatId);
+		this.#streamUpdates.queueToolUpdate(chat, tool);
 	}
 
 	#applySnapshot(chat: ChatTab, snapshot: RuntimeSnapshot): void {
-		this.#discardPendingStreamUpdate(chat.id);
+		this.#streamUpdates.discard(chat.id);
 		chat.snapshot = snapshot;
 		chat.permissionRequests = snapshot.permissionRequests.map((request) => ({ ...request }));
 		this.#reconcilePendingUserMessages(chat);
