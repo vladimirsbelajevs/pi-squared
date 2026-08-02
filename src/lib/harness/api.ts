@@ -80,18 +80,24 @@ export function searchProjectFiles(
 	return request(`/api/projects/${encodeURIComponent(projectId)}/files?${parameters}`, { signal });
 }
 
-export function createRuntime(input: {
-	mode: 'new' | 'resume';
-	projectId: string;
-	sessionId?: string;
-	model?: ModelOption;
-	thinkingLevel?: ThinkingLevel;
-}): Promise<{ checkpoint: RuntimeCheckpoint }> {
-	return request('/api/runtimes', { method: 'POST', body: JSON.stringify(input) });
+export function createRuntime(
+	input: {
+		mode: 'new' | 'resume';
+		projectId: string;
+		sessionId?: string;
+		model?: ModelOption;
+		thinkingLevel?: ThinkingLevel;
+	},
+	signal?: AbortSignal
+): Promise<{ checkpoint: RuntimeCheckpoint }> {
+	return request('/api/runtimes', { method: 'POST', body: JSON.stringify(input), signal });
 }
 
-export function getRuntime(runtimeId: string): Promise<{ checkpoint: RuntimeCheckpoint }> {
-	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}`);
+export function getRuntime(
+	runtimeId: string,
+	signal?: AbortSignal
+): Promise<{ checkpoint: RuntimeCheckpoint }> {
+	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}`, { signal });
 }
 
 export function listRuntimeSlashCommands(

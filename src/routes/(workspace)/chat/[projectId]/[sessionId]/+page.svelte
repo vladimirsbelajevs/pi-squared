@@ -31,9 +31,9 @@
 	onMount(ensureChatForRoute);
 </script>
 
-{#if !chat || chat.hydrating}
+{#if !chat || chat.hydrationState === 'unhydrated' || chat.hydrationState === 'hydrating'}
 	<section class="route-state">Opening session…</section>
-{:else if !chat.snapshot}
+{:else if chat.hydrationState === 'failed' || !chat.snapshot}
 	<section class="route-state route-error" role="alert">
 		{chat.error || 'This project session could not be opened.'}
 		<a href={resolve('/history')}>Back to history</a>

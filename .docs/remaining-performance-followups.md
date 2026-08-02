@@ -94,7 +94,7 @@ Keying preserves component and DOM identity; it does not bound DOM size or preve
 
 ## 2. Eager hydration of restored chat tabs
 
-**Status:** Open  
+**Status:** Closed  
 **Priority:** High
 
 ### Current behavior
@@ -103,7 +103,7 @@ After projects, models, and sessions load, workspace startup restores tab metada
 
 `ensureChat()` single-flights ordinary startup/route calls by project and session, but SSE reset recovery and direct refresh paths call the underlying hydration method separately. Startup, route activation, recovery, and close can therefore overlap, apply stale completions, duplicate resume work, or leave a late-created runtime attached only to a removed tab object.
 
-The current route must be authoritative. A direct chat URL can differ from persisted `activeTabId`; history, settings, and new-chat routes need no chat hydration. The existing 30-minute server idle cleanup is opportunistic—it runs before runtime creation—not a periodic disposal policy.
+The current route must be authoritative. A direct chat URL can differ from persisted `activeTabId`; history, settings, and new-chat routes need no chat hydration. Runtime disposal is explicit: closing a chat tab disposes its runtime immediately, and a hydrated, settled chat that remains inactive for 30 minutes is disposed client-side. Streaming chats and chats with pending permissions or optimistic messages are retained; their timer begins only after they settle. Server idle cleanup remains opportunistic—it runs before runtime creation—as a secondary fallback.
 
 ### Relevant files
 
@@ -126,7 +126,7 @@ The current route must be authoritative. A direct chat URL can differ from persi
 - Attach a generation/cancellation token to hydration. Ignore stale completions and dispose any runtime created after the tab was closed or superseded.
 - Do not accumulate an unbounded SSE buffer for an unhydrated inactive tab. Rehydrate from a checkpoint on activation and retain only the events needed to close the checkpoint/subscription race.
 - Optionally prefetch one likely next tab during idle time, with cancellation and a strict runtime budget.
-- Either document the current opportunistic server cleanup or add a periodic/explicit inactive-runtime disposal policy.
+- Keep the explicit client policy: dispose on tab close, and after 30 minutes of inactivity only for a settled chat with no pending permissions or optimistic messages. Do not dispose merely because a chat is backgrounded while streaming. Server cleanup remains an opportunistic secondary fallback.
 
 ### Acceptance criteria
 

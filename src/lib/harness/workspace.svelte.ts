@@ -58,6 +58,9 @@ const LAST_THINKING_LEVEL_KEY = 'pi-squared:last-thinking-level';
 const THEME_KEY = 'pi-squared:theme';
 const SHOW_REASONING_KEY = 'pi-squared:show-reasoning';
 const SHOW_MODEL_CHANGES_KEY = 'pi-squared:show-model-changes';
+const MAX_HYDRATION_BUFFERED_EVENTS = 100;
+/** Release an inactive, settled runtime; persisted session history is resumed on next activation. */
+const INACTIVE_RUNTIME_DISPOSAL_MS = 30 * 60 * 1000;
 
 export type ScrollState = {
 	top: number;
@@ -127,6 +130,9 @@ export class HarnessWorkspace {
 	#events: EventSource | undefined;
 	#lastEventId: string | undefined;
 	#chatLoads = new SvelteMap<string, Promise<ChatTab | undefined>>();
+	#hydrationControllers = new SvelteMap<string, AbortController>();
+	#inactiveRuntimeTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>();
+	#activeChatId: string | undefined;
 	#scrollStates = new SvelteMap<string, ScrollState>();
 	#streamUpdates = new StreamUpdateBatcher(
 		(callback) => requestAnimationFrame(callback),
@@ -151,6 +157,11 @@ export class HarnessWorkspace {
 		this.#events?.close();
 		this.#events = undefined;
 		this.#streamUpdates.discardAll();
+		for (const tab of this.tabs) {
+			if (tab.kind === 'chat') {
+				this.#cancelInactiveRuntimeDisposal(tab);
+			}
+		}
 	}
 
 	schedulePersist(): void {
@@ -196,6 +207,11 @@ export class HarnessWorkspace {
 
 		this.activeTabId = tab.id;
 		this.persist();
+	}
+
+	setRoutePathname(pathname: string): void {
+		const tab = this.tabs.find((candidate) => this.hrefForTab(candidate) === pathname);
+		this.#setActiveChat(tab?.kind === 'chat' ? tab : undefined);
 	}
 
 	createNewTab(tabId = randomId()): NewTab {
@@ -329,26 +345,18 @@ export class HarnessWorkspace {
 	}
 
 	async ensureChat(projectId: string, sessionId: string): Promise<ChatTab | undefined> {
-		const key = `${projectId}:${sessionId}`;
-		const existingLoad = this.#chatLoads.get(key);
-		if (existingLoad) {
-			return existingLoad;
-		}
-
-		const existing = this.findChat(projectId, sessionId);
-		if (existing?.snapshot) {
-			return existing;
-		}
-
-		let chat =
-			existing ??
-			({
+		let chat = this.findChat(projectId, sessionId);
+		if (!chat) {
+			chat = {
 				id: randomId(),
 				kind: 'chat',
 				title: 'Loading chat',
 				projectId,
 				sessionId,
-				hydrating: true,
+				hydrationState: 'unhydrated',
+				hydrationGeneration: 0,
+				bufferedEvents: [],
+				needsCheckpoint: false,
 				draft: '',
 				queueMode: 'followUp',
 				streamText: '',
@@ -357,29 +365,14 @@ export class HarnessWorkspace {
 				streamTools: [],
 				transientNotices: [],
 				permissionRequests: [],
-				pendingUserMessages: [],
-				bufferedEvents: []
-			} satisfies ChatTab);
-		if (!existing) {
+				pendingUserMessages: []
+			};
 			this.tabs.push(chat);
-			chat = this.findChat(projectId, sessionId) ?? chat;
 		}
 
-		const load = this.#hydrateChat(chat)
-			.then(() => chat)
-			.catch((error: unknown) => {
-				chat.error = error instanceof Error ? error.message : 'Unable to open this session.';
+		this.#setActiveChat(chat);
 
-				return undefined;
-			})
-			.finally(() => {
-				chat.hydrating = false;
-				this.#chatLoads.delete(key);
-				this.persist();
-			});
-		this.#chatLoads.set(key, load);
-
-		return load;
+		return this.#loadChat(chat);
 	}
 
 	async sendPrompt(chat: ChatTab, submission: ChatSubmission): Promise<boolean> {
@@ -541,6 +534,14 @@ export class HarnessWorkspace {
 	}
 
 	async closeTab(tab: WorkspaceTab): Promise<void> {
+		if (tab.kind === 'chat') {
+			this.#cancelInactiveRuntimeDisposal(tab);
+			this.#invalidateHydration(tab);
+			if (this.#activeChatId === tab.id) {
+				this.#activeChatId = undefined;
+			}
+		}
+
 		const index = this.tabs.findIndex((candidate) => candidate.id === tab.id);
 		this.tabs = this.tabs.filter((candidate) => candidate.id !== tab.id);
 		if (this.activeTabId === tab.id) {
@@ -576,7 +577,7 @@ export class HarnessWorkspace {
 	}
 
 	async refreshRuntime(chat: ChatTab): Promise<void> {
-		await this.#hydrateChat(chat);
+		await this.#loadChat(chat, true);
 	}
 
 	#defaultDraft(): NewDraft {
@@ -617,11 +618,6 @@ export class HarnessWorkspace {
 			this.sessions = sessions.sessions;
 			this.#restoreTabs();
 			this.#connectEvents();
-			await Promise.all(
-				this.tabs
-					.filter((tab): tab is ChatTab => tab.kind === 'chat')
-					.map((tab) => this.ensureChat(tab.projectId, tab.sessionId))
-			);
 		} catch (error) {
 			this.error = error instanceof Error ? error.message : 'Unable to load the harness.';
 		} finally {
@@ -640,11 +636,11 @@ export class HarnessWorkspace {
 	#handleEvent(message: StreamMessage): void {
 		if (!('id' in message)) {
 			this.#lastEventId = undefined;
-			for (const tab of this.tabs) {
-				if (tab.kind === 'chat' && tab.runtimeId) {
-					tab.hydrating = true;
-					void this.#hydrateChat(tab);
-				}
+			const activeChat = this.tabs.find(
+				(tab): tab is ChatTab => tab.kind === 'chat' && tab.id === this.#activeChatId
+			);
+			if (activeChat) {
+				void this.#loadChat(activeChat, true);
 			}
 
 			return;
@@ -654,12 +650,12 @@ export class HarnessWorkspace {
 		const chat = this.tabs.find(
 			(tab): tab is ChatTab => tab.kind === 'chat' && tab.runtimeId === message.runtimeId
 		);
-		if (!chat) {
+		if (!chat || chat.hydrationState === 'unhydrated' || chat.hydrationState === 'failed') {
 			return;
 		}
 
-		if (chat.hydrating) {
-			(chat.bufferedEvents ??= []).push(message);
+		if (chat.hydrationState === 'hydrating') {
+			this.#bufferHydrationEvent(chat, message);
 
 			return;
 		}
@@ -688,16 +684,20 @@ export class HarnessWorkspace {
 		}
 
 		if (!chat.runtime) {
-			(chat.bufferedEvents ??= []).push(envelope);
-
 			return;
 		}
 
 		const result = applyRuntimeEvent(chat.runtime, event);
 		if (result === 'recovery') {
-			(chat.bufferedEvents ??= []).push(envelope);
-			chat.hydrating = true;
-			void this.#hydrateChat(chat);
+			if (chat.hydrationState === 'hydrating') {
+				this.#bufferHydrationEvent(chat, envelope);
+				chat.needsCheckpoint = true;
+			} else if (chat.id === this.#activeChatId) {
+				this.#bufferHydrationEvent(chat, envelope);
+				void this.#loadChat(chat, true);
+			} else {
+				this.#invalidateHydration(chat);
+			}
 
 			return;
 		}
@@ -734,46 +734,293 @@ export class HarnessWorkspace {
 			chat.streamThinking = '';
 			chat.streamTools = [];
 		}
+
+		this.#scheduleInactiveRuntimeDisposal(chat);
 	}
 
-	async #hydrateChat(chat: ChatTab): Promise<void> {
-		let checkpoint: RuntimeCheckpoint | undefined;
+	#chatKey(chat: Pick<ChatTab, 'projectId' | 'sessionId'>): string {
+		return `${chat.projectId}:${chat.sessionId}`;
+	}
+
+	#setActiveChat(chat: ChatTab | undefined): void {
+		if (this.#activeChatId === chat?.id) {
+			return;
+		}
+
+		const previous = this.tabs.find(
+			(tab): tab is ChatTab => tab.kind === 'chat' && tab.id === this.#activeChatId
+		);
+		if (previous?.hydrationState === 'hydrating') {
+			this.#invalidateHydration(previous);
+		}
+
+		this.#activeChatId = chat?.id;
+		if (chat) {
+			this.#cancelInactiveRuntimeDisposal(chat);
+		}
+
+		if (previous?.hydrationState === 'ready') {
+			this.#scheduleInactiveRuntimeDisposal(previous);
+		}
+	}
+
+	#isCurrentHydration(chat: ChatTab, generation: number): boolean {
+		return (
+			chat.hydrationGeneration === generation &&
+			this.tabs.some((tab) => tab === chat) &&
+			chat.hydrationState === 'hydrating'
+		);
+	}
+
+	#invalidateHydration(chat: ChatTab): void {
+		chat.hydrationGeneration += 1;
+		chat.hydrationState = 'unhydrated';
+		chat.error = undefined;
+		chat.bufferedEvents = [];
+		chat.needsCheckpoint = false;
+		this.#hydrationControllers.get(chat.id)?.abort();
+		this.#hydrationControllers.delete(chat.id);
+		this.#chatLoads.delete(this.#chatKey(chat));
+	}
+
+	#scheduleInactiveRuntimeDisposal(chat: ChatTab): void {
+		if (
+			this.#activeChatId === chat.id ||
+			chat.hydrationState !== 'ready' ||
+			!chat.runtimeId ||
+			chat.snapshot?.isStreaming ||
+			chat.permissionRequests.length ||
+			chat.pendingUserMessages.length ||
+			this.#inactiveRuntimeTimers.has(chat.id)
+		) {
+			return;
+		}
+
+		const runtimeId = chat.runtimeId;
+		const timer = setTimeout(() => {
+			this.#inactiveRuntimeTimers.delete(chat.id);
+			void this.#disposeInactiveRuntime(chat, runtimeId);
+		}, INACTIVE_RUNTIME_DISPOSAL_MS);
+		this.#inactiveRuntimeTimers.set(chat.id, timer);
+	}
+
+	#cancelInactiveRuntimeDisposal(chat: ChatTab): void {
+		const timer = this.#inactiveRuntimeTimers.get(chat.id);
+		if (timer) {
+			clearTimeout(timer);
+			this.#inactiveRuntimeTimers.delete(chat.id);
+		}
+	}
+
+	async #disposeInactiveRuntime(chat: ChatTab, runtimeId: string): Promise<void> {
+		if (
+			this.#activeChatId === chat.id ||
+			chat.runtimeId !== runtimeId ||
+			chat.hydrationState !== 'ready' ||
+			chat.snapshot?.isStreaming ||
+			chat.permissionRequests.length ||
+			chat.pendingUserMessages.length
+		) {
+			return;
+		}
+
+		// Clear local runtime state before the request so a simultaneous activation resumes a
+		// fresh runtime instead of using one that is being disposed.
+		this.#invalidateHydration(chat);
+		chat.runtimeId = undefined;
+		chat.runtime = undefined;
+		chat.snapshot = undefined;
+		chat.streamText = '';
+		chat.streamRenderedText = '';
+		chat.streamThinking = '';
+		chat.streamTools = [];
+		chat.permissionRequests = [];
+		this.#streamUpdates.discard(chat.id);
+		this.persist();
+
+		try {
+			await disposeRuntime(runtimeId);
+		} catch {
+			// A failed teardown leaves no usable local runtime ID; the next activation resumes it.
+		}
+	}
+
+	#bufferHydrationEvent(chat: ChatTab, envelope: StreamEnvelope): void {
+		if (chat.needsCheckpoint) {
+			return;
+		}
+
+		if (chat.bufferedEvents.length >= MAX_HYDRATION_BUFFERED_EVENTS) {
+			chat.bufferedEvents = [];
+			chat.needsCheckpoint = true;
+
+			return;
+		}
+
+		chat.bufferedEvents.push(envelope);
+	}
+
+	async #loadChat(chat: ChatTab, force = false): Promise<ChatTab | undefined> {
+		const key = this.#chatKey(chat);
+		const existingLoad = this.#chatLoads.get(key);
+		if (existingLoad) {
+			return existingLoad;
+		}
+
+		if (!force && chat.hydrationState === 'ready') {
+			return chat;
+		}
+
+		const generation = chat.hydrationGeneration + 1;
+		chat.hydrationGeneration = generation;
+		chat.hydrationState = 'hydrating';
+		chat.error = undefined;
+		const controller = new AbortController();
+		this.#hydrationControllers.set(chat.id, controller);
+
+		const load = this.#hydrateChat(chat, generation, controller.signal)
+			.then(() => {
+				if (!this.#isCurrentHydration(chat, generation)) {
+					return undefined;
+				}
+
+				chat.hydrationState = 'ready';
+				this.#scheduleInactiveRuntimeDisposal(chat);
+
+				return chat;
+			})
+			.catch((error: unknown) => {
+				if (this.#isCurrentHydration(chat, generation)) {
+					chat.hydrationState = 'failed';
+					chat.error = error instanceof Error ? error.message : 'Unable to open this session.';
+				}
+
+				return undefined;
+			})
+			.finally(() => {
+				if (this.#hydrationControllers.get(chat.id) === controller) {
+					this.#hydrationControllers.delete(chat.id);
+				}
+
+				if (this.#chatLoads.get(key) === load) {
+					this.#chatLoads.delete(key);
+				}
+
+				if (chat.hydrationGeneration === generation && this.tabs.some((tab) => tab === chat)) {
+					this.persist();
+				}
+			});
+		this.#chatLoads.set(key, load);
+
+		return load;
+	}
+
+	async #hydrateChat(chat: ChatTab, generation: number, signal: AbortSignal): Promise<void> {
+		const createdRuntimeIds: string[] = [];
+		try {
+			while (this.#isCurrentHydration(chat, generation)) {
+				chat.needsCheckpoint = false;
+				const { checkpoint, createdRuntimeId } = await this.#fetchCheckpoint(
+					chat,
+					generation,
+					signal
+				);
+				if (createdRuntimeId) {
+					createdRuntimeIds.push(createdRuntimeId);
+				}
+
+				if (!this.#isCurrentHydration(chat, generation)) {
+					await this.#disposeCreatedRuntimes(createdRuntimeIds);
+
+					return;
+				}
+
+				this.#applyCheckpoint(chat, checkpoint);
+				if (chat.needsCheckpoint) {
+					chat.bufferedEvents = [];
+
+					continue;
+				}
+
+				const buffered = chat.bufferedEvents;
+				chat.bufferedEvents = [];
+				for (const envelope of buffered) {
+					if (
+						envelope.cursor.epoch !== checkpoint.cursor.epoch ||
+						envelope.cursor.sequence > checkpoint.cursor.sequence
+					) {
+						this.#applyEnvelope(chat, envelope);
+					}
+				}
+
+				if (chat.needsCheckpoint) {
+					chat.bufferedEvents = [];
+
+					continue;
+				}
+
+				return;
+			}
+		} catch (error) {
+			if (!this.#isCurrentHydration(chat, generation)) {
+				await this.#disposeCreatedRuntimes(createdRuntimeIds);
+
+				return;
+			}
+
+			throw error;
+		}
+	}
+
+	async #fetchCheckpoint(
+		chat: ChatTab,
+		generation: number,
+		signal: AbortSignal
+	): Promise<{ checkpoint: RuntimeCheckpoint; createdRuntimeId?: string }> {
 		if (chat.runtimeId) {
 			try {
-				const response = await getRuntime(chat.runtimeId);
+				const response = await getRuntime(chat.runtimeId, signal);
 				if (
 					response.checkpoint.snapshot.project.id === chat.projectId &&
 					response.checkpoint.snapshot.sessionId === chat.sessionId
 				) {
-					checkpoint = response.checkpoint;
+					return { checkpoint: response.checkpoint };
 				}
-			} catch {
-				chat.runtimeId = undefined;
+			} catch (error) {
+				if (signal.aborted) {
+					throw error;
+				}
 			}
 		}
 
-		if (!checkpoint) {
-			const response = await createRuntime({
-				mode: 'resume',
-				projectId: chat.projectId,
-				sessionId: chat.sessionId
-			});
-			checkpoint = response.checkpoint;
+		if (!this.#isCurrentHydration(chat, generation)) {
+			throw new Error('Chat hydration was superseded.');
 		}
 
-		this.#applyCheckpoint(chat, checkpoint);
-		const buffered = chat.bufferedEvents ?? [];
-		chat.bufferedEvents = [];
-		for (const envelope of buffered) {
-			if (
-				envelope.cursor.epoch !== checkpoint.cursor.epoch ||
-				envelope.cursor.sequence > checkpoint.cursor.sequence
-			) {
-				this.#applyEnvelope(chat, envelope);
-			}
-		}
+		// Do not abort the resume request: if it succeeds after cancellation, we need its
+		// checkpoint to dispose the runtime rather than leaving an orphan on the server.
+		const response = await createRuntime({
+			mode: 'resume',
+			projectId: chat.projectId,
+			sessionId: chat.sessionId
+		});
 
-		chat.hydrating = false;
+		return {
+			checkpoint: response.checkpoint,
+			createdRuntimeId: response.checkpoint.snapshot.runtimeId
+		};
+	}
+
+	async #disposeCreatedRuntimes(runtimeIds: string[]): Promise<void> {
+		await Promise.all(
+			runtimeIds.map(async (runtimeId) => {
+				try {
+					await disposeRuntime(runtimeId);
+				} catch {
+					// The runtime may already have been removed server-side.
+				}
+			})
+		);
 	}
 
 	#queueAssistantDelta(chat: ChatTab, text: string, thinking: string): void {
@@ -813,7 +1060,9 @@ export class HarnessWorkspace {
 			snapshot,
 			runtime,
 			bufferedEvents: [],
-			hydrating: false,
+			needsCheckpoint: false,
+			hydrationState: 'ready',
+			hydrationGeneration: 0,
 			draft: '',
 			queueMode: 'followUp',
 			streamText: checkpoint.live.text,
@@ -1049,7 +1298,10 @@ export class HarnessWorkspace {
 			projectId: tab.projectId,
 			sessionId: tab.sessionId,
 			runtimeId: tab.runtimeId,
-			hydrating: true,
+			hydrationState: 'unhydrated',
+			hydrationGeneration: 0,
+			bufferedEvents: [],
+			needsCheckpoint: false,
 			draft: tab.draft,
 			queueMode: tab.queueMode,
 			streamText: '',
@@ -1058,8 +1310,7 @@ export class HarnessWorkspace {
 			streamTools: [],
 			transientNotices: [],
 			permissionRequests: [],
-			pendingUserMessages: [],
-			bufferedEvents: []
+			pendingUserMessages: []
 		};
 	}
 

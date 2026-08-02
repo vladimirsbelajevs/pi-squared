@@ -71,6 +71,8 @@ export interface PendingUserMessage {
 	knownUserItemIds: string[];
 }
 
+export type ChatHydrationState = 'unhydrated' | 'hydrating' | 'ready' | 'failed';
+
 export interface ChatTab {
 	id: string;
 	kind: 'chat';
@@ -81,8 +83,14 @@ export interface ChatTab {
 	snapshot?: RuntimeSnapshot;
 	/** Normalized protocol authority; snapshot is a read-only compatibility projection. */
 	runtime?: RuntimeConversationState;
-	bufferedEvents?: StreamEnvelope[];
-	hydrating: boolean;
+	/** Runtime hydration is deferred until this chat is routed to. */
+	hydrationState: ChatHydrationState;
+	/** Invalidates stale async hydration completions. Runtime-only and never persisted. */
+	hydrationGeneration: number;
+	/** Bounded SSE replay buffer used only while a checkpoint is being fetched. */
+	bufferedEvents: StreamEnvelope[];
+	/** A buffer overflow requires another checkpoint before this chat can become ready. */
+	needsCheckpoint: boolean;
 	draft: string;
 	queueMode: QueueMode;
 	streamText: string;

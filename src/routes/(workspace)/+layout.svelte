@@ -79,11 +79,12 @@
 	});
 
 	afterNavigate(() => {
+		workspace.setRoutePathname(page.url.pathname);
 		scrollArea?.restoreActiveKey();
 	});
 
 	onMount(() => {
-		void workspace.start();
+		void workspace.start().then(() => workspace.setRoutePathname(page.url.pathname));
 
 		return () => workspace.disposeConnection();
 	});

@@ -27,7 +27,10 @@ function chat(overrides: Partial<ChatTab> = {}): ChatTab {
 			items: [],
 			permissionRequests: []
 		},
-		hydrating: false,
+		hydrationState: 'ready',
+		hydrationGeneration: 0,
+		bufferedEvents: [],
+		needsCheckpoint: false,
 		draft: '',
 		queueMode: 'followUp',
 		streamText: '',
