@@ -93,3 +93,15 @@ until no issues or suggestions are returned.
 Generates a Svelte Playground link with the provided code. After completing the
 code, ask the user if they want a playground link. Only call this tool after
 user confirmation and NEVER if code was written to files in their project.
+
+## Chrome MCP:
+
+You have chrome MCP available, first check if you can connect.
+If you cannot open flatpak chrome with remote debugging enabled and then connect to MCP
+
+```
+nohup setsid flatpak run com.google.Chrome \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.var/app/com.google.Chrome/config/chrome-devtools-mcp"
+```
