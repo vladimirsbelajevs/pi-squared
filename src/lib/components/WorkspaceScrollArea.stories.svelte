@@ -28,7 +28,7 @@
 	name="Long workspace content"
 	play={async ({ canvas }) => {
 		await expect(canvas.getByText('Scroll area content')).toBeVisible();
-		await expect(canvas.getByTestId('workspace-scrollbar')).toBeInTheDocument();
+		await expect(canvas.getByText('Workspace entry 40')).toBeVisible();
 	}}
 >
 	{#snippet template()}

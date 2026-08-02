@@ -117,10 +117,11 @@
 	.thread-composer-dock {
 		position: sticky;
 		bottom: 0;
-		width: 100%;
+		width: min(100%, 54rem);
+		align-self: center;
 		flex-shrink: 0;
 		z-index: 2;
-		padding: 1.65rem max(1rem, calc((100vw - 54rem) / 2)) calc(1rem + env(safe-area-inset-bottom));
+		padding: 1.65rem 0 calc(1rem + env(safe-area-inset-bottom));
 		background: linear-gradient(180deg, transparent, var(--canvas) 28%, var(--canvas));
 	}
 

@@ -218,11 +218,7 @@
 		</div>
 	</ScrollArea.Viewport>
 
-	<ScrollArea.Scrollbar
-		class="workspace-scrollbar"
-		data-testid="workspace-scrollbar"
-		orientation="vertical"
-	>
+	<ScrollArea.Scrollbar class="workspace-scrollbar" orientation="vertical">
 		<ScrollArea.Thumb class="workspace-scroll-thumb" />
 	</ScrollArea.Scrollbar>
 	<ScrollArea.Corner />
