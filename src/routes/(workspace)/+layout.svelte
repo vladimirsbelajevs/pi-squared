@@ -1,13 +1,35 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import WorkspaceScrollArea from '$lib/components/WorkspaceScrollArea.svelte';
+	import { setWorkspaceScrollController } from '$lib/workspace-scroll';
 	import WorkspaceTabs from './WorkspaceTabs.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 	import type { WorkspaceTab } from '$lib/harness/types';
 
 	let { children } = $props();
+	let scrollArea = $state<{
+		captureScrollBeforeContentChange: (key: string) => void;
+		restoreActiveKey: () => void;
+	} | null>(null);
+	let activeScrollKey = $derived(scrollKeyForPathname(page.url.pathname));
+
+	setWorkspaceScrollController({
+		captureScrollBeforeContentChange: (key) => scrollArea?.captureScrollBeforeContentChange(key)
+	});
+
+	function scrollKeyForPathname(pathname: string): string | undefined {
+		const tab = workspace.tabs.find((candidate) => workspace.hrefForTab(candidate) === pathname);
+		if (tab) {
+			return `tab:${tab.id}`;
+		}
+
+		if (pathname === '/history' || pathname === '/settings') {
+			return `utility:${pathname}`;
+		}
+	}
 
 	function createNewTab(): void {
 		const tab = workspace.createNewTab();
@@ -50,6 +72,16 @@
 		void workspace.closeTab(tab);
 	}
 
+	beforeNavigate(() => {
+		if (activeScrollKey) {
+			scrollArea?.captureScrollBeforeContentChange(activeScrollKey);
+		}
+	});
+
+	afterNavigate(() => {
+		scrollArea?.restoreActiveKey();
+	});
+
 	onMount(() => {
 		void workspace.start();
 
@@ -65,19 +97,23 @@
 <main class="harness-shell">
 	<WorkspaceTabs {workspace} pathname={page.url.pathname} onNew={createNewTab} onClose={closeTab} />
 
-	<div
-		id="workspace-content"
-		class:workspace-state={workspace.initializing || workspace.error}
-		class="workspace-content"
-	>
-		{#if workspace.initializing}
-			<section class="loading-state"><span class="pulse"></span>Loading harness…</section>
-		{:else if workspace.error}
-			<div class="app-error" role="alert">{workspace.error}</div>
-		{:else}
-			{@render children()}
-		{/if}
-	</div>
+	{#key activeScrollKey}
+		<WorkspaceScrollArea
+			bind:this={scrollArea}
+			activeKey={activeScrollKey}
+			workspaceState={workspace.initializing || !!workspace.error}
+			rememberScroll={(key, state) => workspace.rememberScroll(key, state)}
+			scrollState={(key) => workspace.scrollState(key)}
+		>
+			{#if workspace.initializing}
+				<section class="loading-state"><span class="pulse"></span>Loading harness…</section>
+			{:else if workspace.error}
+				<div class="app-error" role="alert">{workspace.error}</div>
+			{:else}
+				{@render children()}
+			{/if}
+		</WorkspaceScrollArea>
+	{/key}
 </main>
 
 <style>
@@ -87,16 +123,6 @@
 		height: 100vh;
 		height: 100dvh;
 		overflow: hidden;
-	}
-
-	.workspace-content {
-		min-height: 0;
-		overflow: auto;
-	}
-
-	.workspace-content.workspace-state {
-		display: grid;
-		grid-template-rows: minmax(0, 1fr);
 	}
 
 	.app-error {

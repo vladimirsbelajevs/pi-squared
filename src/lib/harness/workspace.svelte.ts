@@ -35,6 +35,7 @@ import {
 	type StoredChatTab,
 	type StoredNewTab,
 	type StoredWorkspaceV1,
+	type StreamingTool,
 	type Theme,
 	type WorkspaceTab
 } from '$lib/harness/types';
@@ -49,6 +50,11 @@ const LAST_THINKING_LEVEL_KEY = 'pi-squared:last-thinking-level';
 const THEME_KEY = 'pi-squared:theme';
 const SHOW_REASONING_KEY = 'pi-squared:show-reasoning';
 const SHOW_MODEL_CHANGES_KEY = 'pi-squared:show-model-changes';
+
+export type ScrollState = {
+	top: number;
+	pinnedToBottom: boolean;
+};
 
 export const THEME_LABELS: Record<Theme, string> = {
 	graphite: 'Graphite',
@@ -113,6 +119,12 @@ export class HarnessWorkspace {
 	#events: EventSource | undefined;
 	#lastEventId: number | undefined;
 	#chatLoads = new SvelteMap<string, Promise<ChatTab | undefined>>();
+	#scrollStates = new SvelteMap<string, ScrollState>();
+	#pendingStreamUpdates = new SvelteMap<
+		string,
+		{ chat: ChatTab; text: string; thinking: string; tools: SvelteMap<string, StreamingTool> }
+	>();
+	#streamFrame: number | undefined;
 	#persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 	async start(): Promise<void> {
@@ -154,6 +166,18 @@ export class HarnessWorkspace {
 
 	hrefForTab(tab: WorkspaceTab): string {
 		return tab.kind === 'new' ? this.newHref(tab.id) : this.chatHref(tab.projectId, tab.sessionId);
+	}
+
+	rememberScroll(key: string, state: ScrollState): void {
+		this.#scrollStates.set(key, state);
+	}
+
+	scrollState(key: string): ScrollState | undefined {
+		return this.#scrollStates.get(key);
+	}
+
+	removeScrollState(key: string): void {
+		this.#scrollStates.delete(key);
 	}
 
 	rememberTabForPathname(pathname: string): void {
@@ -513,6 +537,8 @@ export class HarnessWorkspace {
 			this.activeTabId = this.tabs[index]?.id ?? this.tabs[index - 1]?.id;
 		}
 
+		this.removeScrollState(`tab:${tab.id}`);
+		this.#discardPendingStreamUpdate(tab.id);
 		this.persist();
 		if (tab.kind === 'chat' && tab.runtimeId) {
 			try {
@@ -603,7 +629,6 @@ export class HarnessWorkspace {
 
 	#handleEvent(envelope: StreamEnvelope): void {
 		this.#lastEventId = envelope.id;
-		this.schedulePersist();
 		const chat = this.tabs.find(
 			(tab): tab is ChatTab => tab.kind === 'chat' && tab.runtimeId === envelope.runtimeId
 		);
@@ -613,6 +638,7 @@ export class HarnessWorkspace {
 
 		const event = envelope.event;
 		if (event.type === 'snapshot') {
+			this.#discardPendingStreamUpdate(chat.id);
 			this.#applySnapshot(chat, event.snapshot);
 			this.persist();
 
@@ -620,25 +646,18 @@ export class HarnessWorkspace {
 		}
 
 		if (event.type === 'assistant_delta') {
-			chat.streamText += event.text ?? '';
-			chat.streamThinking += event.thinking ?? '';
+			this.#queueAssistantDelta(chat, event.text ?? '', event.thinking ?? '');
 
 			return;
 		}
 
 		if (event.type === 'tool_update') {
-			const tool = chat.streamTools.find((candidate) => candidate.id === event.toolCallId);
-			if (tool) {
-				tool.text = event.text;
-				tool.isError = event.isError;
-			} else {
-				chat.streamTools.push({
-					id: event.toolCallId,
-					name: event.toolName,
-					text: event.text,
-					isError: event.isError
-				});
-			}
+			this.#queueToolUpdate(chat, {
+				id: event.toolCallId,
+				name: event.toolName,
+				text: event.text,
+				isError: event.isError
+			});
 
 			return;
 		}
@@ -721,7 +740,67 @@ export class HarnessWorkspace {
 		this.#applySnapshot(chat, snapshot);
 	}
 
+	#queueAssistantDelta(chat: ChatTab, text: string, thinking: string): void {
+		const pending = this.#pendingStreamUpdateFor(chat);
+		pending.text += text;
+		pending.thinking += thinking;
+		this.#scheduleStreamFlush();
+	}
+
+	#queueToolUpdate(chat: ChatTab, tool: StreamingTool): void {
+		const pending = this.#pendingStreamUpdateFor(chat);
+		pending.tools.set(tool.id, tool);
+		this.#scheduleStreamFlush();
+	}
+
+	#pendingStreamUpdateFor(chat: ChatTab): {
+		chat: ChatTab;
+		text: string;
+		thinking: string;
+		tools: SvelteMap<string, StreamingTool>;
+	} {
+		let pending = this.#pendingStreamUpdates.get(chat.id);
+		if (!pending) {
+			pending = { chat, text: '', thinking: '', tools: new SvelteMap() };
+			this.#pendingStreamUpdates.set(chat.id, pending);
+		}
+
+		return pending;
+	}
+
+	#scheduleStreamFlush(): void {
+		if (this.#streamFrame !== undefined) {
+			return;
+		}
+
+		this.#streamFrame = requestAnimationFrame(() => {
+			this.#streamFrame = undefined;
+			for (const pending of this.#pendingStreamUpdates.values()) {
+				pending.chat.streamText += pending.text;
+				pending.chat.streamThinking += pending.thinking;
+				for (const tool of pending.tools.values()) {
+					const current = pending.chat.streamTools.find((candidate) => candidate.id === tool.id);
+					if (current) {
+						current.text = tool.text;
+						current.isError = tool.isError;
+					} else {
+						pending.chat.streamTools.push(tool);
+					}
+				}
+			}
+
+			this.#pendingStreamUpdates.clear();
+
+			this.schedulePersist();
+		});
+	}
+
+	#discardPendingStreamUpdate(chatId: string): void {
+		this.#pendingStreamUpdates.delete(chatId);
+	}
+
 	#applySnapshot(chat: ChatTab, snapshot: RuntimeSnapshot): void {
+		this.#discardPendingStreamUpdate(chat.id);
 		chat.snapshot = snapshot;
 		chat.permissionRequests = snapshot.permissionRequests.map((request) => ({ ...request }));
 		this.#reconcilePendingUserMessages(chat);

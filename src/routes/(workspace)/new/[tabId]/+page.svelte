@@ -8,7 +8,9 @@
 	import ProjectPicker from './ProjectPicker.svelte';
 	import type { ChatSubmission } from '$lib/contracts';
 	import { workspace } from '$lib/harness/workspace.svelte';
+	import { getWorkspaceScrollController } from '$lib/workspace-scroll';
 
+	const scrollController = getWorkspaceScrollController();
 	let tabId = $derived(page.params.tabId ?? '');
 	let tab = $derived(workspace.findNewTab(tabId));
 	let introReady = $state(false);
@@ -38,6 +40,7 @@
 			return false;
 		}
 
+		scrollController.captureScrollBeforeContentChange(`tab:${tab.id}`);
 		const chat = await workspace.startChat(tab, submission);
 		if (!chat) {
 			return false;

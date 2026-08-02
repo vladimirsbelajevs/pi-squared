@@ -7,10 +7,12 @@
 	import ChatComposer from '$lib/components/ChatComposer/ChatComposer.svelte';
 	import type { ChatSubmission } from '$lib/contracts';
 	import { workspace } from '$lib/harness/workspace.svelte';
+	import { getWorkspaceScrollController } from '$lib/workspace-scroll';
 	import ChatTimeline from './ChatTimeline.svelte';
 	import PermissionApproval from './PermissionApproval.svelte';
 	import TransientNoticePopup from './TransientNoticePopup.svelte';
 
+	const scrollController = getWorkspaceScrollController();
 	let projectId = $derived(page.params.projectId ?? '');
 	let sessionId = $derived(page.params.sessionId ?? '');
 	let chat = $derived(workspace.findChat(projectId, sessionId));
@@ -38,7 +40,7 @@
 	</section>
 {:else}
 	<section class="chat-view" role="tabpanel">
-		<div class="chat-scroll">
+		<div class="chat-content">
 			<ChatTimeline
 				{chat}
 				showReasoning={workspace.showReasoning}
@@ -66,7 +68,11 @@
 				sessionTokens={chat.snapshot.sessionTokens}
 				onMcpToggle={(serverName, enabled) =>
 					workspace.setMcpServerEnabled(chat, serverName, enabled)}
-				onSend={(submission: ChatSubmission) => workspace.sendPrompt(chat, submission)}
+				onSend={(submission: ChatSubmission) => {
+					scrollController.captureScrollBeforeContentChange(`tab:${chat.id}`);
+
+					return workspace.sendPrompt(chat, submission);
+				}}
 				onDraftChange={() => workspace.schedulePersist()}
 				onStop={() => workspace.stopChat(chat)}
 				onModelChange={(key) => workspace.changeModel(chat, key)}
@@ -102,8 +108,9 @@
 		flex-direction: column;
 	}
 
-	.chat-scroll {
+	.chat-content {
 		flex: 1;
+		min-width: 0;
 		padding: 1.5rem max(1rem, calc((100vw - 54rem) / 2)) 2rem;
 	}
 
