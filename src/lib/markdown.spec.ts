@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderAssistantMarkdown } from './markdown';
+import { renderAssistantMarkdown, renderStreamingMarkdown } from './markdown';
 
 describe('renderAssistantMarkdown', () => {
 	it('renders common assistant Markdown', () => {
@@ -99,5 +99,44 @@ describe('renderAssistantMarkdown', () => {
 		for (const url of unsafeUrls) {
 			expect(renderAssistantMarkdown(`[unsafe](${url})`)).not.toContain('<a ');
 		}
+	});
+});
+
+describe('renderStreamingMarkdown', () => {
+	it('renders Markdown without highlighting or copy controls', () => {
+		const html = renderStreamingMarkdown(
+			'## Heading\n\nThis is **emphasized**.\n\n- First\n- Second\n\n[Docs](https://example.test/docs)\n\n```ts\nconst answer = 42;\n'
+		);
+
+		expect(html).toContain('<h2>Heading</h2>');
+		expect(html).toContain('<strong>emphasized</strong>');
+		expect(html).toContain('<ul>');
+		expect(html).toContain('<li>First</li>');
+		expect(html).toContain('<a href="https://example.test/docs">Docs</a>');
+		expect(html).toContain('<pre><code class="language-ts">const answer = 42;\n</code></pre>');
+		expect(html).not.toContain('hljs-');
+		expect(html).not.toContain('data-code-copy');
+		expect(html).not.toContain('markdown-code-block');
+	});
+
+	it('retains the final renderer safety policy', () => {
+		const unsafe = '<script>alert("unsafe")</script>\n\n![Logo](https://example.test/logo.svg)';
+		const unsafeUrls = [
+			'javascript:alert(1)',
+			'javascript%3Aalert(1)',
+			'//example.test/path',
+			'data:text/html,unsafe'
+		];
+
+		const streamingHtml = renderStreamingMarkdown(unsafe);
+		expect(streamingHtml).toContain('&lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt;');
+		expect(streamingHtml).not.toContain('<script>');
+		expect(streamingHtml).not.toContain('<img');
+
+		for (const url of unsafeUrls) {
+			expect(renderStreamingMarkdown(`[unsafe](${url})`)).not.toContain('<a ');
+		}
+
+		expect(renderAssistantMarkdown(unsafe)).toBe(streamingHtml);
 	});
 });

@@ -81,35 +81,67 @@ function isAllowedLink(url: string): boolean {
 	);
 }
 
-const markdown = new MarkdownIt({
-	html: false,
-	linkify: false,
-	breaks: false,
-	highlight(code, language) {
-		const normalizedLanguage = language.trim().toLowerCase();
-		if (!normalizedLanguage || !hljs.getLanguage(normalizedLanguage)) {
-			return '';
+type MarkdownRendererOptions = {
+	highlightCode: boolean;
+	includeCodeCopyAction: boolean;
+};
+
+function createMarkdownRenderer({
+	highlightCode,
+	includeCodeCopyAction
+}: MarkdownRendererOptions): MarkdownIt {
+	const markdown = new MarkdownIt({
+		html: false,
+		linkify: false,
+		breaks: false,
+		highlight(code, language) {
+			if (!highlightCode) {
+				return '';
+			}
+
+			const normalizedLanguage = language.trim().toLowerCase();
+			if (!normalizedLanguage || !hljs.getLanguage(normalizedLanguage)) {
+				return '';
+			}
+
+			return hljs.highlight(code, { language: normalizedLanguage, ignoreIllegals: true }).value;
 		}
+	});
+	const defaultFence = markdown.renderer.rules.fence;
 
-		return hljs.highlight(code, { language: normalizedLanguage, ignoreIllegals: true }).value;
+	if (!defaultFence) {
+		throw new Error('Markdown-it fence renderer is unavailable.');
 	}
-});
-const defaultFence = markdown.renderer.rules.fence;
 
-if (!defaultFence) {
-	throw new Error('Markdown-it fence renderer is unavailable.');
+	if (includeCodeCopyAction) {
+		markdown.renderer.rules.fence = (...args) =>
+			`<div class="markdown-code-block" data-code-block>${CODE_COPY_BUTTON}${defaultFence(...args)}</div>\n`;
+	}
+
+	const defaultNormalizeLink = markdown.normalizeLink.bind(markdown);
+	const defaultValidateLink = markdown.validateLink.bind(markdown);
+
+	markdown.normalizeLink = (url) =>
+		hasRejectedLinkSyntax(url) ? 'invalid:' : defaultNormalizeLink(url);
+	markdown.validateLink = (url) => defaultValidateLink(url) && isAllowedLink(url);
+	markdown.renderer.rules.image = () => '';
+
+	return markdown;
 }
 
-markdown.renderer.rules.fence = (...args) =>
-	`<div class="markdown-code-block" data-code-block>${CODE_COPY_BUTTON}${defaultFence(...args)}</div>\n`;
-const defaultNormalizeLink = markdown.normalizeLink.bind(markdown);
-const defaultValidateLink = markdown.validateLink.bind(markdown);
-
-markdown.normalizeLink = (url) =>
-	hasRejectedLinkSyntax(url) ? 'invalid:' : defaultNormalizeLink(url);
-markdown.validateLink = (url) => defaultValidateLink(url) && isAllowedLink(url);
-markdown.renderer.rules.image = () => '';
+const assistantMarkdown = createMarkdownRenderer({
+	highlightCode: true,
+	includeCodeCopyAction: true
+});
+const streamingMarkdown = createMarkdownRenderer({
+	highlightCode: false,
+	includeCodeCopyAction: false
+});
 
 export function renderAssistantMarkdown(text: string): string {
-	return markdown.render(text);
+	return assistantMarkdown.render(text);
+}
+
+export function renderStreamingMarkdown(text: string): string {
+	return streamingMarkdown.render(text);
 }

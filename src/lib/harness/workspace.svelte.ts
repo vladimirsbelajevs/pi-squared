@@ -345,6 +345,7 @@ export class HarnessWorkspace {
 				draft: '',
 				queueMode: 'followUp',
 				streamText: '',
+				streamRenderedText: '',
 				streamThinking: '',
 				streamTools: [],
 				transientNotices: [],
@@ -758,6 +759,7 @@ export class HarnessWorkspace {
 		chat.title = this.#chatTitle(snapshot);
 		chat.hydrating = false;
 		chat.streamText = '';
+		chat.streamRenderedText = '';
 		chat.streamThinking = '';
 		chat.streamTools = [];
 	}
@@ -775,6 +777,7 @@ export class HarnessWorkspace {
 			draft: '',
 			queueMode: 'followUp',
 			streamText: '',
+			streamRenderedText: '',
 			streamThinking: '',
 			streamTools: [],
 			transientNotices: [],
@@ -1009,6 +1012,7 @@ export class HarnessWorkspace {
 			draft: tab.draft,
 			queueMode: tab.queueMode,
 			streamText: '',
+			streamRenderedText: '',
 			streamThinking: '',
 			streamTools: [],
 			transientNotices: [],

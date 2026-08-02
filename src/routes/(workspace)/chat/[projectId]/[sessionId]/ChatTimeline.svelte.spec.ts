@@ -31,6 +31,7 @@ function chat(overrides: Partial<ChatTab> = {}): ChatTab {
 		draft: '',
 		queueMode: 'followUp',
 		streamText: '',
+		streamRenderedText: '',
 		streamThinking: '',
 		streamTools: [],
 		transientNotices: [],
@@ -394,31 +395,40 @@ describe('ChatTimeline', () => {
 		}
 	});
 
-	it('copies fenced code added to an existing streaming Markdown container', async () => {
-		const writeText = vi.fn().mockResolvedValue(undefined);
-		const restoreClipboard = mockClipboard(writeText);
+	it('does not add code controls or highlighting to streaming code', async () => {
+		const text = '```bash\necho "done"\n```';
+		const screen = render(ChatTimeline, {
+			chat: chat({ streamText: text, streamRenderedText: text })
+		});
+		const message = screen.container.querySelector('.streaming .message-markdown') as HTMLElement;
 
-		try {
-			const screen = render(ChatTimeline, { chat: chat({ streamText: 'Still working…' }) });
-			expect(screen.container.querySelector('[data-code-copy]')).toBeNull();
-
-			await screen.rerender({
-				chat: chat({ streamText: '```bash\necho "done"\n```' })
-			});
-			await screen.getByRole('button', { name: 'Copy code' }).click();
-
-			await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('echo "done"\n'));
-		} finally {
-			restoreClipboard();
-		}
+		expect(message.querySelector('[data-code-copy]')).toBeNull();
+		expect(message.querySelector('pre > code')).toHaveClass('language-bash');
+		expect(message.innerHTML).not.toContain('hljs-');
 	});
 
-	it('reports fenced code clipboard failures', async () => {
+	it('reports finalized fenced code clipboard failures', async () => {
 		const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied.'));
 		const restoreClipboard = mockClipboard(writeText);
+		const base = chat();
 
 		try {
-			const screen = render(ChatTimeline, { chat: chat({ streamText: '```\nsecret\n```' }) });
+			const screen = render(ChatTimeline, {
+				chat: chat({
+					snapshot: {
+						...base.snapshot!,
+						isStreaming: false,
+						items: [
+							{
+								id: 'assistant-code-failure',
+								kind: 'message',
+								role: 'assistant',
+								text: '```\nsecret\n```'
+							}
+						]
+					}
+				})
+			});
 			await screen.getByRole('button', { name: 'Copy code' }).click();
 
 			await expect
@@ -519,14 +529,66 @@ describe('ChatTimeline', () => {
 		);
 	});
 
-	it('renders streaming assistant text as Markdown', async () => {
+	it('renders the throttled streaming snapshot as Markdown', async () => {
+		const text = '## Streaming\n\n**Partial answer**';
 		const screen = render(ChatTimeline, {
-			chat: chat({ streamText: '## Streaming\n\n**Partial answer**' })
+			chat: chat({ streamText: text, streamRenderedText: text })
 		});
 
 		const message = screen.container.querySelector('.streaming .message-markdown') as HTMLElement;
 		expect(message.querySelector('h2')).toHaveTextContent('Streaming');
 		expect(message.querySelector('strong')).toHaveTextContent('Partial answer');
+	});
+
+	it('replaces the unhighlighted streaming preview with finalized highlighted Markdown', async () => {
+		const text = '```ts\nconst answer = 42;\n```';
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({ streamText: text, streamRenderedText: text })
+		});
+
+		const streamingMessage = screen.container.querySelector(
+			'.streaming .message-markdown'
+		) as HTMLElement;
+		expect(streamingMessage.querySelector('[data-code-copy]')).toBeNull();
+		expect(streamingMessage.innerHTML).not.toContain('hljs-');
+
+		await screen.rerender({
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-final',
+							kind: 'message',
+							role: 'assistant',
+							text
+						}
+					]
+				},
+				streamText: '',
+				streamRenderedText: ''
+			})
+		});
+
+		const finalMessage = screen.container.querySelector(
+			'.message-entry-assistant .message-markdown'
+		) as HTMLElement;
+		expect(finalMessage.querySelector('[data-code-copy]')).not.toBeNull();
+		expect(finalMessage.innerHTML).toContain('hljs-');
+	});
+
+	it('renders unsafe streaming HTML and links according to the shared safe policy', async () => {
+		const text = '<script>alert("unsafe")</script>\n\n[unsafe](javascript:alert(1))';
+		const screen = render(ChatTimeline, {
+			chat: chat({ streamText: text, streamRenderedText: text })
+		});
+		const message = screen.container.querySelector('.streaming .message-markdown') as HTMLElement;
+
+		expect(message.querySelector('script')).toBeNull();
+		expect(message.querySelector('a')).toBeNull();
+		expect(message.textContent).toContain('<script>alert("unsafe")</script>');
 	});
 
 	it('keeps live tool calls above the streaming response', async () => {

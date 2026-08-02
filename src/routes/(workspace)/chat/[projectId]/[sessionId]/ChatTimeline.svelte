@@ -3,7 +3,7 @@
 	import { on } from 'svelte/events';
 	import type { ChatItem, ChatToolCall } from '$lib/contracts';
 	import type { ChatTab, StreamingTool } from '$lib/harness/types';
-	import { renderAssistantMarkdown } from '$lib/markdown';
+	import { renderAssistantMarkdown, renderStreamingMarkdown } from '$lib/markdown';
 	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
 	import ImageViewer, { type ImageViewerImage } from '$lib/components/ImageViewer.svelte';
 
@@ -470,10 +470,10 @@
 				<pre>{chat.streamThinking}</pre>
 			</details>
 		{/if}
-		{#if chat.streamText}
-			{@const markdown = renderAssistantMarkdown(chat.streamText)}
+		{#if chat.streamRenderedText}
+			{@const markdown = renderStreamingMarkdown(chat.streamRenderedText)}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
-			<div class="message-markdown" {@attach codeCopyControls}>{@html markdown}</div>
+			<div class="message-markdown">{@html markdown}</div>
 		{/if}
 	</article>
 {/if}

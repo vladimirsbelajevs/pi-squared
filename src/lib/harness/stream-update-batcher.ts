@@ -1,8 +1,11 @@
 import type { StreamingTool } from '$lib/harness/types';
 
+export const STREAM_RENDER_THROTTLE_MS = 100;
+
 export type StreamUpdateTarget = {
 	id: string;
 	streamText: string;
+	streamRenderedText: string;
 	streamThinking: string;
 	streamTools: StreamingTool[];
 };
@@ -14,16 +17,27 @@ type PendingStreamUpdate = {
 	tools: Map<string, StreamingTool>;
 };
 
+type PendingPreview = {
+	chat: StreamUpdateTarget;
+	handle?: ReturnType<typeof setTimeout>;
+};
+
 type FrameScheduler = (callback: FrameRequestCallback) => number;
+type TimeoutScheduler = (callback: () => void, delay: number) => ReturnType<typeof setTimeout>;
+type TimeoutCanceller = (handle: ReturnType<typeof setTimeout>) => void;
 
 /** Coalesces display-only stream mutations until the next animation frame. */
 export class StreamUpdateBatcher {
 	#pending = new Map<string, PendingStreamUpdate>();
+	#previewTimers = new Map<string, PendingPreview>();
 	#frame: number | undefined;
 
 	constructor(
-		private readonly scheduleFrame: FrameScheduler = requestAnimationFrame,
-		private readonly onFlush: () => void = () => undefined
+		private readonly scheduleFrame: FrameScheduler = (callback) => requestAnimationFrame(callback),
+		private readonly onFlush: () => void = () => undefined,
+		private readonly scheduleTimeout: TimeoutScheduler = (callback, delay) =>
+			setTimeout(callback, delay),
+		private readonly clearScheduledTimeout: TimeoutCanceller = (handle) => clearTimeout(handle)
 	) {}
 
 	queueAssistantDelta(chat: StreamUpdateTarget, text: string, thinking: string): void {
@@ -40,10 +54,14 @@ export class StreamUpdateBatcher {
 
 	discard(chatId: string): void {
 		this.#pending.delete(chatId);
+		this.#discardPreview(chatId);
 	}
 
 	discardAll(): void {
 		this.#pending.clear();
+		for (const chatId of this.#previewTimers.keys()) {
+			this.#discardPreview(chatId);
+		}
 	}
 
 	#pendingFor(chat: StreamUpdateTarget): PendingStreamUpdate {
@@ -68,6 +86,7 @@ export class StreamUpdateBatcher {
 			}
 
 			for (const pending of this.#pending.values()) {
+				const hadStreamText = pending.chat.streamText.length > 0;
 				pending.chat.streamText += pending.text;
 				pending.chat.streamThinking += pending.thinking;
 				for (const tool of pending.tools.values()) {
@@ -80,10 +99,45 @@ export class StreamUpdateBatcher {
 						pending.chat.streamTools.push(tool);
 					}
 				}
+
+				if (pending.text && !hadStreamText && pending.chat.streamText) {
+					pending.chat.streamRenderedText = pending.chat.streamText;
+				} else if (pending.text) {
+					this.#schedulePreview(pending.chat);
+				}
 			}
 
 			this.#pending.clear();
 			this.onFlush();
 		});
+	}
+
+	#schedulePreview(chat: StreamUpdateTarget): void {
+		if (this.#previewTimers.has(chat.id)) {
+			return;
+		}
+
+		const pendingPreview: PendingPreview = { chat };
+		this.#previewTimers.set(chat.id, pendingPreview);
+		pendingPreview.handle = this.scheduleTimeout(() => {
+			if (this.#previewTimers.get(chat.id) !== pendingPreview) {
+				return;
+			}
+
+			this.#previewTimers.delete(chat.id);
+			chat.streamRenderedText = chat.streamText;
+		}, STREAM_RENDER_THROTTLE_MS);
+	}
+
+	#discardPreview(chatId: string): void {
+		const pendingPreview = this.#previewTimers.get(chatId);
+		if (!pendingPreview) {
+			return;
+		}
+
+		this.#previewTimers.delete(chatId);
+		if (pendingPreview.handle !== undefined) {
+			this.clearScheduledTimeout(pendingPreview.handle);
+		}
 	}
 }

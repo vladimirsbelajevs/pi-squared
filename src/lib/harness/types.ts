@@ -78,6 +78,8 @@ export interface ChatTab {
 	draft: string;
 	queueMode: QueueMode;
 	streamText: string;
+	/** Recent throttled Markdown preview of streamText; transient and never persisted. */
+	streamRenderedText: string;
 	streamThinking: string;
 	streamTools: StreamingTool[];
 	transientNotices: TransientNotice[];
