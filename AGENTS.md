@@ -26,7 +26,35 @@
 - For UI component stories and Storybook component tests, read and follow
   [`.agents/skills/storybook-tests/SKILL.md`](.agents/skills/storybook-tests/SKILL.md).
 
-## Validation
+## Code style
+
+### General coding guidlines
+
+Keep the code cohesive - keep closely related functionality together (unless it breaks common SvelteKit patterns, like `$lib/server`)
+
+### Svelte code style
+
+If .svelte files become larger than 300 lines (excluding `<style></style>` section) then
+consider splitting component into smaller components.
+
+Follow **smart parent / dumb child** pattern, but do not apply it as a rigid rule.
+
+Here are some component guidlines guidlines:
+
+- `+page.ts` / `+page.server.ts` for loading and server-side concerns
+- page component for orchestration
+- feature components for cohesive domain behavior
+- small presentational components for reusable UI
+- context or shared state only when props genuinely become cumbersome
+
+Keep state in the lowest component that needs it, but lift it when another component or business operation must coordinate it.
+
+### Performance
+
+When implementing big features do keep in mind how it will perform.
+Do not do computationaly expensive implementations
+
+### Linting
 
 - After making any edits, run `npm run lint` before responding. Report any
   failures and their cause.
