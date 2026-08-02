@@ -3,6 +3,7 @@ import type { AgentSession, SessionEntry } from '@earendil-works/pi-coding-agent
 import {
 	buildSnapshot,
 	listSessionSlashCommands,
+	serializeToolArguments,
 	mapSessionEntry,
 	normalizePiEvent
 } from './pi.js';
@@ -192,6 +193,66 @@ describe('mapSessionEntry', () => {
 				assistantMessageEvent: { type: 'thinking_delta', delta: 'Inspecting files.' }
 			} as never)
 		).toEqual({ type: 'assistant_delta', thinking: 'Inspecting files.' });
+	});
+
+	it('normalizes the live tool lifecycle with arguments and explicit terminal states', () => {
+		expect(
+			normalizePiEvent({
+				type: 'message_update',
+				assistantMessageEvent: {
+					type: 'toolcall_end',
+					toolCall: { id: 'read-1', name: 'read', arguments: { path: 'README.md' } }
+				}
+			} as never)
+		).toEqual({
+			type: 'tool_update',
+			toolCallId: 'read-1',
+			toolName: 'read',
+			status: 'pending',
+			arguments: '{\n  "path": "README.md"\n}'
+		});
+		expect(
+			normalizePiEvent({
+				type: 'tool_execution_start',
+				toolCallId: 'read-1',
+				toolName: 'read',
+				args: { path: 'README.md' }
+			} as never)
+		).toMatchObject({ status: 'running', arguments: '{\n  "path": "README.md"\n}' });
+		expect(
+			normalizePiEvent({
+				type: 'tool_execution_update',
+				toolCallId: 'read-1',
+				toolName: 'read',
+				args: { path: 'README.md' },
+				partialResult: [{ type: 'text', text: 'partial' }]
+			} as never)
+		).toMatchObject({ status: 'running', text: 'partial' });
+		expect(
+			normalizePiEvent({
+				type: 'tool_execution_end',
+				toolCallId: 'read-1',
+				toolName: 'read',
+				result: [{ type: 'text', text: 'done' }],
+				isError: false
+			} as never)
+		).toMatchObject({ status: 'completed', text: 'done' });
+		expect(
+			normalizePiEvent({
+				type: 'tool_execution_end',
+				toolCallId: 'read-1',
+				toolName: 'read',
+				result: [{ type: 'text', text: 'failed' }],
+				isError: true
+			} as never)
+		).toMatchObject({ status: 'failed', text: 'failed' });
+	});
+
+	it('keeps a live tool event usable when arguments cannot be serialized', () => {
+		const circular: { self?: unknown } = {};
+		circular.self = circular;
+
+		expect(serializeToolArguments(circular)).toBe('[Unable to serialize tool arguments]');
 	});
 
 	it('lists only prompt-executable extensions, templates, and skills', () => {

@@ -640,8 +640,11 @@ export class HarnessWorkspace {
 
 		const event = envelope.event;
 		if (event.type === 'snapshot') {
+			// SSE envelopes are source-ordered: commit any earlier tool lifecycle patches before
+			// this snapshot decides whether their live lifecycle remains active.
+			this.#streamUpdates.flush(chat.id);
 			this.#streamUpdates.discard(chat.id);
-			this.#applySnapshot(chat, event.snapshot);
+			this.#applySnapshot(chat, event.snapshot, true);
 			this.persist();
 
 			return;
@@ -657,8 +660,9 @@ export class HarnessWorkspace {
 			this.#queueToolUpdate(chat, {
 				id: event.toolCallId,
 				name: event.toolName,
-				text: event.text,
-				isError: event.isError
+				status: event.status,
+				...(event.arguments !== undefined ? { arguments: event.arguments } : {}),
+				...(event.text !== undefined ? { text: event.text } : {})
 			});
 
 			return;
@@ -750,8 +754,11 @@ export class HarnessWorkspace {
 		this.#streamUpdates.queueToolUpdate(chat, tool);
 	}
 
-	#applySnapshot(chat: ChatTab, snapshot: RuntimeSnapshot): void {
-		this.#streamUpdates.discard(chat.id);
+	#applySnapshot(chat: ChatTab, snapshot: RuntimeSnapshot, fromSse = false): void {
+		if (!fromSse) {
+			this.#streamUpdates.discard(chat.id);
+		}
+
 		chat.snapshot = snapshot;
 		chat.permissionRequests = snapshot.permissionRequests.map((request) => ({ ...request }));
 		this.#reconcilePendingUserMessages(chat);
@@ -761,7 +768,9 @@ export class HarnessWorkspace {
 		chat.streamText = '';
 		chat.streamRenderedText = '';
 		chat.streamThinking = '';
-		chat.streamTools = [];
+		if (!snapshot.isStreaming) {
+			chat.streamTools = [];
+		}
 	}
 
 	#createChatTab(id: string, snapshot: RuntimeSnapshot): ChatTab {

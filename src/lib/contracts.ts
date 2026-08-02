@@ -118,6 +118,9 @@ export interface ChatToolCall {
 	arguments: string;
 }
 
+/** Lifecycle state for a tool call, including calls that have not started execution yet. */
+export type ToolStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
 export interface ChatItem {
 	id: string;
 	kind: 'message' | 'notice';
@@ -179,8 +182,9 @@ export type RuntimeEvent =
 			type: 'tool_update';
 			toolCallId: string;
 			toolName: string;
-			text: string;
-			isError?: boolean;
+			status: ToolStatus;
+			arguments?: string;
+			text?: string;
 	  }
 	| { type: 'state'; isStreaming: boolean }
 	| { type: 'mcp_status'; mcpStatus: McpStatusSnapshot }

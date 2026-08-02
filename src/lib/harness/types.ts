@@ -3,7 +3,8 @@ import type {
 	ModelOption,
 	PermissionRequest,
 	RuntimeSnapshot,
-	ThinkingLevel
+	ThinkingLevel,
+	ToolStatus
 } from '$lib/contracts';
 
 export type Theme =
@@ -41,8 +42,10 @@ export interface NewTab {
 export interface StreamingTool {
 	id: string;
 	name: string;
-	text: string;
-	isError?: boolean;
+	/** Status is optional only for persisted local state created before tool lifecycle events existed. */
+	status?: ToolStatus;
+	arguments?: string;
+	text?: string;
 }
 
 export interface TransientNotice {

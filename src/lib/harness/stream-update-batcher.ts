@@ -1,4 +1,5 @@
 import type { StreamingTool } from '$lib/harness/types';
+import { mergeStreamingTool } from '$lib/harness/streaming-tools';
 
 export const STREAM_RENDER_THROTTLE_MS = 100;
 
@@ -48,8 +49,21 @@ export class StreamUpdateBatcher {
 	}
 
 	queueToolUpdate(chat: StreamUpdateTarget, tool: StreamingTool): void {
-		this.#pendingFor(chat).tools.set(tool.id, tool);
+		const pending = this.#pendingFor(chat);
+		pending.tools.set(tool.id, mergeStreamingTool(pending.tools.get(tool.id), tool));
 		this.#scheduleFlush();
+	}
+
+	/** Commits pending SSE updates before an SSE snapshot applies its lifecycle boundary. */
+	flush(chatId: string): void {
+		const pending = this.#pending.get(chatId);
+		if (!pending) {
+			return;
+		}
+
+		this.#commit(pending);
+		this.#pending.delete(chatId);
+		this.onFlush();
 	}
 
 	discard(chatId: string): void {
@@ -86,30 +100,32 @@ export class StreamUpdateBatcher {
 			}
 
 			for (const pending of this.#pending.values()) {
-				const hadStreamText = pending.chat.streamText.length > 0;
-				pending.chat.streamText += pending.text;
-				pending.chat.streamThinking += pending.thinking;
-				for (const tool of pending.tools.values()) {
-					const current = pending.chat.streamTools.find((candidate) => candidate.id === tool.id);
-					if (current) {
-						current.name = tool.name;
-						current.text = tool.text;
-						current.isError = tool.isError;
-					} else {
-						pending.chat.streamTools.push(tool);
-					}
-				}
-
-				if (pending.text && !hadStreamText && pending.chat.streamText) {
-					pending.chat.streamRenderedText = pending.chat.streamText;
-				} else if (pending.text) {
-					this.#schedulePreview(pending.chat);
-				}
+				this.#commit(pending);
 			}
 
 			this.#pending.clear();
 			this.onFlush();
 		});
+	}
+
+	#commit(pending: PendingStreamUpdate): void {
+		const hadStreamText = pending.chat.streamText.length > 0;
+		pending.chat.streamText += pending.text;
+		pending.chat.streamThinking += pending.thinking;
+		for (const tool of pending.tools.values()) {
+			const index = pending.chat.streamTools.findIndex((candidate) => candidate.id === tool.id);
+			if (index >= 0) {
+				pending.chat.streamTools[index] = mergeStreamingTool(pending.chat.streamTools[index], tool);
+			} else {
+				pending.chat.streamTools.push(tool);
+			}
+		}
+
+		if (pending.text && !hadStreamText && pending.chat.streamText) {
+			pending.chat.streamRenderedText = pending.chat.streamText;
+		} else if (pending.text) {
+			this.#schedulePreview(pending.chat);
+		}
 	}
 
 	#schedulePreview(chat: StreamUpdateTarget): void {

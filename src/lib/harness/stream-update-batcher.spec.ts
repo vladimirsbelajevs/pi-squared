@@ -114,19 +114,50 @@ describe('StreamUpdateBatcher', () => {
 		expect(previewDelays()).toHaveLength(1);
 	});
 
-	it('keeps only the latest update for each tool until the frame', () => {
+	it('merges same-frame tool patches without losing arguments or terminal status', () => {
 		const { batcher, flushFrame } = createBatcher();
 		const target = chat('chat-1');
 
-		batcher.queueToolUpdate(target, { id: 'read-1', name: 'read', text: 'Opening file' });
-		batcher.queueToolUpdate(target, { id: 'read-1', name: 'read', text: 'Reading file' });
-		batcher.queueToolUpdate(target, { id: 'write-1', name: 'write', text: 'Writing file' });
+		batcher.queueToolUpdate(target, {
+			id: 'read-1',
+			name: 'read',
+			status: 'running',
+			arguments: '{"path":"README.md"}'
+		});
+		batcher.queueToolUpdate(target, {
+			id: 'read-1',
+			name: 'read',
+			status: 'completed',
+			text: 'file contents'
+		});
+		batcher.queueToolUpdate(target, {
+			id: 'write-1',
+			name: 'write',
+			status: 'running',
+			text: 'Writing file'
+		});
 		flushFrame();
 
 		expect(target.streamTools).toEqual([
-			{ id: 'read-1', name: 'read', text: 'Reading file' },
-			{ id: 'write-1', name: 'write', text: 'Writing file' }
+			{
+				id: 'read-1',
+				name: 'read',
+				status: 'completed',
+				arguments: '{"path":"README.md"}',
+				text: 'file contents'
+			},
+			{ id: 'write-1', name: 'write', status: 'running', text: 'Writing file' }
 		]);
+	});
+
+	it('flushes pending updates synchronously for an SSE snapshot boundary', () => {
+		const { batcher } = createBatcher();
+		const target = chat('chat-1');
+		batcher.queueToolUpdate(target, { id: 'read-1', name: 'read', status: 'pending' });
+
+		batcher.flush(target.id);
+
+		expect(target.streamTools).toEqual([{ id: 'read-1', name: 'read', status: 'pending' }]);
 	});
 
 	it('makes scheduled frame and preview callbacks harmless when a snapshot discards its update', () => {

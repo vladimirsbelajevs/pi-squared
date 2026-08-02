@@ -20,6 +20,7 @@ import type {
 	PermissionRequest,
 	Project,
 	RuntimeSnapshot,
+	RuntimeEvent,
 	SessionTokenUsage,
 	McpStatusSnapshot,
 	SlashCommand,
@@ -140,6 +141,14 @@ function thinkingFromContent(content: unknown): string | undefined {
 	return thinking || undefined;
 }
 
+export function serializeToolArguments(argumentsValue: unknown): string {
+	try {
+		return JSON.stringify(argumentsValue ?? {}, null, 2);
+	} catch {
+		return '[Unable to serialize tool arguments]';
+	}
+}
+
 function toolCallsFromContent(content: unknown): ChatToolCall[] | undefined {
 	if (!Array.isArray(content)) {
 		return undefined;
@@ -160,7 +169,7 @@ function toolCallsFromContent(content: unknown): ChatToolCall[] | undefined {
 			{
 				id: item.id,
 				name: item.name,
-				arguments: JSON.stringify(item.arguments ?? {}, null, 2)
+				arguments: serializeToolArguments(item.arguments)
 			}
 		];
 	});
@@ -480,11 +489,7 @@ export async function resolveSessionPath(project: Project, sessionId: string): P
 
 export function normalizePiEvent(
 	event: AgentSessionEvent
-):
-	| { type: 'assistant_delta'; text?: string; thinking?: string }
-	| { type: 'tool_update'; toolCallId: string; toolName: string; text: string; isError?: boolean }
-	| { type: 'notice'; message: string }
-	| undefined {
+): Extract<RuntimeEvent, { type: 'assistant_delta' | 'tool_update' | 'notice' }> | undefined {
 	if (event.type === 'message_update') {
 		const update = event.assistantMessageEvent;
 		if (update.type === 'text_delta') {
@@ -495,9 +500,29 @@ export function normalizePiEvent(
 			return { type: 'assistant_delta', thinking: update.delta };
 		}
 
+		if (update.type === 'toolcall_end') {
+			return {
+				type: 'tool_update',
+				toolCallId: update.toolCall.id,
+				toolName: update.toolCall.name,
+				status: 'pending',
+				arguments: serializeToolArguments(update.toolCall.arguments)
+			};
+		}
+
 		if (update.type === 'error') {
 			return { type: 'notice', message: 'The model returned an error.' };
 		}
+	}
+
+	if (event.type === 'tool_execution_start') {
+		return {
+			type: 'tool_update',
+			toolCallId: event.toolCallId,
+			toolName: event.toolName,
+			status: 'running',
+			arguments: serializeToolArguments(event.args)
+		};
 	}
 
 	if (event.type === 'tool_execution_update') {
@@ -505,6 +530,8 @@ export function normalizePiEvent(
 			type: 'tool_update',
 			toolCallId: event.toolCallId,
 			toolName: event.toolName,
+			status: 'running',
+			arguments: serializeToolArguments(event.args),
 			text: textFromContent(record(event.partialResult)?.content ?? event.partialResult)
 		};
 	}
@@ -514,8 +541,8 @@ export function normalizePiEvent(
 			type: 'tool_update',
 			toolCallId: event.toolCallId,
 			toolName: event.toolName,
-			text: textFromContent(record(event.result)?.content ?? event.result),
-			isError: event.isError
+			status: event.isError ? 'failed' : 'completed',
+			text: textFromContent(record(event.result)?.content ?? event.result)
 		};
 	}
 

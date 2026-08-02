@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { on } from 'svelte/events';
-	import type { ChatItem, ChatToolCall } from '$lib/contracts';
+	import type { ChatItem, ChatToolCall, ToolStatus } from '$lib/contracts';
 	import type { ChatTab, StreamingTool } from '$lib/harness/types';
 	import { renderAssistantMarkdown, renderStreamingMarkdown } from '$lib/markdown';
 	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
 	import ImageViewer, { type ImageViewerImage } from '$lib/components/ImageViewer.svelte';
+	import ToolGroup, { type ToolGroupTool } from './ToolGroup.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 
 	type ToolView = {
 		id: string;
@@ -13,6 +15,7 @@
 		arguments?: string;
 		result?: ChatItem;
 		stream?: StreamingTool;
+		owner?: ChatItem;
 	};
 
 	type TimelineEntry =
@@ -28,6 +31,7 @@
 	const copiedCodeTimers = new WeakMap<HTMLButtonElement, ReturnType<typeof setTimeout>>();
 	let hoveredMessageId = $state<string>();
 	let selectedImage = $state<ImageViewerImage>();
+	const expandedToolIds = new SvelteSet<string>();
 	let waitingForResponse = $derived(
 		chat.snapshot?.isStreaming === true &&
 			(!showReasoning || !chat.streamThinking) &&
@@ -53,7 +57,15 @@
 				timestamp: message.timestamp
 			}))
 		];
-		const calledIds = items.flatMap((item) => item.toolCalls?.map((tool) => tool.id) ?? []);
+		const calledIds = new Set(
+			items.flatMap((item) => item.toolCalls?.map((tool) => tool.id) ?? [])
+		);
+		const resultsByCallId = new Map(
+			items
+				.filter((item) => item.role === 'tool' && item.toolCallId)
+				.map((item) => [item.toolCallId!, item])
+		);
+		const streamsByCallId = new Map(chat.streamTools.map((tool) => [tool.id, tool]));
 		const timeline: TimelineEntry[] = [];
 		let activeToolEntry: Extract<TimelineEntry, { kind: 'tools' }> | undefined;
 		let currentToolEntry: Extract<TimelineEntry, { kind: 'tools' }> | undefined;
@@ -62,24 +74,23 @@
 			entry.thinking = [entry.thinking, thinking].filter(Boolean).join('\n\n');
 		}
 
-		function toolView(call: ChatToolCall): ToolView {
+		function toolView(call: ChatToolCall, owner: ChatItem): ToolView {
 			return {
 				id: call.id,
 				name: call.name,
 				arguments: call.arguments,
-				result: items.find(
-					(candidate) => candidate.role === 'tool' && candidate.toolCallId === call.id
-				),
-				stream: chat.streamTools.find((candidate) => candidate.id === call.id)
+				result: resultsByCallId.get(call.id),
+				stream: streamsByCallId.get(call.id),
+				owner
 			};
 		}
 
 		for (const item of items) {
-			if (item.role === 'tool' && item.toolCallId && calledIds.includes(item.toolCallId)) {
+			if (item.role === 'tool' && item.toolCallId && calledIds.has(item.toolCallId)) {
 				continue;
 			}
 
-			const tools = (item.toolCalls ?? []).map(toolView);
+			const tools = (item.toolCalls ?? []).map((tool) => toolView(tool, item));
 			const isEmptyAssistant =
 				item.role === 'assistant' &&
 				!item.text &&
@@ -160,37 +171,31 @@
 		return timeline;
 	});
 
-	function toolCountLabel(count: number): string {
-		return `${count} tool${count === 1 ? '' : 's'} called`;
-	}
-
-	function toolStatus(tool: ToolView): 'pending' | 'running' | 'completed' | 'failed' {
+	function toolStatus(tool: ToolView): ToolStatus {
 		if (tool.result) {
 			return tool.result.isError ? 'failed' : 'completed';
 		}
 
-		if (tool.stream?.isError) {
-			return 'failed';
+		if (tool.stream) {
+			return tool.stream.status ?? 'running';
 		}
 
-		return tool.stream ? 'running' : 'pending';
+		if (tool.owner?.stopReason === 'aborted') {
+			return 'cancelled';
+		}
+
+		return tool.owner?.isError ? 'failed' : 'pending';
 	}
 
-	function toolGroupSummary(tools: ToolView[]): string {
-		const counts = { completed: 0, running: 0, failed: 0 };
-		for (const tool of tools) {
-			const status = toolStatus(tool);
-			if (status !== 'pending') {
-				counts[status] += 1;
-			}
-		}
-
-		return [
-			toolCountLabel(tools.length),
-			...(['completed', 'running', 'failed'] as const)
-				.filter((status) => counts[status] > 0)
-				.map((status) => `${counts[status]} ${status}`)
-		].join(' · ');
+	function toolGroupTools(tools: ToolView[]): ToolGroupTool[] {
+		return tools.map((tool) => ({
+			id: tool.id,
+			name: tool.name,
+			status: toolStatus(tool),
+			arguments: tool.arguments ?? tool.stream?.arguments,
+			hasResult: tool.result !== undefined || tool.stream !== undefined,
+			resultText: tool.result?.text ?? tool.stream?.text
+		}));
 	}
 
 	function formatTimestamp(timestamp: string | undefined): string | undefined {
@@ -312,42 +317,13 @@
 	{#if entry.kind === 'stopped'}
 		<p class="stopped-row" role="status">Stopped</p>
 	{:else if entry.kind === 'tools'}
-		<details
-			class={[
-				'tool-group',
-				entry.tools.some((tool) => toolStatus(tool) === 'failed') && 'tool-group-error'
-			]}
-		>
-			<summary class="tool-group-summary">{toolGroupSummary(entry.tools)}</summary>
-			{#if showReasoning && entry.thinking}
-				<details class="thinking tool-thinking">
-					<summary>Reasoning</summary>
-					<pre>{entry.thinking}</pre>
-				</details>
-			{/if}
-			<div class="tool-list">
-				{#each entry.tools as tool (tool.id)}
-					<section class:tool-entry-error={toolStatus(tool) === 'failed'} class="tool-entry">
-						<div class="tool-entry-heading">
-							<strong>{tool.name}</strong>
-							<span>{toolStatus(tool)}</span>
-						</div>
-						{#if tool.arguments !== undefined}
-							<div class="tool-detail">
-								<span>Arguments</span>
-								<pre>{tool.arguments}</pre>
-							</div>
-						{/if}
-						{#if tool.result || tool.stream}
-							<details class="tool-detail tool-result">
-								<summary>Result</summary>
-								<pre>{tool.result?.text || tool.stream?.text || 'No output.'}</pre>
-							</details>
-						{/if}
-					</section>
-				{/each}
-			</div>
-		</details>
+		<ToolGroup
+			chatId={chat.id}
+			tools={toolGroupTools(entry.tools)}
+			thinking={entry.thinking}
+			{showReasoning}
+			{expandedToolIds}
+		/>
 	{:else if entry.item.kind === 'notice'}
 		<p class="timeline-notice">{entry.item.text}</p>
 	{:else}
@@ -791,8 +767,7 @@
 	}
 
 	.message-text,
-	.thinking pre,
-	.tool-detail pre {
+	.thinking pre {
 		margin: 0;
 		overflow-x: auto;
 		padding: 0.8rem;
@@ -822,105 +797,6 @@
 
 	.thinking pre {
 		color: var(--text-muted);
-	}
-
-	.tool-group {
-		max-width: 54rem;
-		margin: 0.25rem auto;
-		overflow: hidden;
-	}
-
-	.tool-group-summary {
-		display: flex;
-		align-items: center;
-		gap: 0.55rem;
-		padding: 0;
-		color: var(--text-muted);
-		font-size: 0.8rem;
-		cursor: pointer;
-		list-style: none;
-	}
-
-	.tool-group-summary::-webkit-details-marker {
-		display: none;
-	}
-
-	.tool-group-error > .tool-group-summary {
-		color: var(--danger);
-	}
-
-	.tool-list {
-		display: grid;
-		gap: 0.65rem;
-		padding: 0.75rem;
-	}
-
-	.tool-entry {
-		overflow: hidden;
-		border: 1px solid var(--border);
-		border-radius: 0.45rem;
-		background: var(--surface-muted);
-	}
-
-	.tool-entry-error {
-		border-color: color-mix(in srgb, var(--danger) 65%, var(--border));
-	}
-
-	.tool-entry-heading {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 0.5rem 0.65rem;
-		border-bottom: 1px solid var(--border);
-		color: var(--text);
-		font-size: 0.75rem;
-	}
-
-	.tool-entry-heading span,
-	.tool-detail > span,
-	.tool-result summary {
-		color: var(--text-muted);
-		font-size: 0.65rem;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-	}
-
-	.tool-entry-error .tool-entry-heading span {
-		color: var(--danger);
-	}
-
-	.tool-detail + .tool-detail {
-		border-top: 1px solid var(--border);
-	}
-
-	.tool-detail > span {
-		display: block;
-		padding: 0.5rem 0.65rem 0;
-	}
-
-	.tool-result summary {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.5rem 0.65rem;
-		cursor: pointer;
-		list-style: none;
-	}
-
-	.tool-result summary::-webkit-details-marker {
-		display: none;
-	}
-
-	.tool-result summary::before {
-		content: '›';
-		color: var(--accent);
-		font-size: 0.9rem;
-		transition: transform 160ms ease;
-	}
-
-	.tool-result[open] summary::before {
-		transform: rotate(90deg);
 	}
 
 	.timeline-notice {
@@ -992,10 +868,8 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.thinking-dots i,
-		.tool-result summary::before {
+		.thinking-dots i {
 			animation: none;
-			transition: none;
 		}
 	}
 </style>

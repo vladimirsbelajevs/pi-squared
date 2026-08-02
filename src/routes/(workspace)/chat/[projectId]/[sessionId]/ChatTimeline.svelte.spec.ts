@@ -820,6 +820,8 @@ describe('ChatTimeline', () => {
 
 		await expect.element(screen.getByText('2 tools called · 1 completed · 1 failed')).toBeVisible();
 		expect(group.open).toBe(false);
+		expect(screen.container.querySelector('.tool-list')).toBeNull();
+		expect(screen.container.querySelector('.tool-detail pre')).toBeNull();
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(0);
 		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
 
@@ -835,7 +837,63 @@ describe('ChatTimeline', () => {
 		expect(result.open).toBe(true);
 		expect((results[1] as HTMLDetailsElement).open).toBe(false);
 		await expect.element(screen.getByText('README contents')).toBeVisible();
+		await screen.getByText('2 tools called · 1 completed · 1 failed').click();
+		await vi.waitFor(() => expect(group.open).toBe(false));
+		expect(screen.container.querySelector('.tool-list')).toBeNull();
+		await screen.getByText('2 tools called · 1 completed · 1 failed').click();
+		await expect.element(screen.getByText('README contents')).toBeVisible();
 		expect(screen.container.querySelectorAll('.copy-action')).toHaveLength(0);
+	});
+
+	it('keeps call-id-backed disclosure state during the live-to-final handoff', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				streamTools: [
+					{
+						id: 'tool-1',
+						name: 'read',
+						status: 'completed',
+						arguments: '{"path":"README.md"}',
+						text: 'README contents'
+					}
+				]
+			})
+		});
+
+		await screen.getByText('1 tool called · 1 completed').click();
+		await screen.getByText('Result').click();
+		await expect.element(screen.getByText('README contents')).toBeVisible();
+		await screen.rerender({
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-final',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{"path":"README.md"}' }]
+						},
+						{
+							id: 'result-final',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'README contents'
+						}
+					]
+				},
+				streamTools: []
+			})
+		});
+
+		expect((screen.container.querySelector('details.tool-group') as HTMLDetailsElement).open).toBe(
+			true
+		);
+		await expect.element(screen.getByText('README contents')).toBeVisible();
 	});
 
 	it('merges consecutive assistant tool batches into one group', async () => {
