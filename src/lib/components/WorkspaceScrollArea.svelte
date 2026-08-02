@@ -238,7 +238,10 @@
 	}
 
 	.workspace-scroll-content {
+		width: 100%;
 		min-width: 0;
+		height: 100%;
+		min-height: 100%;
 		overflow-wrap: anywhere;
 	}
 
