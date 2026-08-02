@@ -58,7 +58,6 @@ export interface ModelOption {
 
 export type ChatAttachmentKind = 'image' | 'text';
 
-/** An attachment submitted from the browser, including base64-encoded file bytes. */
 export interface PromptAttachment {
 	id: string;
 	kind: ChatAttachmentKind;
@@ -68,7 +67,6 @@ export interface PromptAttachment {
 	data: string;
 }
 
-/** Browser-safe attachment metadata, with image bytes when a preview is available. */
 export interface ChatAttachment {
 	id: string;
 	kind: ChatAttachmentKind;
@@ -83,18 +81,15 @@ export interface ChatSubmission {
 	attachments: PromptAttachment[];
 }
 
-/** Cumulative token usage across every entry in a Pi session. */
 export interface SessionTokenUsage {
 	input: number;
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
-	/** Cache-hit percentage for the most recent assistant response. */
 	cacheHitRate?: number;
 	total: number;
 }
 
-/** Current prompt-context occupancy, which may be unknown just after compaction. */
 export interface ContextUsageSnapshot {
 	tokens: number | null;
 	contextWindow: number;
@@ -118,7 +113,6 @@ export interface ChatToolCall {
 	arguments: string;
 }
 
-/** Lifecycle state for a tool call, including calls that have not started execution yet. */
 export type ToolStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface ChatItem {
@@ -137,6 +131,15 @@ export interface ChatItem {
 	label?: string;
 }
 
+export interface PermissionRequest {
+	id: string;
+	method: 'select' | 'confirm' | 'input';
+	title: string;
+	message?: string;
+	options?: string[];
+	placeholder?: string;
+}
+
 export interface RuntimeSnapshot {
 	runtimeId: string;
 	project: Project;
@@ -150,33 +153,49 @@ export interface RuntimeSnapshot {
 	sessionTokens?: SessionTokenUsage;
 	contextUsage?: ContextUsageSnapshot;
 	modelFallbackMessage?: string;
-	/** Permission requests awaiting a response from the user. */
 	permissionRequests: PermissionRequest[];
 }
 
-/** Result returned after a prompt has been accepted by a runtime. */
-export interface PromptRuntimeResult {
-	queued: boolean;
-	/** User-visible prompt text, omitted when a command needs no prompt. */
-	userMessageText?: string;
+/** Opaque process-local position in the SSE broker. Never compare cursor IDs lexically. */
+export interface StreamCursor {
+	epoch: string;
+	sequence: number;
 }
 
-export interface PermissionRequest {
+export interface RuntimeStreamingTool {
 	id: string;
-	method: 'select' | 'confirm' | 'input';
-	title: string;
-	message?: string;
-	options?: string[];
-	placeholder?: string;
+	name: string;
+	status: ToolStatus;
+	arguments?: string;
+	text?: string;
 }
 
-export type PermissionResponse =
-	| { requestId: string; value: string }
-	| { requestId: string; confirmed: boolean }
-	| { requestId: string; cancelled: true };
+/** State not persisted by Pi yet, but included in checkpoints while streaming. */
+export interface RuntimeLiveState {
+	text: string;
+	thinking: string;
+	tools: RuntimeStreamingTool[];
+}
 
-export type RuntimeEvent =
-	| { type: 'snapshot'; snapshot: RuntimeSnapshot }
+export interface RuntimeCheckpoint {
+	protocolVersion: 2;
+	cursor: StreamCursor;
+	revision: number;
+	snapshot: RuntimeSnapshot;
+	live: RuntimeLiveState;
+}
+
+export type RuntimeMetadataPatch = Partial<
+	Omit<RuntimeSnapshot, 'runtimeId' | 'project' | 'sessionId' | 'items'>
+>;
+
+type Revisioned = { baseRevision: number; revision: number };
+
+export type RuntimeMutation =
+	| { type: 'items_appended'; afterId?: string; items: ChatItem[] }
+	| { type: 'item_updated'; item: ChatItem }
+	| { type: 'items_replaced'; items: ChatItem[]; reason: 'branch' | 'compaction' | 'recovery' }
+	| { type: 'metadata_updated'; patch: RuntimeMetadataPatch }
 	| { type: 'assistant_delta'; text?: string; thinking?: string }
 	| {
 			type: 'tool_update';
@@ -186,15 +205,36 @@ export type RuntimeEvent =
 			arguments?: string;
 			text?: string;
 	  }
-	| { type: 'state'; isStreaming: boolean }
-	| { type: 'mcp_status'; mcpStatus: McpStatusSnapshot }
-	| { type: 'notice'; message: string }
 	| { type: 'permission_request'; request: PermissionRequest }
-	| { type: 'permission_resolved'; requestId: string }
-	| { type: 'error'; message: string };
+	| { type: 'permission_resolved'; requestId: string };
+
+export type RevisionedRuntimeEvent = RuntimeMutation & Revisioned;
+export type RuntimeEvent =
+	RevisionedRuntimeEvent | { type: 'notice'; message: string } | { type: 'error'; message: string };
 
 export interface StreamEnvelope {
-	id: number;
+	/** Opaque SSE ID in `epoch:sequence` form. */
+	id: string;
+	cursor: StreamCursor;
 	runtimeId: string;
 	event: RuntimeEvent;
 }
+
+export interface ResetRequired {
+	type: 'reset_required';
+	reason: 'expired_cursor' | 'foreign_epoch';
+	cursor: StreamCursor;
+}
+
+export type StreamMessage = StreamEnvelope | ResetRequired;
+
+/** Result returned after a prompt has been accepted by a runtime. */
+export interface PromptRuntimeResult {
+	queued: boolean;
+	userMessageText?: string;
+}
+
+export type PermissionResponse =
+	| { requestId: string; value: string }
+	| { requestId: string; confirmed: boolean }
+	| { requestId: string; cancelled: true };

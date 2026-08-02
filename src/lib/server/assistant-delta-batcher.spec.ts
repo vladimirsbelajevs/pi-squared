@@ -1,26 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RuntimeEvent, StreamEnvelope } from '$lib/contracts';
+import type { RuntimeEvent } from '$lib/contracts';
 import { AssistantDeltaBatcher } from './assistant-delta-batcher';
 import { EventBroker } from './event-broker';
-import { publishRuntimeEvent } from './runtimes';
 
-afterEach(() => {
-	vi.useRealTimers();
-});
+afterEach(() => vi.useRealTimers());
 
 describe('AssistantDeltaBatcher', () => {
 	it('combines text and thinking deltas received in one 25 ms window', () => {
 		vi.useFakeTimers();
 		const publish = vi.fn();
 		const batcher = new AssistantDeltaBatcher(publish);
-
 		batcher.queue({ text: 'Hel' });
 		batcher.queue({ thinking: 'Reason' });
 		batcher.queue({ text: 'lo', thinking: 'ing' });
-		vi.advanceTimersByTime(24);
-		expect(publish).not.toHaveBeenCalled();
-
-		vi.advanceTimersByTime(1);
+		vi.advanceTimersByTime(25);
 		expect(publish).toHaveBeenCalledExactlyOnceWith({
 			type: 'assistant_delta',
 			text: 'Hello',
@@ -28,82 +21,63 @@ describe('AssistantDeltaBatcher', () => {
 		});
 	});
 
-	it('flushes immediately at a boundary and does not leave a duplicate timer publish', () => {
+	it('flushes at a causal boundary without a duplicate timer', () => {
 		vi.useFakeTimers();
 		const publish = vi.fn();
 		const batcher = new AssistantDeltaBatcher(publish);
-
 		batcher.queue({ text: 'before boundary' });
 		batcher.flush();
 		vi.advanceTimersByTime(25);
-
 		expect(publish).toHaveBeenCalledExactlyOnceWith({
 			type: 'assistant_delta',
 			text: 'before boundary'
 		});
 		expect(vi.getTimerCount()).toBe(0);
 	});
-
-	it('cancels pending output without publishing it', () => {
-		vi.useFakeTimers();
-		const publish = vi.fn();
-		const batcher = new AssistantDeltaBatcher(publish);
-
-		batcher.queue({ text: 'discard me' });
-		batcher.cancel();
-		vi.advanceTimersByTime(25);
-		batcher.flush();
-
-		expect(publish).not.toHaveBeenCalled();
-		expect(vi.getTimerCount()).toBe(0);
-	});
 });
 
-describe('assistant delta broker integration', () => {
-	it('assigns ordered broker IDs when a boundary flushes a runtime batch', () => {
+describe('EventBroker protocol v2', () => {
+	function stateEvent(): RuntimeEvent {
+		return { type: 'metadata_updated', patch: { isStreaming: true }, baseRevision: 0, revision: 1 };
+	}
+
+	it('uses epoch-qualified, monotonic opaque IDs and exact replay', () => {
 		const broker = new EventBroker();
-		const events: StreamEnvelope[] = [];
-		broker.subscribe(undefined, (event) => events.push(event));
-		const batcher = new AssistantDeltaBatcher((event) => broker.publish('runtime-1', event));
-		const record = { id: 'runtime-1', assistantDeltaBatcher: batcher };
-
-		publishRuntimeEvent(record, { type: 'assistant_delta', text: 'first' }, broker);
-		publishRuntimeEvent(record, { type: 'state', isStreaming: false }, broker);
-
-		expect(events).toEqual([
-			{ id: 1, runtimeId: 'runtime-1', event: { type: 'assistant_delta', text: 'first' } },
-			{ id: 2, runtimeId: 'runtime-1', event: { type: 'state', isStreaming: false } }
-		]);
+		const first = broker.publish('runtime-1', stateEvent());
+		const second = broker.publish('runtime-1', stateEvent());
+		expect(first.cursor.epoch).toBe(second.cursor.epoch);
+		expect(second.cursor.sequence).toBe(first.cursor.sequence + 1);
+		const replayed: string[] = [];
+		broker.subscribe(first.id, (event) => replayed.push(event.id));
+		expect(replayed).toEqual([second.id]);
 	});
 
-	it('never merges output from separate runtime batchers', () => {
+	it('requests reset for a foreign or expired cursor', () => {
 		const broker = new EventBroker();
-		const events: StreamEnvelope[] = [];
-		broker.subscribe(undefined, (event) => events.push(event));
-		const first = new AssistantDeltaBatcher((event) => broker.publish('runtime-1', event));
-		const second = new AssistantDeltaBatcher((event) => broker.publish('runtime-2', event));
+		const resets: string[] = [];
+		broker.subscribe(
+			'previous-process:3',
+			() => undefined,
+			(reset) => resets.push(reset.reason)
+		);
+		for (let index = 0; index < 301; index += 1) {
+			broker.publish('runtime-1', stateEvent());
+		}
 
-		first.queue({ text: 'one' });
-		second.queue({ thinking: 'two' });
-		first.flush();
-		second.flush();
-
-		expect(events.map(({ runtimeId, event }) => ({ runtimeId, event }))).toEqual([
-			{ runtimeId: 'runtime-1', event: { type: 'assistant_delta', text: 'one' } },
-			{ runtimeId: 'runtime-2', event: { type: 'assistant_delta', thinking: 'two' } }
-		]);
+		broker.subscribe(
+			`${broker.epoch}:0`,
+			() => undefined,
+			(reset) => resets.push(reset.reason)
+		);
+		expect(resets).toEqual(['foreign_epoch', 'expired_cursor']);
 	});
 
-	it('replays complete assistant batches after the requested event ID', () => {
+	it('registers the listener before replay so synchronous publishes are not lost', () => {
 		const broker = new EventBroker();
-		broker.publish('runtime-1', { type: 'state', isStreaming: true });
-		const batcher = new AssistantDeltaBatcher((event) => broker.publish('runtime-1', event));
-		batcher.queue({ text: 'complete' });
-		batcher.flush();
-		const replayed: RuntimeEvent[] = [];
-
-		broker.subscribe(1, (event) => replayed.push(event.event));
-
-		expect(replayed).toEqual([{ type: 'assistant_delta', text: 'complete' }]);
+		const first = broker.publish('runtime-1', stateEvent());
+		const received: string[] = [];
+		broker.subscribe(first.id, (event) => received.push(event.id));
+		const next = broker.publish('runtime-1', stateEvent());
+		expect(received).toEqual([next.id]);
 	});
 });

@@ -10,7 +10,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		return json({
-			snapshot: await setRuntimeMcpServerEnabled(
+			checkpoint: await setRuntimeMcpServerEnabled(
 				requiredParam(params.runtimeId, 'Runtime'),
 				requiredString(body.serverName, 'MCP server'),
 				body.enabled

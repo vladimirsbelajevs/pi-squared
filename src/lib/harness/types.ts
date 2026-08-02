@@ -1,8 +1,10 @@
+import type { RuntimeConversationState } from '$lib/harness/runtime-state';
 import type {
 	ChatAttachment,
 	ModelOption,
 	PermissionRequest,
 	RuntimeSnapshot,
+	StreamEnvelope,
 	ThinkingLevel,
 	ToolStatus
 } from '$lib/contracts';
@@ -77,6 +79,9 @@ export interface ChatTab {
 	sessionId: string;
 	runtimeId?: string;
 	snapshot?: RuntimeSnapshot;
+	/** Normalized protocol authority; snapshot is a read-only compatibility projection. */
+	runtime?: RuntimeConversationState;
+	bufferedEvents?: StreamEnvelope[];
 	hydrating: boolean;
 	draft: string;
 	queueMode: QueueMode;
@@ -96,7 +101,7 @@ export type WorkspaceTab = NewTab | ChatTab;
 
 export interface StoredWorkspaceV1 {
 	version: 1;
-	lastEventId?: number;
+	lastEventId?: string;
 	activeTabId?: string;
 	tabs: Array<StoredNewTab | StoredChatTab>;
 }

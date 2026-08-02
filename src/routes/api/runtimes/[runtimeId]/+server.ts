@@ -1,10 +1,10 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { errorResponse, requiredParam } from '$lib/server/http';
-import { disposeRuntime, getRuntimeSnapshot } from '$lib/server/runtimes';
+import { disposeRuntime, getRuntimeCheckpoint } from '$lib/server/runtimes';
 
 export const GET: RequestHandler = async ({ params }) => {
 	try {
-		return json({ snapshot: getRuntimeSnapshot(requiredParam(params.runtimeId, 'Runtime')) });
+		return json({ checkpoint: getRuntimeCheckpoint(requiredParam(params.runtimeId, 'Runtime')) });
 	} catch (error) {
 		return errorResponse(error, 404);
 	}

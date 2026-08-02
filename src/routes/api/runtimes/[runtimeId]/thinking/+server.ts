@@ -22,7 +22,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		return json({
-			snapshot: setRuntimeThinkingLevel(requiredParam(params.runtimeId, 'Runtime'), thinkingLevel)
+			checkpoint: setRuntimeThinkingLevel(requiredParam(params.runtimeId, 'Runtime'), thinkingLevel)
 		});
 	} catch (error) {
 		return errorResponse(error);

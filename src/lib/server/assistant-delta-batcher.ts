@@ -1,6 +1,6 @@
-import type { RuntimeEvent } from '$lib/contracts';
+import type { RuntimeMutation } from '$lib/contracts';
 
-type AssistantDelta = Extract<RuntimeEvent, { type: 'assistant_delta' }>;
+type AssistantDelta = Extract<RuntimeMutation, { type: 'assistant_delta' }>;
 type Timer = ReturnType<typeof setTimeout>;
 
 export interface AssistantDeltaBatcherTimers {

@@ -7,7 +7,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const body = await readObject(request);
 
 		return json({
-			snapshot: await setRuntimeModel(requiredParam(params.runtimeId, 'Runtime'), {
+			checkpoint: await setRuntimeModel(requiredParam(params.runtimeId, 'Runtime'), {
 				provider: requiredString(body.provider, 'Provider'),
 				id: requiredString(body.id, 'Model')
 			})

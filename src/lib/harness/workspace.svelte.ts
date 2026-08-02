@@ -3,8 +3,10 @@ import type {
 	HistoricalSession,
 	ModelOption,
 	Project,
+	RuntimeCheckpoint,
 	RuntimeSnapshot,
 	StreamEnvelope,
+	StreamMessage,
 	ThinkingLevel
 } from '$lib/contracts';
 import {
@@ -25,6 +27,11 @@ import {
 } from '$lib/harness/api';
 import { errorNotices } from '$lib/error-notices';
 import { reconcilePendingUserMessages } from '$lib/harness/pending-user-messages';
+import {
+	applyRuntimeEvent,
+	snapshotFromState,
+	stateFromCheckpoint
+} from '$lib/harness/runtime-state';
 import { StreamUpdateBatcher } from '$lib/harness/stream-update-batcher';
 import {
 	modelKey,
@@ -118,7 +125,7 @@ export class HarnessWorkspace {
 	#started = false;
 	#startPromise: Promise<void> | undefined;
 	#events: EventSource | undefined;
-	#lastEventId: number | undefined;
+	#lastEventId: string | undefined;
 	#chatLoads = new SvelteMap<string, Promise<ChatTab | undefined>>();
 	#scrollStates = new SvelteMap<string, ScrollState>();
 	#streamUpdates = new StreamUpdateBatcher(
@@ -300,13 +307,13 @@ export class HarnessWorkspace {
 
 		try {
 			localStorage.setItem(LAST_PROJECT_KEY, tab.draft.projectId);
-			const { snapshot } = await createRuntime({
+			const { checkpoint } = await createRuntime({
 				mode: 'new',
 				projectId: tab.draft.projectId,
 				model,
 				thinkingLevel: tab.draft.thinkingLevel
 			});
-			const chat = this.#createChatTab(tab.id, snapshot);
+			const chat = this.#createChatTab(tab.id, checkpoint);
 			this.tabs = this.tabs.map((candidate) => (candidate.id === tab.id ? chat : candidate));
 			const accepted = await this.sendPrompt(chat, openingPrompt);
 			if (!accepted) {
@@ -350,7 +357,8 @@ export class HarnessWorkspace {
 				streamTools: [],
 				transientNotices: [],
 				permissionRequests: [],
-				pendingUserMessages: []
+				pendingUserMessages: [],
+				bufferedEvents: []
 			} satisfies ChatTab);
 		if (!existing) {
 			this.tabs.push(chat);
@@ -425,7 +433,7 @@ export class HarnessWorkspace {
 		}
 
 		const response = await setRuntimeMcpServerEnabled(chat.runtimeId, { serverName, enabled });
-		this.#applySnapshot(chat, response.snapshot);
+		this.#applyCheckpoint(chat, response.checkpoint);
 	}
 
 	clearTransientNotices(chat: ChatTab): void {
@@ -507,8 +515,8 @@ export class HarnessWorkspace {
 		}
 
 		try {
-			const { snapshot } = await setRuntimeModel(chat.runtimeId, model);
-			this.#applySnapshot(chat, snapshot);
+			const { checkpoint } = await setRuntimeModel(chat.runtimeId, model);
+			this.#applyCheckpoint(chat, checkpoint);
 			localStorage.setItem(LAST_MODEL_KEY, key);
 			if (model.reasoning === false) {
 				localStorage.setItem(LAST_THINKING_LEVEL_KEY, 'off');
@@ -524,8 +532,8 @@ export class HarnessWorkspace {
 		}
 
 		try {
-			const { snapshot } = await setRuntimeThinking(chat.runtimeId, thinkingLevel);
-			this.#applySnapshot(chat, snapshot);
+			const { checkpoint } = await setRuntimeThinking(chat.runtimeId, thinkingLevel);
+			this.#applyCheckpoint(chat, checkpoint);
 			localStorage.setItem(LAST_THINKING_LEVEL_KEY, thinkingLevel);
 		} catch (error) {
 			errorNotices.show(normalizeError(error, 'Unable to change reasoning.'));
@@ -629,31 +637,80 @@ export class HarnessWorkspace {
 		this.#events = openEventStream(this.#lastEventId, (event) => this.#handleEvent(event));
 	}
 
-	#handleEvent(envelope: StreamEnvelope): void {
-		this.#lastEventId = envelope.id;
+	#handleEvent(message: StreamMessage): void {
+		if (!('id' in message)) {
+			this.#lastEventId = undefined;
+			for (const tab of this.tabs) {
+				if (tab.kind === 'chat' && tab.runtimeId) {
+					tab.hydrating = true;
+					void this.#hydrateChat(tab);
+				}
+			}
+
+			return;
+		}
+
+		this.#lastEventId = message.id;
 		const chat = this.tabs.find(
-			(tab): tab is ChatTab => tab.kind === 'chat' && tab.runtimeId === envelope.runtimeId
+			(tab): tab is ChatTab => tab.kind === 'chat' && tab.runtimeId === message.runtimeId
 		);
 		if (!chat) {
 			return;
 		}
 
-		const event = envelope.event;
-		if (event.type === 'snapshot') {
-			// SSE envelopes are source-ordered: commit any earlier tool lifecycle patches before
-			// this snapshot decides whether their live lifecycle remains active.
-			this.#streamUpdates.flush(chat.id);
-			this.#streamUpdates.discard(chat.id);
-			this.#applySnapshot(chat, event.snapshot, true);
-			this.persist();
+		if (chat.hydrating) {
+			(chat.bufferedEvents ??= []).push(message);
 
 			return;
 		}
 
-		if (event.type === 'assistant_delta') {
-			this.#queueAssistantDelta(chat, event.text ?? '', event.thinking ?? '');
+		this.#applyEnvelope(chat, message);
+	}
+
+	#applyEnvelope(chat: ChatTab, envelope: StreamEnvelope): void {
+		const event = envelope.event;
+		if (event.type === 'notice') {
+			if (event.message.trim()) {
+				chat.transientNotices.push({ id: `notice-${envelope.id}`, message: event.message });
+			}
+
+			if (chat.transientNotices.length > 20) {
+				chat.transientNotices.splice(0, 1);
+			}
 
 			return;
+		}
+
+		if (event.type === 'error') {
+			errorNotices.show(event.message);
+
+			return;
+		}
+
+		if (!chat.runtime) {
+			(chat.bufferedEvents ??= []).push(envelope);
+
+			return;
+		}
+
+		const result = applyRuntimeEvent(chat.runtime, event);
+		if (result === 'recovery') {
+			(chat.bufferedEvents ??= []).push(envelope);
+			chat.hydrating = true;
+			void this.#hydrateChat(chat);
+
+			return;
+		}
+
+		if (result === 'duplicate') {
+			return;
+		}
+
+		chat.snapshot = snapshotFromState(chat.runtime);
+		chat.permissionRequests = chat.snapshot.permissionRequests.map((request) => ({ ...request }));
+		this.#reconcilePendingUserMessages(chat);
+		if (event.type === 'assistant_delta') {
+			this.#queueAssistantDelta(chat, event.text ?? '', event.thinking ?? '');
 		}
 
 		if (event.type === 'tool_update') {
@@ -664,86 +721,59 @@ export class HarnessWorkspace {
 				...(event.arguments !== undefined ? { arguments: event.arguments } : {}),
 				...(event.text !== undefined ? { text: event.text } : {})
 			});
-
-			return;
 		}
 
-		if (event.type === 'state') {
-			if (chat.snapshot) {
-				chat.snapshot.isStreaming = event.isStreaming;
-			}
-
-			return;
-		}
-
-		if (event.type === 'mcp_status') {
-			if (chat.snapshot) {
-				chat.snapshot.mcpStatus = event.mcpStatus;
-			}
-
-			return;
-		}
-
-		if (event.type === 'notice') {
-			if (!event.message.trim()) {
-				return;
-			}
-
-			chat.transientNotices.push({ id: `notice-${envelope.id}`, message: event.message });
-			if (chat.transientNotices.length > 20) {
-				chat.transientNotices.splice(0, 1);
-			}
-
-			return;
-		}
-
-		if (event.type === 'permission_request') {
-			if (!chat.permissionRequests.some((request) => request.id === event.request.id)) {
-				chat.permissionRequests.push({ ...event.request });
-			}
-
-			return;
-		}
-
-		if (event.type === 'permission_resolved') {
-			chat.permissionRequests = chat.permissionRequests.filter(
-				(request) => request.id !== event.requestId
-			);
-
-			return;
-		}
-
-		if (event.type === 'error') {
-			errorNotices.show(event.message);
+		if (
+			(event.type === 'metadata_updated' && event.patch.isStreaming === false) ||
+			((event.type === 'items_appended' || event.type === 'items_replaced') &&
+				chat.snapshot.isStreaming === false)
+		) {
+			this.#streamUpdates.discard(chat.id);
+			chat.streamText = '';
+			chat.streamRenderedText = '';
+			chat.streamThinking = '';
+			chat.streamTools = [];
 		}
 	}
 
 	async #hydrateChat(chat: ChatTab): Promise<void> {
-		let snapshot: RuntimeSnapshot | undefined;
+		let checkpoint: RuntimeCheckpoint | undefined;
 		if (chat.runtimeId) {
 			try {
 				const response = await getRuntime(chat.runtimeId);
 				if (
-					response.snapshot.project.id === chat.projectId &&
-					response.snapshot.sessionId === chat.sessionId
+					response.checkpoint.snapshot.project.id === chat.projectId &&
+					response.checkpoint.snapshot.sessionId === chat.sessionId
 				) {
-					snapshot = response.snapshot;
+					checkpoint = response.checkpoint;
 				}
 			} catch {
 				chat.runtimeId = undefined;
 			}
 		}
 
-		if (!snapshot) {
+		if (!checkpoint) {
 			const response = await createRuntime({
 				mode: 'resume',
 				projectId: chat.projectId,
 				sessionId: chat.sessionId
 			});
-			snapshot = response.snapshot;
+			checkpoint = response.checkpoint;
 		}
 
-		this.#applySnapshot(chat, snapshot);
+		this.#applyCheckpoint(chat, checkpoint);
+		const buffered = chat.bufferedEvents ?? [];
+		chat.bufferedEvents = [];
+		for (const envelope of buffered) {
+			if (
+				envelope.cursor.epoch !== checkpoint.cursor.epoch ||
+				envelope.cursor.sequence > checkpoint.cursor.sequence
+			) {
+				this.#applyEnvelope(chat, envelope);
+			}
+		}
+
+		chat.hydrating = false;
 	}
 
 	#queueAssistantDelta(chat: ChatTab, text: string, thinking: string): void {
@@ -754,26 +784,25 @@ export class HarnessWorkspace {
 		this.#streamUpdates.queueToolUpdate(chat, tool);
 	}
 
-	#applySnapshot(chat: ChatTab, snapshot: RuntimeSnapshot, fromSse = false): void {
-		if (!fromSse) {
-			this.#streamUpdates.discard(chat.id);
-		}
-
+	#applyCheckpoint(chat: ChatTab, checkpoint: RuntimeCheckpoint): void {
+		this.#streamUpdates.discard(chat.id);
+		chat.runtime = stateFromCheckpoint(checkpoint, chat.runtime);
+		const snapshot = snapshotFromState(chat.runtime);
 		chat.snapshot = snapshot;
 		chat.permissionRequests = snapshot.permissionRequests.map((request) => ({ ...request }));
 		this.#reconcilePendingUserMessages(chat);
 		chat.runtimeId = snapshot.runtimeId;
 		chat.title = this.#chatTitle(snapshot);
-		chat.hydrating = false;
-		chat.streamText = '';
-		chat.streamRenderedText = '';
-		chat.streamThinking = '';
-		if (!snapshot.isStreaming) {
-			chat.streamTools = [];
-		}
+		chat.streamText = checkpoint.live.text;
+		chat.streamRenderedText = checkpoint.live.text;
+		chat.streamThinking = checkpoint.live.thinking;
+		chat.streamTools = checkpoint.live.tools.map((tool) => ({ ...tool }));
 	}
 
-	#createChatTab(id: string, snapshot: RuntimeSnapshot): ChatTab {
+	#createChatTab(id: string, checkpoint: RuntimeCheckpoint): ChatTab {
+		const runtime = stateFromCheckpoint(checkpoint);
+		const snapshot = snapshotFromState(runtime);
+
 		return {
 			id,
 			kind: 'chat',
@@ -782,15 +811,17 @@ export class HarnessWorkspace {
 			sessionId: snapshot.sessionId,
 			runtimeId: snapshot.runtimeId,
 			snapshot,
+			runtime,
+			bufferedEvents: [],
 			hydrating: false,
 			draft: '',
 			queueMode: 'followUp',
-			streamText: '',
-			streamRenderedText: '',
-			streamThinking: '',
-			streamTools: [],
+			streamText: checkpoint.live.text,
+			streamRenderedText: checkpoint.live.text,
+			streamThinking: checkpoint.live.thinking,
+			streamTools: checkpoint.live.tools.map((tool) => ({ ...tool })),
 			transientNotices: [],
-			permissionRequests: [],
+			permissionRequests: snapshot.permissionRequests.map((request) => ({ ...request })),
 			pendingUserMessages: []
 		};
 	}
@@ -882,7 +913,8 @@ export class HarnessWorkspace {
 
 					return {
 						version: 1,
-						lastEventId: typeof parsed.lastEventId === 'number' ? parsed.lastEventId : undefined,
+						// Numeric v1 cursors cannot be interpreted as epoch-qualified v2 cursors.
+						lastEventId: typeof parsed.lastEventId === 'string' ? parsed.lastEventId : undefined,
 						activeTabId: typeof parsed.activeTabId === 'string' ? parsed.activeTabId : undefined,
 						tabs
 					};
@@ -1026,7 +1058,8 @@ export class HarnessWorkspace {
 			streamTools: [],
 			transientNotices: [],
 			permissionRequests: [],
-			pendingUserMessages: []
+			pendingUserMessages: [],
+			bufferedEvents: []
 		};
 	}
 

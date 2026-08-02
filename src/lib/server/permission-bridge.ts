@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { ExtensionUIContext } from '@earendil-works/pi-coding-agent';
-import type { PermissionRequest, PermissionResponse, RuntimeEvent } from '$lib/contracts';
+import type {
+	PermissionRequest,
+	PermissionResponse,
+	RuntimeEvent,
+	RuntimeMutation
+} from '$lib/contracts';
 
 type PendingPermission = {
 	request: PermissionRequest;
@@ -15,7 +20,11 @@ type RequestOptions = { signal?: AbortSignal };
 export class PermissionBridge {
 	#pending = new Map<string, PendingPermission>();
 
-	constructor(private readonly publish: (event: RuntimeEvent) => void) {}
+	constructor(
+		private readonly publish: (
+			event: RuntimeMutation | Extract<RuntimeEvent, { type: 'notice' | 'error' }>
+		) => void
+	) {}
 
 	get pendingRequests(): PermissionRequest[] {
 		return [...this.#pending.values()].map(({ request }) => ({

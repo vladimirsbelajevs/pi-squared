@@ -19,8 +19,8 @@ import type {
 	ModelOption,
 	PermissionRequest,
 	Project,
+	RuntimeMutation,
 	RuntimeSnapshot,
-	RuntimeEvent,
 	SessionTokenUsage,
 	McpStatusSnapshot,
 	SlashCommand,
@@ -489,7 +489,10 @@ export async function resolveSessionPath(project: Project, sessionId: string): P
 
 export function normalizePiEvent(
 	event: AgentSessionEvent
-): Extract<RuntimeEvent, { type: 'assistant_delta' | 'tool_update' | 'notice' }> | undefined {
+):
+	| Extract<RuntimeMutation, { type: 'assistant_delta' | 'tool_update' }>
+	| { type: 'notice'; message: string }
+	| undefined {
 	if (event.type === 'message_update') {
 		const update = event.assistantMessageEvent;
 		if (update.type === 'text_delta') {

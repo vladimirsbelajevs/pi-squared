@@ -27,7 +27,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			throw new Error('Model is invalid.');
 		}
 
-		const snapshot = await createRuntime({
+		const checkpoint = await createRuntime({
 			mode,
 			projectId: requiredString(body.projectId, 'Project'),
 			sessionId: optionalString(body.sessionId, 'Session'),
@@ -36,7 +36,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				ThinkingLevel | undefined
 		});
 
-		return json({ snapshot }, { status: 201 });
+		return json({ checkpoint }, { status: 201 });
 	} catch (error) {
 		return errorResponse(error);
 	}

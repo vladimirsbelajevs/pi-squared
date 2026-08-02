@@ -6,7 +6,11 @@ import type {
 	PromptAttachment,
 	PromptRuntimeResult,
 	Project,
+	RuntimeCheckpoint,
 	RuntimeEvent,
+	RuntimeLiveState,
+	RuntimeMetadataPatch,
+	RuntimeMutation,
 	RuntimeSnapshot,
 	SlashCommand,
 	ThinkingLevel
@@ -20,6 +24,7 @@ import { getProject, markProjectOpened, resolveProject } from '$lib/server/proje
 import {
 	buildSnapshot,
 	createPiSession,
+	mapSessionEntry,
 	listProjectSlashCommands,
 	listSessionSlashCommands,
 	normalizePiEvent,
@@ -50,6 +55,15 @@ interface RuntimeRecord {
 	unsubscribeMcpStatus: () => void;
 	mcpToggle?: Promise<void>;
 	suppressMcpReloadNotice?: boolean;
+	projection: RuntimeProjection;
+}
+
+interface RuntimeProjection {
+	snapshot: RuntimeSnapshot;
+	live: RuntimeLiveState;
+	revision: number;
+	/** Last active-branch entry observed when persisted items were refreshed. */
+	sourceLeafId?: string;
 }
 
 const runtimes = new Map<string, RuntimeRecord>();
@@ -111,32 +125,199 @@ export function subscribeToMcpStatus(
 	});
 }
 
-export type RuntimeEventRecord = {
-	id: string;
-	assistantDeltaBatcher: AssistantDeltaBatcher;
-};
-
 /**
- * Publishes runtime events in source order. Assistant deltas are append-only and
- * may wait briefly; every other event is a causal boundary and flushes them.
+ * Runtime projection mutation and publication are deliberately synchronous.
+ * The revision is assigned only after all earlier delayed text has been flushed.
  */
-export function publishRuntimeEvent(
-	record: RuntimeEventRecord,
-	event: RuntimeEvent,
-	broker: Pick<typeof eventBroker, 'publish'> = eventBroker
+function commitMutation(record: RuntimeRecord, mutation: RuntimeMutation): void {
+	const baseRevision = record.projection.revision;
+	record.projection.revision += 1;
+	eventBroker.publish(record.id, {
+		...mutation,
+		baseRevision,
+		revision: record.projection.revision
+	});
+}
+
+function applyLiveMutation(projection: RuntimeProjection, mutation: RuntimeMutation): void {
+	if (mutation.type === 'permission_request') {
+		projection.snapshot = {
+			...projection.snapshot,
+			permissionRequests: [...projection.snapshot.permissionRequests, mutation.request]
+		};
+
+		return;
+	}
+
+	if (mutation.type === 'permission_resolved') {
+		projection.snapshot = {
+			...projection.snapshot,
+			permissionRequests: projection.snapshot.permissionRequests.filter(
+				(request) => request.id !== mutation.requestId
+			)
+		};
+
+		return;
+	}
+
+	if (mutation.type === 'assistant_delta') {
+		projection.live.text += mutation.text ?? '';
+		projection.live.thinking += mutation.thinking ?? '';
+
+		return;
+	}
+
+	if (mutation.type === 'tool_update') {
+		const existing = projection.live.tools.find((tool) => tool.id === mutation.toolCallId);
+		const tool = {
+			id: mutation.toolCallId,
+			name: mutation.toolName,
+			status: mutation.status,
+			...(mutation.arguments !== undefined ? { arguments: mutation.arguments } : {}),
+			...(mutation.text !== undefined ? { text: mutation.text } : {})
+		};
+		if (existing) {
+			Object.assign(existing, tool);
+		} else {
+			projection.live.tools.push(tool);
+		}
+	}
+}
+
+function publish(
+	record: RuntimeRecord,
+	mutation: RuntimeMutation | Extract<RuntimeEvent, { type: 'notice' | 'error' }>
 ): void {
-	if (event.type === 'assistant_delta') {
-		record.assistantDeltaBatcher.queue(event);
+	if (mutation.type === 'notice' || mutation.type === 'error') {
+		record.assistantDeltaBatcher.flush();
+		eventBroker.publish(record.id, mutation);
+
+		return;
+	}
+
+	applyLiveMutation(record.projection, mutation);
+	if (mutation.type === 'assistant_delta') {
+		record.assistantDeltaBatcher.queue(mutation);
 
 		return;
 	}
 
 	record.assistantDeltaBatcher.flush();
-	broker.publish(record.id, event);
+	commitMutation(record, mutation);
 }
 
-function publish(record: RuntimeRecord, event: RuntimeEvent): void {
-	publishRuntimeEvent(record, event);
+function checkpoint(record: RuntimeRecord): RuntimeCheckpoint {
+	// Flushing first guarantees the reported cursor includes the complete live prefix.
+	record.assistantDeltaBatcher.flush();
+
+	return {
+		protocolVersion: 2,
+		cursor: eventBroker.currentCursor(),
+		revision: record.projection.revision,
+		snapshot: record.projection.snapshot,
+		live: {
+			text: record.projection.live.text,
+			thinking: record.projection.live.thinking,
+			tools: record.projection.live.tools.map((tool) => ({ ...tool }))
+		}
+	};
+}
+
+function metadataPatch(record: RuntimeRecord): RuntimeMetadataPatch {
+	const session = record.session;
+	const snapshot = record.projection.snapshot;
+	const sessionStats = session.getSessionStats();
+	const contextUsage = session.getContextUsage();
+	const next: RuntimeMetadataPatch = {
+		sessionName: session.sessionName,
+		model: session.model
+			? {
+					provider: session.model.provider,
+					id: session.model.id,
+					name: session.model.name ?? session.model.id,
+					reasoning: session.model.reasoning ?? false
+				}
+			: undefined,
+		thinkingLevel: session.thinkingLevel as ThinkingLevel,
+		isStreaming: session.isStreaming,
+		mcpStatus: record.mcpStatus,
+		modelFallbackMessage: record.modelFallbackMessage,
+		permissionRequests: record.permissions.pendingRequests,
+		sessionTokens: sessionStats.tokens,
+		contextUsage
+	};
+	const patch: RuntimeMetadataPatch = {};
+	for (const [key, value] of Object.entries(next) as Array<
+		[keyof RuntimeMetadataPatch, RuntimeMetadataPatch[keyof RuntimeMetadataPatch]]
+	>) {
+		if (JSON.stringify(snapshot[key]) !== JSON.stringify(value)) {
+			patch[key] = value as never;
+		}
+	}
+
+	return patch;
+}
+
+function refreshMetadata(record: RuntimeRecord): void {
+	const patch = metadataPatch(record);
+	if (!Object.keys(patch).length) {
+		return;
+	}
+
+	record.projection.snapshot = { ...record.projection.snapshot, ...patch };
+	publish(record, { type: 'metadata_updated', patch });
+}
+
+function refreshPersistedItems(
+	record: RuntimeRecord,
+	reason: 'branch' | 'compaction' | 'recovery' = 'branch'
+): void {
+	const entries = record.session.sessionManager.getBranch();
+	const leafId = entries.at(-1)?.id;
+	if (leafId === record.projection.sourceLeafId) {
+		return;
+	}
+
+	const knownIndex = record.projection.sourceLeafId
+		? entries.findIndex((entry) => entry.id === record.projection.sourceLeafId)
+		: -1;
+	if (!record.projection.sourceLeafId || knownIndex < 0) {
+		const items = entries.flatMap((entry) => {
+			const item = mapSessionEntry(entry);
+
+			return item ? [item] : [];
+		});
+		record.projection.snapshot = { ...record.projection.snapshot, items };
+		if (!record.session.isStreaming) {
+			record.projection.live = { text: '', thinking: '', tools: [] };
+		}
+
+		record.projection.sourceLeafId = leafId;
+		publish(record, { type: 'items_replaced', items, reason });
+
+		return;
+	}
+
+	const afterId = record.projection.snapshot.items.at(-1)?.id;
+	const suffix = entries.slice(knownIndex + 1).flatMap((entry) => {
+		const item = mapSessionEntry(entry);
+
+		return item ? [item] : [];
+	});
+	record.projection.sourceLeafId = leafId;
+	if (!suffix.length) {
+		return;
+	}
+
+	record.projection.snapshot = {
+		...record.projection.snapshot,
+		items: [...record.projection.snapshot.items, ...suffix]
+	};
+	if (!record.session.isStreaming) {
+		record.projection.live = { text: '', thinking: '', tools: [] };
+	}
+
+	publish(record, { type: 'items_appended', afterId, items: suffix });
 }
 
 /**
@@ -174,33 +355,33 @@ export async function shutdownRuntimeSession(session: AgentSession): Promise<voi
 	}
 }
 
-function publishSnapshot(record: RuntimeRecord): RuntimeSnapshot {
-	const snapshot = buildSnapshot(
-		record.id,
-		record.project,
-		record.session,
-		record.modelFallbackMessage,
-		record.mcpStatus,
-		record.permissions.pendingRequests
-	);
-	publish(record, { type: 'snapshot', snapshot });
-
-	return snapshot;
-}
-
 function attachSessionEvents(record: RuntimeRecord): () => void {
-	return record.session.subscribe((event) => {
-		record.lastAccessedAt = Date.now();
-		if (event.type === 'agent_start') {
-			publish(record, { type: 'state', isStreaming: true });
+	let refreshScheduled = false;
+	const schedulePersistedRefresh = () => {
+		if (refreshScheduled) {
+			return;
 		}
 
-		if (event.type === 'agent_settled' || event.type === 'agent_end') {
-			publish(record, { type: 'state', isStreaming: record.session.isStreaming });
+		refreshScheduled = true;
+		queueMicrotask(() => {
+			refreshScheduled = false;
+			refreshPersistedItems(record);
+			refreshMetadata(record);
+		});
+	};
+
+	return record.session.subscribe((event) => {
+		record.lastAccessedAt = Date.now();
+		if (
+			event.type === 'agent_start' ||
+			event.type === 'agent_settled' ||
+			event.type === 'agent_end'
+		) {
+			refreshMetadata(record);
 		}
 
 		if (event.type === 'entry_appended' || event.type === 'session_info_changed') {
-			publishSnapshot(record);
+			schedulePersistedRefresh();
 		}
 
 		const normalized = normalizePiEvent(event);
@@ -227,7 +408,7 @@ export async function createRuntime(input: {
 	sessionId?: string;
 	model?: ModelOption;
 	thinkingLevel?: ThinkingLevel;
-}): Promise<RuntimeSnapshot> {
+}): Promise<RuntimeCheckpoint> {
 	const project = await getProject(input.projectId);
 	if (!project) {
 		throw new Error('Project not found.');
@@ -253,6 +434,15 @@ export async function createRuntime(input: {
 	});
 
 	const id = randomUUID();
+	const openedProject = await markProjectOpened(project.id);
+	const initialSnapshot = buildSnapshot(
+		id,
+		openedProject,
+		created.session,
+		created.modelFallbackMessage,
+		undefined,
+		[]
+	);
 	const recordRef: { current?: RuntimeRecord } = {};
 	const permissions = new PermissionBridge((event) => {
 		const record = recordRef.current;
@@ -264,32 +454,37 @@ export async function createRuntime(input: {
 			return;
 		}
 
-		// This direct path is only reachable during record construction, before a
-		// batcher can have received session output.
-		if (!record) {
-			eventBroker.publish(id, event);
-
-			return;
+		if (record) {
+			publish(record, event);
 		}
-
-		publish(record, event);
 	});
 	const record: RuntimeRecord = {
 		id,
-		project: await markProjectOpened(project.id),
+		project: openedProject,
 		session: created.session,
 		unsubscribe: () => undefined,
 		modelFallbackMessage: created.modelFallbackMessage,
 		lastAccessedAt: Date.now(),
 		promptActive: false,
 		permissions,
-		assistantDeltaBatcher: new AssistantDeltaBatcher((event) => eventBroker.publish(id, event)),
-		unsubscribeMcpStatus: () => undefined
+		assistantDeltaBatcher: new AssistantDeltaBatcher((event) => {
+			const current = recordRef.current;
+			if (current) {
+				commitMutation(current, event);
+			}
+		}),
+		unsubscribeMcpStatus: () => undefined,
+		projection: {
+			snapshot: initialSnapshot,
+			live: { text: '', thinking: '', tools: [] },
+			revision: 0,
+			sourceLeafId: created.session.sessionManager.getBranch().at(-1)?.id
+		}
 	};
 	recordRef.current = record;
 	record.unsubscribeMcpStatus = subscribeToMcpStatus(created.extensionEvents, (snapshot) => {
 		record.mcpStatus = snapshot;
-		publish(record, { type: 'mcp_status', mcpStatus: snapshot });
+		refreshMetadata(record);
 	});
 	try {
 		await bindRuntimeExtensions(
@@ -307,31 +502,15 @@ export async function createRuntime(input: {
 	record.unsubscribe = attachSessionEvents(record);
 	runtimes.set(record.id, record);
 
-	return buildSnapshot(
-		record.id,
-		record.project,
-		record.session,
-		record.modelFallbackMessage,
-		record.mcpStatus,
-		record.permissions.pendingRequests
-	);
+	return checkpoint(record);
 }
 
 export function respondToPermissionRequest(runtimeId: string, response: PermissionResponse): void {
 	getRecord(runtimeId).permissions.respond(response);
 }
 
-export function getRuntimeSnapshot(runtimeId: string): RuntimeSnapshot {
-	const record = getRecord(runtimeId);
-
-	return buildSnapshot(
-		record.id,
-		record.project,
-		record.session,
-		record.modelFallbackMessage,
-		record.mcpStatus,
-		record.permissions.pendingRequests
-	);
+export function getRuntimeCheckpoint(runtimeId: string): RuntimeCheckpoint {
+	return checkpoint(getRecord(runtimeId));
 }
 
 export function listRuntimeSlashCommands(runtimeId: string): SlashCommand[] {
@@ -405,8 +584,8 @@ export function promptRuntime(
 		.catch((error: unknown) => publish(record, { type: 'error', message: messageFromError(error) }))
 		.finally(() => {
 			record.promptActive = false;
-			publish(record, { type: 'state', isStreaming: record.session.isStreaming });
-			publishSnapshot(record);
+			refreshPersistedItems(record);
+			refreshMetadata(record);
 		});
 
 	return { queued, userMessageText: visibleText };
@@ -415,29 +594,33 @@ export function promptRuntime(
 export async function setRuntimeModel(
 	runtimeId: string,
 	model: { provider: string; id: string }
-): Promise<RuntimeSnapshot> {
+): Promise<RuntimeCheckpoint> {
 	const record = getRecord(runtimeId);
 	if (record.session.isStreaming) {
 		throw new Error('Wait for the current response before changing the model.');
 	}
 
 	await record.session.setModel(await resolveModel(model.provider, model.id));
+	refreshPersistedItems(record);
+	refreshMetadata(record);
 
-	return publishSnapshot(record);
+	return checkpoint(record);
 }
 
 export function setRuntimeThinkingLevel(
 	runtimeId: string,
 	thinkingLevel: ThinkingLevel
-): RuntimeSnapshot {
+): RuntimeCheckpoint {
 	const record = getRecord(runtimeId);
 	if (record.session.isStreaming) {
 		throw new Error('Wait for the current response before changing reasoning.');
 	}
 
 	record.session.setThinkingLevel(thinkingLevel);
+	refreshPersistedItems(record);
+	refreshMetadata(record);
 
-	return publishSnapshot(record);
+	return checkpoint(record);
 }
 
 /** Persist an adapter-compatible project override, then reload extensions to apply it. */
@@ -445,7 +628,7 @@ export async function setRuntimeMcpServerEnabled(
 	runtimeId: string,
 	serverName: string,
 	enabled: boolean
-): Promise<RuntimeSnapshot> {
+): Promise<RuntimeCheckpoint> {
 	const record = getRecord(runtimeId);
 	const previousToggle = record.mcpToggle ?? Promise.resolve();
 	const toggle = previousToggle.then(async () => {
@@ -459,15 +642,17 @@ export async function setRuntimeMcpServerEnabled(
 		}
 
 		if (server.disabled === !enabled) {
-			return publishSnapshot(record);
+			return checkpoint(record);
 		}
 
 		record.suppressMcpReloadNotice = true;
 		try {
 			await record.session.prompt(`/mcp ${enabled ? 'enable' : 'disable'} ${serverName}`);
 			await record.session.reload();
+			refreshPersistedItems(record);
+			refreshMetadata(record);
 
-			return publishSnapshot(record);
+			return checkpoint(record);
 		} finally {
 			record.suppressMcpReloadNotice = false;
 		}
@@ -490,7 +675,8 @@ export async function abortRuntime(runtimeId: string): Promise<void> {
 	const record = getRecord(runtimeId);
 	record.permissions.cancelAll();
 	await record.session.abort();
-	publishSnapshot(record);
+	refreshPersistedItems(record);
+	refreshMetadata(record);
 }
 
 export async function disposeRuntime(runtimeId: string): Promise<void> {

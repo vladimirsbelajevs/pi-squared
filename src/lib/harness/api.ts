@@ -6,13 +6,13 @@ import type {
 	Project,
 	ProjectFileSuggestion,
 	PromptRuntimeResult,
-	RuntimeSnapshot,
+	RuntimeCheckpoint,
 	SlashCommand,
-	StreamEnvelope,
+	StreamMessage,
 	ThinkingLevel
 } from '$lib/contracts';
 
-function isStreamEnvelope(value: unknown): value is StreamEnvelope {
+function isStreamMessage(value: unknown): value is StreamMessage {
 	if (!value || typeof value !== 'object') {
 		return false;
 	}
@@ -20,10 +20,13 @@ function isStreamEnvelope(value: unknown): value is StreamEnvelope {
 	const envelope = value as Record<string, unknown>;
 
 	return (
-		typeof envelope.id === 'number' &&
-		typeof envelope.runtimeId === 'string' &&
-		!!envelope.event &&
-		typeof envelope.event === 'object'
+		(typeof envelope.type === 'string' && envelope.type === 'reset_required') ||
+		(typeof envelope.id === 'string' &&
+			typeof envelope.runtimeId === 'string' &&
+			!!envelope.cursor &&
+			typeof envelope.cursor === 'object' &&
+			!!envelope.event &&
+			typeof envelope.event === 'object')
 	);
 }
 
@@ -83,11 +86,11 @@ export function createRuntime(input: {
 	sessionId?: string;
 	model?: ModelOption;
 	thinkingLevel?: ThinkingLevel;
-}): Promise<{ snapshot: RuntimeSnapshot }> {
+}): Promise<{ checkpoint: RuntimeCheckpoint }> {
 	return request('/api/runtimes', { method: 'POST', body: JSON.stringify(input) });
 }
 
-export function getRuntime(runtimeId: string): Promise<{ snapshot: RuntimeSnapshot }> {
+export function getRuntime(runtimeId: string): Promise<{ checkpoint: RuntimeCheckpoint }> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}`);
 }
 
@@ -133,7 +136,7 @@ export function respondToPermission(
 export function setRuntimeModel(
 	runtimeId: string,
 	model: ModelOption
-): Promise<{ snapshot: RuntimeSnapshot }> {
+): Promise<{ checkpoint: RuntimeCheckpoint }> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/model`, {
 		method: 'POST',
 		body: JSON.stringify(model)
@@ -143,7 +146,7 @@ export function setRuntimeModel(
 export function setRuntimeThinking(
 	runtimeId: string,
 	thinkingLevel: ThinkingLevel
-): Promise<{ snapshot: RuntimeSnapshot }> {
+): Promise<{ checkpoint: RuntimeCheckpoint }> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/thinking`, {
 		method: 'POST',
 		body: JSON.stringify({ thinkingLevel })
@@ -153,7 +156,7 @@ export function setRuntimeThinking(
 export function setRuntimeMcpServerEnabled(
 	runtimeId: string,
 	input: { serverName: string; enabled: boolean }
-): Promise<{ snapshot: RuntimeSnapshot }> {
+): Promise<{ checkpoint: RuntimeCheckpoint }> {
 	return request(`/api/runtimes/${encodeURIComponent(runtimeId)}/mcp`, {
 		method: 'POST',
 		body: JSON.stringify(input)
@@ -161,15 +164,15 @@ export function setRuntimeMcpServerEnabled(
 }
 
 export function openEventStream(
-	lastEventId: number | undefined,
-	onEvent: (event: StreamEnvelope) => void
+	lastEventId: string | undefined,
+	onEvent: (event: StreamMessage) => void
 ): EventSource {
 	const query = lastEventId === undefined ? '' : `?lastEventId=${encodeURIComponent(lastEventId)}`;
 	const source = new EventSource(`/api/events${query}`);
 	source.onmessage = (message) => {
 		try {
 			const parsed: unknown = JSON.parse(message.data);
-			if (isStreamEnvelope(parsed)) {
+			if (isStreamMessage(parsed)) {
 				onEvent(parsed);
 			}
 		} catch {
