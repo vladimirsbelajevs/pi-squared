@@ -14,46 +14,6 @@
 	let projectId = $derived(page.params.projectId ?? '');
 	let sessionId = $derived(page.params.sessionId ?? '');
 	let chat = $derived(workspace.findChat(projectId, sessionId));
-	let scrollContainer: HTMLElement | undefined;
-	let observedChatId: string | undefined;
-	let observedContentKey: string | undefined;
-	let scrollAfterUpdate = false;
-	let contentKey = $derived.by(() => {
-		if (!chat?.snapshot) {
-			return undefined;
-		}
-
-		return JSON.stringify({
-			items: chat.snapshot.items.map((item) => [
-				item.id,
-				item.attachments?.map((attachment) => [
-					attachment.id,
-					attachment.kind,
-					attachment.name,
-					attachment.mimeType,
-					attachment.size,
-					attachment.data
-				])
-			]),
-			isStreaming: chat.snapshot.isStreaming,
-			pendingMessages: chat.pendingUserMessages.map((message) => [
-				message.id,
-				message.text,
-				message.attachments.map((attachment) => [
-					attachment.id,
-					attachment.kind,
-					attachment.name,
-					attachment.mimeType,
-					attachment.size,
-					attachment.data
-				])
-			]),
-			streamText: chat.streamText,
-			streamThinking: workspace.showReasoning ? chat.streamThinking : '',
-			streamTools: chat.streamTools.map((tool) => [tool.id, tool.text, tool.isError])
-		});
-	});
-
 	function ensureChatForRoute(): void {
 		const projectId = page.params.projectId;
 		const sessionId = page.params.sessionId;
@@ -66,55 +26,7 @@
 	}
 
 	afterNavigate(ensureChatForRoute);
-	onMount(() => {
-		scrollContainer = document.getElementById('workspace-content') ?? undefined;
-		ensureChatForRoute();
-	});
-
-	$effect.pre(() => {
-		scrollAfterUpdate = false;
-		if (!chat?.snapshot || !contentKey) {
-			return;
-		}
-
-		if (chat.id !== observedChatId) {
-			observedChatId = chat.id;
-			observedContentKey = contentKey;
-
-			return;
-		}
-
-		if (contentKey === observedContentKey) {
-			return;
-		}
-
-		observedContentKey = contentKey;
-		if (!scrollContainer) {
-			return;
-		}
-
-		const isPinnedToBottom =
-			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 24;
-		scrollAfterUpdate = isPinnedToBottom;
-	});
-
-	$effect(() => {
-		const activeChat = chat;
-		const currentContentKey = contentKey;
-		if (
-			!scrollAfterUpdate ||
-			!activeChat?.snapshot ||
-			!currentContentKey ||
-			activeChat.id !== observedChatId ||
-			currentContentKey !== observedContentKey ||
-			!scrollContainer
-		) {
-			return;
-		}
-
-		scrollAfterUpdate = false;
-		scrollContainer.scrollTop = scrollContainer.scrollHeight;
-	});
+	onMount(ensureChatForRoute);
 </script>
 
 {#if !chat || chat.hydrating}

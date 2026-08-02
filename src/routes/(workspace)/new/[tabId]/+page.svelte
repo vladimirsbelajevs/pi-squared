@@ -26,28 +26,11 @@
 	afterNavigate(ensureNewTabForRoute);
 	onMount(() => {
 		ensureNewTabForRoute();
-		let restoreFrame: number | undefined;
 		const introFrame = requestAnimationFrame(() => {
 			introReady = true;
-			const pathname = page.url.pathname;
-			restoreFrame = requestAnimationFrame(() => {
-				if (page.url.pathname !== pathname) {
-					return;
-				}
-
-				const scrollContainer = document.getElementById('workspace-content');
-				if (scrollContainer) {
-					scrollContainer.scrollTop = workspace.scrollPosition(pathname);
-				}
-			});
 		});
 
-		return () => {
-			cancelAnimationFrame(introFrame);
-			if (restoreFrame) {
-				cancelAnimationFrame(restoreFrame);
-			}
-		};
+		return () => cancelAnimationFrame(introFrame);
 	});
 
 	async function startChat(submission: ChatSubmission): Promise<boolean> {
@@ -113,7 +96,6 @@
 		display: grid;
 		min-height: 100%;
 		place-items: center;
-		overflow: auto;
 		padding: clamp(1rem, 4vw, 3rem);
 	}
 

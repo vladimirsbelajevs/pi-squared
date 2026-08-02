@@ -1,53 +1,13 @@
 <script lang="ts">
-	import { afterNavigate, goto } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import WorkspaceTabs from './WorkspaceTabs.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 	import type { WorkspaceTab } from '$lib/harness/types';
 
 	let { children } = $props();
-	let scrollContainer: HTMLElement | undefined;
-	let restoringScroll = false;
-
-	function rememberScrollContainer(element: HTMLElement): () => void {
-		scrollContainer = element;
-
-		return () => {
-			scrollContainer = undefined;
-		};
-	}
-
-	function rememberScrollPosition(event: Event): void {
-		if (restoringScroll) {
-			return;
-		}
-
-		workspace.rememberScrollPosition(
-			page.url.pathname,
-			(event.currentTarget as HTMLElement).scrollTop
-		);
-	}
-
-	function restoreScrollPosition(): void {
-		const pathname = page.url.pathname;
-		if (!scrollContainer) {
-			return;
-		}
-
-		const scrollTop = workspace.scrollPosition(pathname);
-		restoringScroll = true;
-		void tick().then(() => {
-			if (scrollContainer && page.url.pathname === pathname) {
-				scrollContainer.scrollTop = scrollTop;
-			}
-
-			requestAnimationFrame(() => (restoringScroll = false));
-		});
-	}
-
-	afterNavigate(restoreScrollPosition);
 
 	function createNewTab(): void {
 		const tab = workspace.createNewTab();
@@ -92,7 +52,6 @@
 
 	onMount(() => {
 		void workspace.start();
-		restoreScrollPosition();
 
 		return () => workspace.disposeConnection();
 	});
@@ -110,8 +69,6 @@
 		id="workspace-content"
 		class:workspace-state={workspace.initializing || workspace.error}
 		class="workspace-content"
-		{@attach rememberScrollContainer}
-		onscroll={rememberScrollPosition}
 	>
 		{#if workspace.initializing}
 			<section class="loading-state"><span class="pulse"></span>Loading harness…</section>
