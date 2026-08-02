@@ -20,7 +20,7 @@ The following major findings are already addressed and are not repeated as work 
 
 | Priority | Issue | Current status |
 | --- | --- | --- |
-| High | Long-conversation DOM growth | Open |
+| High | Long-conversation DOM growth | Closed |
 | High | Eager hydration of restored chat tabs | Open |
 | Medium | Live tool updates invalidate unrelated tool-group inputs | Partially fixed |
 | Medium | Project file autocomplete rescans the filesystem | Open |
@@ -34,8 +34,14 @@ The following major findings are already addressed and are not repeated as work 
 
 ## 1. Long-conversation DOM growth
 
-**Status:** Open  
+**Status:** Closed
+
 **Priority:** High
+
+### Implemented
+
+- Added native CSS containment to finalized message rows, notices, stopped rows, and tool groups using `content-visibility: auto` with a `240px` intrinsic-size fallback.
+- Added a Storybook 200-message profiling fixture with highlighted code blocks, attachments, notices, and tool groups.
 
 ### Current behavior
 

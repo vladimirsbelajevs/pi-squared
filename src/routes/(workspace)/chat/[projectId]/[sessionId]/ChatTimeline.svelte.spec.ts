@@ -64,6 +64,50 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByRole('status')).toHaveTextContent('Pi is thinking');
 	});
 
+	it('contains off-screen finalized timeline rows', () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{ id: 'assistant-1', kind: 'message', role: 'assistant', text: 'Answer' },
+						{ id: 'notice-1', kind: 'notice', text: 'Context compacted.' },
+						{
+							id: 'assistant-aborted',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							stopReason: 'aborted'
+						},
+						{
+							id: 'assistant-tools',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{}' }]
+						},
+						{
+							id: 'tool-result',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'Result'
+						}
+					]
+				}
+			})
+		});
+
+		for (const selector of ['.message-entry', '.timeline-notice', '.stopped-row', '.tool-group']) {
+			const element = screen.container.querySelector<HTMLElement>(selector)!;
+			const style = getComputedStyle(element);
+			expect(style.contentVisibility).toBe('auto');
+			expect(style.containIntrinsicSize).toContain('240px');
+		}
+	});
+
 	it('renders pending user messages immediately and replaces them with their authoritative entry', async () => {
 		const base = chat();
 		const pendingMessage = {

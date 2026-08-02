@@ -122,6 +122,8 @@
 		max-width: 54rem;
 		margin: 0.25rem auto;
 		overflow: hidden;
+		content-visibility: auto;
+		contain-intrinsic-size: auto 240px;
 	}
 
 	.tool-group-summary {

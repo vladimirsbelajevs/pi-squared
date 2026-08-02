@@ -363,6 +363,13 @@
 		font-size: 0.82rem;
 	}
 
+	.message-entry,
+	.timeline-notice,
+	.stopped-row {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 240px;
+	}
+
 	.message-entry {
 		max-width: 54rem;
 		margin: 0 auto 1rem;
