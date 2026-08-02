@@ -9,6 +9,7 @@ export type StreamUpdateTarget = {
 	streamRenderedText: string;
 	streamThinking: string;
 	streamTools: StreamingTool[];
+	streamToolsByCallId?: Map<string, StreamingTool>;
 };
 
 type PendingStreamUpdate = {
@@ -115,9 +116,12 @@ export class StreamUpdateBatcher {
 		for (const tool of pending.tools.values()) {
 			const index = pending.chat.streamTools.findIndex((candidate) => candidate.id === tool.id);
 			if (index >= 0) {
-				pending.chat.streamTools[index] = mergeStreamingTool(pending.chat.streamTools[index], tool);
+				const existing = pending.chat.streamTools[index];
+				Object.assign(existing, mergeStreamingTool(existing, tool));
+				pending.chat.streamToolsByCallId?.set(tool.id, existing);
 			} else {
 				pending.chat.streamTools.push(tool);
+				pending.chat.streamToolsByCallId?.set(tool.id, tool);
 			}
 		}
 

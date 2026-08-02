@@ -109,6 +109,10 @@ function randomId(): string {
 	return crypto.randomUUID();
 }
 
+function streamToolMap(tools: StreamingTool[]): SvelteMap<string, StreamingTool> {
+	return new SvelteMap(tools.map((tool) => [tool.id, tool]));
+}
+
 function normalizeError(error: unknown, fallback: string): Error {
 	return error instanceof Error ? error : new Error(fallback);
 }
@@ -363,6 +367,7 @@ export class HarnessWorkspace {
 				streamRenderedText: '',
 				streamThinking: '',
 				streamTools: [],
+				streamToolsByCallId: new SvelteMap(),
 				transientNotices: [],
 				permissionRequests: [],
 				pendingUserMessages: []
@@ -706,9 +711,12 @@ export class HarnessWorkspace {
 			return;
 		}
 
-		chat.snapshot = snapshotFromState(chat.runtime);
-		chat.permissionRequests = chat.snapshot.permissionRequests.map((request) => ({ ...request }));
-		this.#reconcilePendingUserMessages(chat);
+		if (event.type !== 'assistant_delta' && event.type !== 'tool_update') {
+			chat.snapshot = snapshotFromState(chat.runtime);
+			chat.permissionRequests = chat.snapshot.permissionRequests.map((request) => ({ ...request }));
+			this.#reconcilePendingUserMessages(chat);
+		}
+
 		if (event.type === 'assistant_delta') {
 			this.#queueAssistantDelta(chat, event.text ?? '', event.thinking ?? '');
 		}
@@ -726,13 +734,14 @@ export class HarnessWorkspace {
 		if (
 			(event.type === 'metadata_updated' && event.patch.isStreaming === false) ||
 			((event.type === 'items_appended' || event.type === 'items_replaced') &&
-				chat.snapshot.isStreaming === false)
+				chat.snapshot?.isStreaming === false)
 		) {
 			this.#streamUpdates.discard(chat.id);
 			chat.streamText = '';
 			chat.streamRenderedText = '';
 			chat.streamThinking = '';
 			chat.streamTools = [];
+			chat.streamToolsByCallId?.clear();
 		}
 
 		this.#scheduleInactiveRuntimeDisposal(chat);
@@ -834,6 +843,7 @@ export class HarnessWorkspace {
 		chat.streamRenderedText = '';
 		chat.streamThinking = '';
 		chat.streamTools = [];
+		chat.streamToolsByCallId?.clear();
 		chat.permissionRequests = [];
 		this.#streamUpdates.discard(chat.id);
 		this.persist();
@@ -1044,11 +1054,13 @@ export class HarnessWorkspace {
 		chat.streamRenderedText = checkpoint.live.text;
 		chat.streamThinking = checkpoint.live.thinking;
 		chat.streamTools = checkpoint.live.tools.map((tool) => ({ ...tool }));
+		chat.streamToolsByCallId = streamToolMap(chat.streamTools);
 	}
 
 	#createChatTab(id: string, checkpoint: RuntimeCheckpoint): ChatTab {
 		const runtime = stateFromCheckpoint(checkpoint);
 		const snapshot = snapshotFromState(runtime);
+		const streamTools = checkpoint.live.tools.map((tool) => ({ ...tool }));
 
 		return {
 			id,
@@ -1068,7 +1080,8 @@ export class HarnessWorkspace {
 			streamText: checkpoint.live.text,
 			streamRenderedText: checkpoint.live.text,
 			streamThinking: checkpoint.live.thinking,
-			streamTools: checkpoint.live.tools.map((tool) => ({ ...tool })),
+			streamTools,
+			streamToolsByCallId: streamToolMap(streamTools),
 			transientNotices: [],
 			permissionRequests: snapshot.permissionRequests.map((request) => ({ ...request })),
 			pendingUserMessages: []
@@ -1308,6 +1321,7 @@ export class HarnessWorkspace {
 			streamRenderedText: '',
 			streamThinking: '',
 			streamTools: [],
+			streamToolsByCallId: new SvelteMap(),
 			transientNotices: [],
 			permissionRequests: [],
 			pendingUserMessages: []

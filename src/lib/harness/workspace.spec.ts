@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RuntimeCheckpoint } from '$lib/contracts';
+import type { RuntimeCheckpoint, StreamMessage } from '$lib/contracts';
 
 const api = vi.hoisted(() => ({
 	abortRuntime: vi.fn(),
@@ -24,7 +24,11 @@ import { HarnessWorkspace } from './workspace.svelte';
 
 const STORAGE_KEY = 'pi-squared:workspace:v1';
 
-function checkpoint(runtimeId: string, sessionId = 'session-1'): RuntimeCheckpoint {
+function checkpoint(
+	runtimeId: string,
+	sessionId = 'session-1',
+	isStreaming = false
+): RuntimeCheckpoint {
 	return {
 		protocolVersion: 2,
 		cursor: { epoch: 'test', sequence: 1 },
@@ -40,7 +44,7 @@ function checkpoint(runtimeId: string, sessionId = 'session-1'): RuntimeCheckpoi
 			},
 			sessionId,
 			thinkingLevel: 'medium',
-			isStreaming: false,
+			isStreaming,
 			items: [],
 			permissionRequests: []
 		},
@@ -97,6 +101,43 @@ afterEach(() => {
 });
 
 describe('HarnessWorkspace chat hydration', () => {
+	it('does not replace a finalized snapshot for a live tool update', async () => {
+		let receiveEvent: ((message: StreamMessage) => void) | undefined;
+		api.openEventStream.mockImplementation((_lastEventId, onEvent) => {
+			receiveEvent = onEvent;
+
+			return { close: vi.fn() };
+		});
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callback(0);
+
+			return 1;
+		});
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		const workspace = new HarnessWorkspace();
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		const snapshot = chat.snapshot;
+
+		receiveEvent?.({
+			id: 'test:2',
+			cursor: { epoch: 'test', sequence: 2 },
+			runtimeId: 'runtime-0',
+			event: {
+				type: 'tool_update',
+				baseRevision: 1,
+				revision: 2,
+				toolCallId: 'tool-1',
+				toolName: 'read',
+				status: 'running'
+			}
+		});
+
+		await vi.waitFor(() => expect(chat.streamToolsByCallId?.get('tool-1')).toBeDefined());
+		expect(chat.snapshot).toBe(snapshot);
+	});
+
 	it('restores ten chat tabs without hydrating them, then hydrates only a direct routed chat', async () => {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(storedChats(10)));
 		api.getRuntime.mockImplementation(async (runtimeId: string) => ({

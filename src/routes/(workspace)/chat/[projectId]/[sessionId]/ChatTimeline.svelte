@@ -1,16 +1,14 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { on } from 'svelte/events';
-	import type { ChatItem, ToolStatus } from '$lib/contracts';
-	import { buildFinalizedTimeline, type FinalToolView } from '$lib/harness/timeline';
-	import type { ChatTab, StreamingTool } from '$lib/harness/types';
+	import type { ChatItem } from '$lib/contracts';
+	import { buildFinalizedTimeline } from '$lib/harness/timeline';
+	import type { ChatTab } from '$lib/harness/types';
 	import { renderAssistantMarkdown, renderStreamingMarkdown } from '$lib/markdown';
 	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
 	import ImageViewer, { type ImageViewerImage } from '$lib/components/ImageViewer.svelte';
 	import ToolGroup, { type ToolGroupTool } from './ToolGroup.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-
-	type ToolView = FinalToolView & { stream?: StreamingTool };
 
 	type Props = { chat: ChatTab; showReasoning?: boolean; showModelChanges?: boolean };
 	let { chat, showReasoning = false, showModelChanges = false }: Props = $props();
@@ -31,49 +29,28 @@
 	let timeline = $derived.by(() =>
 		buildFinalizedTimeline(chat.snapshot?.items ?? [], chat.pendingUserMessages, showModelChanges)
 	);
-	let streamsByCallId = $derived(new Map(chat.streamTools.map((tool) => [tool.id, tool])));
-	let liveTools = $derived.by(() => {
-		const persistedCallIds = new Set(
+	let finalizedToolCallIds = $derived(
+		new Set(
 			timeline.flatMap((entry) =>
 				entry.kind === 'tools' ? entry.tools.map((tool) => tool.id) : []
 			)
-		);
-
-		return chat.streamTools.filter((tool) => !persistedCallIds.has(tool.id));
-	});
-	let trailingToolGroupId = $derived(
-		timeline.at(-1)?.kind === 'tools' ? timeline.at(-1)?.id : undefined
+		)
 	);
+	let liveTools = $derived(chat.streamTools.filter((tool) => !finalizedToolCallIds.has(tool.id)));
 
-	function toolStatus(tool: ToolView): ToolStatus {
-		if (tool.result) {
-			return tool.result.isError ? 'failed' : 'completed';
-		}
-
-		if (tool.stream) {
-			return tool.stream.status ?? 'running';
-		}
-
-		if (tool.owner?.stopReason === 'aborted') {
-			return 'cancelled';
-		}
-
-		return tool.owner?.isError ? 'failed' : 'pending';
+	function liveToolForCallId(callId: string) {
+		return chat.streamToolsByCallId?.get(callId);
 	}
 
-	function toolGroupTools(tools: FinalToolView[], streams = streamsByCallId): ToolGroupTool[] {
-		return tools.map((base) => {
-			const tool: ToolView = { ...base, stream: streams.get(base.id) };
-
-			return {
-				id: tool.id,
-				name: tool.name,
-				status: toolStatus(tool),
-				arguments: tool.arguments ?? tool.stream?.arguments,
-				hasResult: tool.result !== undefined || tool.stream !== undefined,
-				resultText: tool.result?.text ?? tool.stream?.text
-			};
-		});
+	function liveToolGroupTools(): ToolGroupTool[] {
+		return liveTools.map((tool) => ({
+			id: tool.id,
+			name: tool.name,
+			status: tool.status ?? 'running',
+			arguments: tool.arguments,
+			hasResult: true,
+			resultText: tool.text
+		}));
 	}
 
 	function formatTimestamp(timestamp: string | undefined): string | undefined {
@@ -197,12 +174,8 @@
 	{:else if entry.kind === 'tools'}
 		<ToolGroup
 			chatId={chat.id}
-			tools={toolGroupTools([
-				...entry.tools,
-				...(entry.id === trailingToolGroupId
-					? liveTools.map((tool) => ({ id: tool.id, name: tool.name }))
-					: [])
-			])}
+			finalizedTools={entry.tools}
+			{liveToolForCallId}
 			thinking={entry.thinking}
 			{showReasoning}
 			{expandedToolIds}
@@ -310,13 +283,8 @@
 	{/if}
 {/each}
 
-{#if liveTools.length && !trailingToolGroupId}
-	<ToolGroup
-		chatId={chat.id}
-		tools={toolGroupTools(liveTools.map((tool) => ({ id: tool.id, name: tool.name })))}
-		{showReasoning}
-		{expandedToolIds}
-	/>
+{#if liveTools.length}
+	<ToolGroup chatId={chat.id} tools={liveToolGroupTools()} {showReasoning} {expandedToolIds} />
 {/if}
 
 {#if waitingForResponse}

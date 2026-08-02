@@ -1,11 +1,14 @@
+import { flushSync } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { StreamUpdateBatcher } from '$lib/harness/stream-update-batcher';
 import type { ChatItem } from '$lib/contracts';
 import type { ChatTab } from '$lib/harness/types';
 import ChatTimeline from './ChatTimeline.svelte';
 
 function chat(overrides: Partial<ChatTab> = {}): ChatTab {
-	return {
+	const result: ChatTab = {
 		id: 'chat-tab',
 		kind: 'chat',
 		title: 'Test chat',
@@ -42,6 +45,9 @@ function chat(overrides: Partial<ChatTab> = {}): ChatTab {
 		pendingUserMessages: [],
 		...overrides
 	};
+	result.streamToolsByCallId = new SvelteMap(result.streamTools.map((tool) => [tool.id, tool]));
+
+	return result;
 }
 
 function mockClipboard(writeText: ReturnType<typeof vi.fn>): () => void {
@@ -1053,7 +1059,7 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByText('Stopped')).toBeVisible();
 	});
 
-	it('upserts active streaming tools into the persisted standalone batch', async () => {
+	it('renders unmatched live tools separately from finalized groups', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
 			chat: chat({
@@ -1083,21 +1089,73 @@ describe('ChatTimeline', () => {
 				}
 			})
 		});
-		const group = screen.container.querySelector('details.tool-group') as HTMLDetailsElement;
+		const groups = screen.container.querySelectorAll('details.tool-group');
+		const finalizedGroup = groups[0] as HTMLDetailsElement;
+		const liveGroup = groups[1] as HTMLDetailsElement;
 
-		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(1);
-		expect(group.closest('.message-assistant')).toBeNull();
+		expect(groups).toHaveLength(2);
+		expect(finalizedGroup.closest('.message-assistant')).toBeNull();
 		await expect.element(screen.getByText('I will inspect the project.')).toBeVisible();
-		expect(group.nextElementSibling).toBe(screen.container.querySelector('article.streaming'));
-		await screen.getByText('2 tools called · 1 completed · 1 running').click();
-		await vi.waitFor(() => expect(group.open).toBe(true));
-		expect(screen.container.querySelectorAll('.tool-detail > span')).toHaveLength(1);
+		expect(liveGroup.nextElementSibling).toBe(screen.container.querySelector('article.streaming'));
+		await screen.getByText('1 tool called · 1 running').click();
+		await vi.waitFor(() => expect(liveGroup.open).toBe(true));
+		expect(screen.container.querySelectorAll('.tool-detail > span')).toHaveLength(0);
 		const statuses = [
 			...screen.container.querySelectorAll<HTMLElement>('.tool-entry-heading span')
 		];
-		expect(statuses.map((status) => status.textContent?.trim())).toEqual(['completed', 'running']);
-		await screen.getByText('Result').last().click();
+		expect(statuses.map((status) => status.textContent?.trim())).toEqual(['running']);
+		await screen.getByText('Result').click();
 		await expect.element(screen.getByText('Running tests')).toBeVisible();
+	});
+
+	it('updates only the finalized group that owns a live tool patch', async () => {
+		const base = chat();
+		const reactiveChat = $state(
+			chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-a',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [{ id: 'tool-a', name: 'read', arguments: '{}' }]
+						},
+						{ id: 'between-tools', kind: 'message', role: 'user', text: 'Continue.' },
+						{
+							id: 'assistant-b',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [{ id: 'tool-b', name: 'bash', arguments: '{}' }]
+						}
+					]
+				},
+				streamTools: [
+					{ id: 'tool-a', name: 'read', status: 'running' },
+					{ id: 'tool-b', name: 'bash', status: 'running' }
+				]
+			})
+		);
+		const screen = render(ChatTimeline, { chat: reactiveChat });
+
+		await expect.element(screen.getByText('1 tool called · 1 running').first()).toBeVisible();
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(2);
+
+		const batcher = new StreamUpdateBatcher();
+		batcher.queueToolUpdate(reactiveChat, {
+			id: 'tool-a',
+			name: 'read',
+			status: 'completed',
+			text: 'README contents'
+		});
+		batcher.flush(reactiveChat.id);
+		flushSync();
+
+		await expect.element(screen.getByText('1 tool called · 1 completed')).toBeVisible();
+		await expect.element(screen.getByText('1 tool called · 1 running')).toBeVisible();
 	});
 
 	it('renders live-only tools as a standalone row and leaves unmatched historical results visible', async () => {

@@ -150,6 +150,33 @@ describe('StreamUpdateBatcher', () => {
 		]);
 	});
 
+	it('preserves unrelated live tool identities when applying a patch', () => {
+		const { batcher, flushFrame } = createBatcher();
+		const target = chat('chat-1');
+		target.streamTools = [
+			{ id: 'read-1', name: 'read', status: 'running' },
+			{ id: 'bash-1', name: 'bash', status: 'running', text: 'Running tests' }
+		];
+		const tools = target.streamTools;
+		const unrelatedTool = target.streamTools[1];
+
+		batcher.queueToolUpdate(target, {
+			id: 'read-1',
+			name: 'read',
+			status: 'completed',
+			text: 'README contents'
+		});
+		flushFrame();
+
+		expect(target.streamTools).toBe(tools);
+		expect(target.streamTools[1]).toBe(unrelatedTool);
+		expect(target.streamTools[0]).toMatchObject({
+			id: 'read-1',
+			status: 'completed',
+			text: 'README contents'
+		});
+	});
+
 	it('flushes pending updates synchronously for an SSE snapshot boundary', () => {
 		const { batcher } = createBatcher();
 		const target = chat('chat-1');

@@ -1,5 +1,9 @@
 <script lang="ts">
 	import type { ToolStatus } from '$lib/contracts';
+	import type { FinalToolView } from '$lib/harness/timeline';
+	import type { StreamingTool } from '$lib/harness/types';
+
+	type ToolView = FinalToolView & { stream?: StreamingTool };
 
 	export type ToolGroupTool = {
 		id: string;
@@ -13,14 +17,56 @@
 	type ExpansionState = Pick<Set<string>, 'add' | 'delete' | 'has'>;
 	type Props = {
 		chatId: string;
-		tools: ToolGroupTool[];
+		tools?: ToolGroupTool[];
+		finalizedTools?: FinalToolView[];
+		liveToolForCallId?: (callId: string) => StreamingTool | undefined;
 		thinking?: string;
 		showReasoning?: boolean;
 		expandedToolIds: ExpansionState;
 	};
-	let { chatId, tools, thinking, showReasoning = false, expandedToolIds }: Props = $props();
+	let {
+		chatId,
+		tools: liveTools = [],
+		finalizedTools,
+		liveToolForCallId,
+		thinking,
+		showReasoning = false,
+		expandedToolIds
+	}: Props = $props();
+	let tools = $derived(
+		finalizedTools?.map((base) => toolGroupTool(base, liveToolForCallId?.(base.id))) ?? liveTools
+	);
 
 	let groupOpen = $derived(tools.some((tool) => expandedToolIds.has(groupKey(tool.id))));
+
+	function toolStatus(tool: ToolView): ToolStatus {
+		if (tool.result) {
+			return tool.result.isError ? 'failed' : 'completed';
+		}
+
+		if (tool.stream) {
+			return tool.stream.status ?? 'running';
+		}
+
+		if (tool.owner?.stopReason === 'aborted') {
+			return 'cancelled';
+		}
+
+		return tool.owner?.isError ? 'failed' : 'pending';
+	}
+
+	function toolGroupTool(base: FinalToolView, stream: StreamingTool | undefined): ToolGroupTool {
+		const tool: ToolView = { ...base, stream };
+
+		return {
+			id: tool.id,
+			name: tool.name,
+			status: toolStatus(tool),
+			arguments: tool.arguments ?? tool.stream?.arguments,
+			hasResult: tool.result !== undefined || tool.stream !== undefined,
+			resultText: tool.result?.text ?? tool.stream?.text
+		};
+	}
 
 	function groupKey(toolId: string): string {
 		return `${chatId}:group:${toolId}`;

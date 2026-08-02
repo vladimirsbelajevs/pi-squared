@@ -98,6 +98,8 @@ export interface ChatTab {
 	streamRenderedText: string;
 	streamThinking: string;
 	streamTools: StreamingTool[];
+	/** Key-scoped reactive lookup for finalized tool groups. Runtime-only and never persisted. */
+	streamToolsByCallId?: Map<string, StreamingTool>;
 	transientNotices: TransientNotice[];
 	permissionRequests: PendingPermission[];
 	/** Runtime-only optimistic messages. Never persisted in StoredWorkspaceV1. */

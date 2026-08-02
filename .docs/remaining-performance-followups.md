@@ -22,7 +22,7 @@ The following major findings are already addressed and are not repeated as work 
 | --- | --- | --- |
 | High | Long-conversation DOM growth | Closed |
 | High | Eager hydration of restored chat tabs | Open |
-| Medium | Live tool updates invalidate unrelated tool-group inputs | Partially fixed |
+| Medium | Live tool updates invalidate unrelated tool-group inputs | Closed |
 | Medium | Project file autocomplete rescans the filesystem | Open |
 | Medium | Attachment files are read, decoded, and validated repeatedly | Open |
 | Low | Stream presentation flushes are coupled to workspace/cursor persistence | Open |
@@ -142,16 +142,15 @@ The current route must be authoritative. A direct chat URL can differ from persi
 
 ## 3. Live tool updates still invalidate unrelated tool-group inputs
 
-**Status:** Partially fixed  
+**Status:** Closed
 **Priority:** Medium
 
-### Current behavior
+### Implemented
 
-Finalized timeline construction no longer depends on `chat.streamTools`, so a tool update does not rebuild historical timeline entries.
-
-However, `ChatTimeline.svelte` derives a replacement global `streamsByCallId` map whenever any live tool changes. Every historical tool-group prop expression then calls `toolGroupTools()`, which reads that map through its default argument and returns a new array containing new tool objects. Unrelated `ToolGroup` instances therefore receive new `tools` identities and re-evaluate their derived inputs.
-
-Existing tests cover live-to-final disclosure-state preservation, but not unrelated group invalidation or prop identity.
+- Finalized `ToolGroup` instances receive their stable finalized tools and look up only their own live call IDs. The global replacement `streamsByCallId` map is removed.
+- Live calls not yet represented in finalized history render in a separate live-only group, so they do not change historical group inputs.
+- Incremental stream patches merge into the matching live-tool object in place, preserving the array and unrelated tool-object identities.
+- Focused component and batcher tests cover owner-group updates, live-tool identity preservation, and live-to-final disclosure-state handoff.
 
 ### Relevant files
 
@@ -160,22 +159,12 @@ Existing tests cover live-to-final disclosure-state preservation, but not unrela
 - `src/lib/harness/streaming-tools.ts`
 - `src/lib/harness/timeline.ts`
 
-### Recommended implementation
-
-- Build a finalized `callId -> groupId` ownership index without making `buildFinalizedTimeline()` depend on live state.
-- Replace the wholesale derived `Map` with one of these boundaries:
-  1. a long-lived per-call reactive store whose entries are updated in place and whose reads are genuinely key-scoped; or
-  2. memoized per-group view models that update only the group owning a changed call ID.
-- Ensure each finalized group subscribes only to its own call IDs. A generic replacement map passed to every child does not satisfy this requirement.
-- A dedicated live-only component may render calls absent from finalized history, but matched stream patches must still be routed to their owning finalized group for live-to-final handoff.
-- Preserve tools-array identity for a group when neither its finalized tools nor its owned live patches changed.
-
 ### Acceptance criteria
 
-- Updating tool `A` does not recreate the tools array or tool objects for a group containing only tool `B`.
+- Updating tool `A` preserves the live-tool array and tool `B` object identities, while only the finalized group owning `A` updates.
 - The finalized timeline builder is not called for tool lifecycle updates.
 - Live-to-final tool handoff preserves disclosure state and does not duplicate a tool.
-- A focused render/invalidation or view-model identity test covers unrelated tool groups.
+- Focused component and batcher identity tests cover unrelated tool groups.
 
 ---
 
