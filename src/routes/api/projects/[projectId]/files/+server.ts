@@ -5,13 +5,13 @@ import { searchProjectFiles } from '$lib/server/project-files';
 export const GET: RequestHandler = async ({ params, request, url }) => {
 	try {
 		const query = url.searchParams.get('q') ?? '';
-		const files = await searchProjectFiles(
+		const result = await searchProjectFiles(
 			requiredParam(params.projectId, 'Project'),
 			query,
 			request.signal
 		);
 
-		return json({ files });
+		return json(result);
 	} catch (error) {
 		return errorResponse(error);
 	}

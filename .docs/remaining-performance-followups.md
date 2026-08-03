@@ -23,7 +23,7 @@ The following major findings are already addressed and are not repeated as work 
 | High | Long-conversation DOM growth | Closed |
 | High | Eager hydration of restored chat tabs | Open |
 | Medium | Live tool updates invalidate unrelated tool-group inputs | Closed |
-| Medium | Project file autocomplete rescans the filesystem | Closed |
+| Medium | Project file autocomplete rescans the filesystem | Partially closed |
 | Medium | Attachment files are read, decoded, and validated repeatedly | Open |
 | Low | Stream presentation flushes are coupled to workspace/cursor persistence | Open |
 | Low | Timeline-wide hover state and formatter allocation | Open |
@@ -180,6 +180,96 @@ The current route must be authoritative. A direct chat URL can differ from persi
 - Git projects use `git ls-files -z --cached --others --exclude-standard` through a directly spawned child with the canonical root as `cwd` and no shell. NUL-delimited output is parsed incrementally and stops at the 20,000-candidate bound. Tracked files remain eligible even when a later ignore rule matches them; ignored untracked files remain excluded. Deleted tracked files, symlinks, absolute paths, escaping paths, missing entries, and non-files are validated out before exposure.
 - Non-Git roots retain the ignore-aware, non-symlink-following traversal as a cached fallback. Ranked candidates are revalidated immediately before each response so TTL-cached paths cannot expose newly missing or symlinked entries. Cache entries are evicted on project removal or when a registry edit changes the canonical root.
 - The files endpoint forwards `request.signal`. The composer keeps its debounce/abort/stale-result behavior and suppresses completed project/query requests while the client-side 30-second result is fresh.
+
+### Remaining findings
+
+#### Effective freshness can approach 60 seconds
+
+**Severity:** Medium
+
+The server expires an index 30 seconds after it is built, but the composer independently caches a response for 30 seconds after it is received. A response obtained just before server-index expiry can therefore suppress a refresh until nearly 60 seconds after the underlying index was built.
+
+**Implementation:**
+
+1. Make the server's index age authoritative instead of starting a new client TTL when a response arrives.
+2. Change `searchProjectFiles()` to return the files plus `freshForMs`, calculated immediately before returning as `max(0, PROJECT_FILE_INDEX_TTL_MS - (Date.now() - index.builtAt))`.
+3. Include `freshForMs` in the files endpoint response and its client API type. Use a duration instead of a server timestamp so browser/server clock skew cannot extend freshness.
+4. Store an absolute local `expiresAt` in each composer cache entry as `Date.now() + min(freshForMs, PROJECT_FILE_INDEX_TTL_MS)`. Do not extend `expiresAt` when an entry is read or moved to the LRU tail.
+5. Reuse an identical completed project/query result only while `Date.now() < expiresAt`. If `freshForMs` is zero, show the returned response for the current interaction but do not retain it as a fresh cache entry.
+6. Keep the existing debounce, abort, generation, and stale-active-token checks unchanged.
+
+**Required tests:**
+
+- Add a server test asserting that a response from a nearly expired index reports only its remaining freshness.
+- Add a fake-timer component test that loads from an index near server expiry and proves the composer refetches when the server freshness ends, rather than 30 seconds after receipt.
+- Add an integration-style test proving a newly created file becomes discoverable no later than 30 seconds after the underlying index was built.
+
+#### A Git failure weakens ignore semantics
+
+**Severity:** Medium
+
+Every non-abort failure from `git ls-files` silently falls back to filesystem traversal. The fallback reads `.gitignore` files but does not honor `.git/info/exclude` or global Git excludes, so an operational Git failure can expose untracked paths that Git would exclude.
+
+**Implementation:**
+
+1. Separate repository detection from index listing. Add a directly spawned, no-shell Git probe such as `git rev-parse --is-inside-work-tree`, using the canonical root as `cwd`, bounded stdout/stderr, and the shared build's abort signal.
+2. Return the filesystem traversal fallback only when the probe confirms that the root is not inside a Git work tree.
+3. When the probe confirms a Git work tree, run the existing `git ls-files -z --cached --others --exclude-standard` path. Propagate any non-abort spawn, output-limit, parse, or non-zero-exit failure instead of falling back.
+4. Treat an unavailable Git executable as an operational error when a `.git` file or directory is present in the root or an ancestor. This prevents a missing executable from silently changing ignore behavior. Preserve support for project roots inside a parent repository and Git worktree `.git` files.
+5. Keep abort errors as `AbortError` and keep direct child termination when the shared build loses its final waiter.
+6. Return a generic autocomplete failure to the client and log the bounded Git diagnostic server-side; do not expose arbitrary Git stderr in the HTTP response.
+
+**Required tests:**
+
+- Verify a non-Git directory still uses the cached traversal fallback.
+- In a real Git fixture, exclude an untracked file through `.git/info/exclude`, force the listing command to fail, and assert that the search rejects rather than returning the excluded file through traversal.
+- Cover a project rooted in a subdirectory of a parent repository and a Git worktree whose `.git` entry is a file.
+- Cover Git executable/spawn failure, non-zero listing exit, and cancellation while probing and listing.
+
+#### Concurrent build resources are not globally bounded
+
+**Severity:** Low
+
+The 32-entry limit applies only to completed indexes. Requests for many distinct projects can create an unbounded number of simultaneous Git children or traversals, each retaining up to the per-index candidate bound.
+
+**Implementation:**
+
+1. Add explicit constants for a small global active-build limit and a bounded queued-build limit, for example four active builds and 64 queued distinct keys.
+2. Replace immediate `buildIndex()` startup in `getIndex()` with a FIFO scheduler. A build should have `queued`, `running`, or `finished` state; only the scheduler may move it to `running` and consume an active slot.
+3. Keep same-project/root single-flight behavior: requests for an existing queued or running key attach as waiters instead of consuming another queue entry or active slot.
+4. If every waiter aborts while a build is queued, remove it from the queue without spawning Git or traversing. If every waiter aborts while it is running, abort its controller as today.
+5. Release the active slot in a `finally` block and immediately start the next live queued build. Ensure rejection or cancellation cannot strand a slot.
+6. When the distinct-key queue is full, reject new builds with a stable server-side busy error; autocomplete may continue treating that failure as optional. Do not evict a queued build that still has waiters.
+7. Extend `getProjectFileCacheStats()` with active and queued counts so tests and diagnostics can verify both limits.
+
+**Required tests:**
+
+- Start more distinct project builds than the active limit and assert that no more than the configured number enter Git/traversal concurrently.
+- Verify queued builds start in FIFO order as active builds finish.
+- Verify same-key waiters share one queued entry, aborting a queued final waiter prevents startup, and aborting one waiter does not remove work needed by another.
+- Fill the pending queue and assert that one additional distinct build fails deterministically without increasing active or queued counts.
+
+#### Invalidation cannot revoke a search already using a completed index
+
+**Severity:** Low
+
+Project removal or canonical-root changes evict cached indexes and abort in-flight builds, but a request that already holds a completed index can finish against the old root.
+
+**Implementation:**
+
+1. Maintain a per-project invalidation generation or opaque token alongside the cache. Capture it after resolving the canonical project root and before obtaining the index.
+2. Advance/replace the token whenever `invalidateProjectFileCache()` runs and whenever `searchProjectFiles()` detects that the canonical root changed.
+3. Recheck the token after `getIndex()`, during or after asynchronous candidate revalidation, and immediately before returning results. Reject a stale request with `AbortError` so the composer discards it through the existing optional-autocomplete path.
+4. Ensure a root-changing request advances the token before starting the replacement-root build, so old-root requests cannot pass their final check while new-root requests proceed normally.
+5. Keep token storage bounded. Remove state for a deleted project after its active searches/builds settle, or use opaque token identity that can be deleted while existing requests retain only their local reference.
+6. Do not rely only on deleting the cached map entry: callers can retain the removed `FileIndex` object, which is why the final token check is required.
+
+**Required tests:**
+
+- Pause a cached query during candidate revalidation, remove the project, resume it, and assert that it rejects without returning old-root paths.
+- Repeat the race with a canonical-root change and assert that the old request rejects while a new request returns only replacement-root paths.
+- Verify ordinary cache eviction does not invalidate an already authorized request, while explicit project/root invalidation does.
+- Verify generation/token bookkeeping is released after project removal and does not grow without bound.
 
 ### Relevant files
 

@@ -74,7 +74,7 @@ export function searchProjectFiles(
 	projectId: string,
 	query: string,
 	signal?: AbortSignal
-): Promise<{ files: ProjectFileSuggestion[] }> {
+): Promise<{ files: ProjectFileSuggestion[]; freshForMs: number }> {
 	const parameters = new URLSearchParams({ q: query });
 
 	return request(`/api/projects/${encodeURIComponent(projectId)}/files?${parameters}`, { signal });

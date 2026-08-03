@@ -352,7 +352,10 @@ describe('ChatComposer', () => {
 	});
 
 	it('inserts an @ file path with Tab', async () => {
-		autocompleteApi.searchProjectFiles.mockResolvedValue({ files: [{ path: 'src/lib/chat.ts' }] });
+		autocompleteApi.searchProjectFiles.mockResolvedValue({
+			files: [{ path: 'src/lib/chat.ts' }],
+			freshForMs: 30_000
+		});
 		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
 		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
 
@@ -375,7 +378,10 @@ describe('ChatComposer', () => {
 
 	it('keeps file suggestions mounted while a refined search is debounced', async () => {
 		autocompleteApi.searchProjectFiles.mockReset();
-		autocompleteApi.searchProjectFiles.mockResolvedValue({ files: [{ path: 'src/lib/chat.ts' }] });
+		autocompleteApi.searchProjectFiles.mockResolvedValue({
+			files: [{ path: 'src/lib/chat.ts' }],
+			freshForMs: 30_000
+		});
 		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
 		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
 
@@ -399,9 +405,35 @@ describe('ChatComposer', () => {
 		expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledOnce();
 	});
 
+	it('refetches when server-provided freshness expires instead of sliding from receipt', async () => {
+		vi.useFakeTimers();
+		autocompleteApi.searchProjectFiles.mockReset();
+		autocompleteApi.searchProjectFiles.mockResolvedValue({
+			files: [{ path: 'src/lib/chat.ts' }],
+			freshForMs: 1_000
+		});
+		try {
+			const screen = render(ChatComposer, props({ projectId: 'project-1' }));
+			const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+			await userEvent.click(textbox);
+			await textbox.fill('Inspect @cha');
+			await vi.waitFor(() => expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledOnce());
+			await vi.advanceTimersByTimeAsync(1_001);
+			textbox.element().dispatchEvent(new Event('select', { bubbles: true }));
+			await vi.advanceTimersByTimeAsync(180);
+			await vi.waitFor(() => expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledTimes(2));
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('does not refetch a completed file query during selection synchronization', async () => {
 		autocompleteApi.searchProjectFiles.mockReset();
-		autocompleteApi.searchProjectFiles.mockResolvedValue({ files: [{ path: 'src/lib/chat.ts' }] });
+		autocompleteApi.searchProjectFiles.mockResolvedValue({
+			files: [{ path: 'src/lib/chat.ts' }],
+			freshForMs: 30_000
+		});
 		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
 		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
 

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
+import { TextDecoder } from 'node:util';
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import ignore from 'ignore';
 import type { ProjectFileSuggestion } from '$lib/contracts';
 import { resolveProject } from '$lib/server/projects';
@@ -10,6 +11,8 @@ const MAX_SCANNED_ENTRIES = 20_000;
 const MAX_INDEXED_FILES = 20_000;
 const MAX_RESULTS = 30;
 export const PROJECT_FILE_INDEX_MAX_CACHE_ENTRIES = 32;
+export const PROJECT_FILE_INDEX_MAX_ACTIVE_BUILDS = 4;
+export const PROJECT_FILE_INDEX_MAX_QUEUED_BUILDS = 64;
 
 /**
  * A project file index is retained for 30 seconds. This keeps normal autocomplete
@@ -19,6 +22,7 @@ export const PROJECT_FILE_INDEX_MAX_CACHE_ENTRIES = 32;
 export const PROJECT_FILE_INDEX_TTL_MS = 30_000;
 const MAX_GIT_CANDIDATES = 20_000;
 const MAX_GIT_PATH_BYTES = 1 * 1024 * 1024;
+const MAX_GIT_PROBE_OUTPUT_BYTES = 16 * 1024;
 const SKIPPED_DIRECTORIES = new Set(['.git', 'node_modules']);
 
 type FileIndex = {
@@ -28,10 +32,33 @@ type FileIndex = {
 };
 
 type IndexBuild = {
+	key: string;
+	root: string;
 	controller: AbortController;
 	waiters: number;
+	state: 'queued' | 'running' | 'finished';
 	finished: boolean;
 	promise: Promise<FileIndex>;
+	resolve: (index: FileIndex) => void;
+	reject: (error: unknown) => void;
+};
+
+type ProjectState = {
+	root: string;
+	token: object;
+	activeSearches: number;
+};
+
+export type ProjectFileSearchResult = {
+	files: ProjectFileSuggestion[];
+	freshForMs: number;
+};
+
+/** Narrow async seam used by race tests; unset during normal application operation. */
+export type ProjectFileTestHooks = {
+	beforeCandidateRevalidation?: (root: string, path: string) => void | Promise<void>;
+	onIndexBuildEnqueued?: (root: string) => void;
+	onIndexBuildStarted?: (root: string) => void;
 };
 
 interface DirectoryToScan {
@@ -46,6 +73,10 @@ interface ScoredPath {
 
 const indexes = new Map<string, FileIndex>();
 const builds = new Map<string, IndexBuild>();
+const queuedBuilds: IndexBuild[] = [];
+const projectStates = new Map<string, ProjectState>();
+let projectFileTestHooks: ProjectFileTestHooks | undefined;
+let activeBuildCount = 0;
 let buildCount = 0;
 
 function createAbortError(): Error {
@@ -63,6 +94,44 @@ function throwIfAborted(signal?: AbortSignal): void {
 
 function isAbortError(error: unknown, signal?: AbortSignal): boolean {
 	return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
+}
+
+class GitAutocompleteError extends Error {
+	constructor(
+		readonly operation: string,
+		readonly diagnostic: string,
+		readonly root: string
+	) {
+		super('Project file autocomplete is unavailable.');
+		this.name = 'GitAutocompleteError';
+	}
+}
+
+function boundedDiagnostic(value: string): string {
+	return value.replaceAll(/\s+/g, ' ').trim().slice(0, 4096);
+}
+
+function logGitFailure(error: GitAutocompleteError): void {
+	console.error('Project file autocomplete Git operation failed.', {
+		operation: error.operation,
+		root: error.root,
+		diagnostic: error.diagnostic
+	});
+}
+
+function createDeferred<T>(): {
+	promise: Promise<T>;
+	resolve: (value: T) => void;
+	reject: (error: unknown) => void;
+} {
+	let resolve!: (value: T) => void;
+	let reject!: (error: unknown) => void;
+	const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+		resolve = resolvePromise;
+		reject = rejectPromise;
+	});
+
+	return { promise, resolve, reject };
 }
 
 function toProjectPath(path: string): string {
@@ -244,9 +313,146 @@ export async function validateProjectFileCandidate(
 	}
 }
 
+export function setProjectFileTestHooks(hooks: ProjectFileTestHooks | undefined): void {
+	projectFileTestHooks = hooks;
+}
+
 function stopGitChild(child: ReturnType<typeof spawn>): void {
 	if (child.exitCode === null && child.signalCode === null) {
 		child.kill();
+	}
+}
+
+async function hasGitMarker(root: string, signal: AbortSignal): Promise<boolean> {
+	let current = root;
+	while (true) {
+		throwIfAborted(signal);
+		try {
+			await lstat(join(current, '.git'));
+
+			return true;
+		} catch (error) {
+			if (isAbortError(error, signal)) {
+				throw createAbortError();
+			}
+		}
+
+		const parent = dirname(current);
+		if (parent === current) {
+			return false;
+		}
+
+		current = parent;
+	}
+}
+
+async function probeGitRepository(root: string, signal: AbortSignal): Promise<boolean> {
+	throwIfAborted(signal);
+	const child = spawn('git', ['rev-parse', '--is-inside-work-tree'], {
+		cwd: root,
+		shell: false,
+		stdio: ['ignore', 'pipe', 'pipe'],
+		env: { ...process.env, LC_ALL: 'C', LANG: 'C', LANGUAGE: 'C' },
+		signal
+	});
+	if (!child.stdout || !child.stderr) {
+		throw new GitAutocompleteError('probe', 'Git probe did not provide output streams.', root);
+	}
+
+	let stdout = Buffer.alloc(0);
+	let stderr = '';
+	let tooMuchOutput = false;
+	let childError: Error | undefined;
+	child.stdout.on('data', (chunk: Buffer | string) => {
+		if (tooMuchOutput) {
+			return;
+		}
+
+		const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+		const remaining = MAX_GIT_PROBE_OUTPUT_BYTES - stdout.length;
+		if (bytes.length > remaining) {
+			stdout = Buffer.concat([stdout, bytes.subarray(0, remaining)]);
+			tooMuchOutput = true;
+			stopGitChild(child);
+
+			return;
+		}
+
+		stdout = Buffer.concat([stdout, bytes]);
+	});
+	child.stderr.on('data', (chunk: Buffer | string) => {
+		if (stderr.length < 4096) {
+			stderr += chunk.toString().slice(0, 4096 - stderr.length);
+		}
+	});
+	child.on('error', (error) => {
+		childError = error;
+	});
+
+	const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+		(resolve) => {
+			child.once('close', (code, signalCode) => resolve({ code, signal: signalCode }));
+		}
+	);
+	if (isAbortError(childError, signal)) {
+		throw createAbortError();
+	}
+
+	if (signal.aborted) {
+		throw createAbortError();
+	}
+
+	if (tooMuchOutput) {
+		throw new GitAutocompleteError('probe', 'Git probe output exceeded its bound.', root);
+	}
+
+	if (childError) {
+		const code = 'code' in childError ? childError.code : undefined;
+		if (code === 'ENOENT' && !(await hasGitMarker(root, signal))) {
+			return false;
+		}
+
+		throw new GitAutocompleteError(
+			'probe',
+			`${childError.message}${stderr ? ` ${boundedDiagnostic(stderr)}` : ''}`,
+			root
+		);
+	}
+
+	if (exit.code === 0) {
+		const result = stdout.toString('utf8').trim();
+		if (result === 'true') {
+			return true;
+		}
+
+		if (result === 'false') {
+			return false;
+		}
+
+		throw new GitAutocompleteError(
+			'probe',
+			`Unexpected Git probe output: ${boundedDiagnostic(stdout.toString('utf8'))}`,
+			root
+		);
+	}
+
+	const diagnostic = boundedDiagnostic(stderr);
+	if (/not a git repository|outside a repository|must be run in a work tree/i.test(diagnostic)) {
+		return false;
+	}
+
+	throw new GitAutocompleteError(
+		'probe',
+		`Git probe exited with ${String(exit.code)}.${diagnostic ? ` ${diagnostic}` : ''}`,
+		root
+	);
+}
+
+function decodeGitPath(value: Buffer, root: string): string {
+	try {
+		return new TextDecoder('utf-8', { fatal: true }).decode(value);
+	} catch {
+		throw new GitAutocompleteError('listing', 'Git returned invalid UTF-8 path data.', root);
 	}
 }
 
@@ -261,10 +467,15 @@ async function runGit(root: string, signal: AbortSignal): Promise<string[]> {
 		cwd: root,
 		shell: false,
 		stdio: ['ignore', 'pipe', 'pipe'],
+		env: { ...process.env, LC_ALL: 'C', LANG: 'C', LANGUAGE: 'C' },
 		signal
 	});
 	if (!child.stdout || !child.stderr) {
-		throw new Error('Git file listing did not provide output streams.');
+		throw new GitAutocompleteError(
+			'listing',
+			'Git file listing did not provide output streams.',
+			root
+		);
 	}
 
 	const paths: string[] = [];
@@ -282,13 +493,22 @@ async function runGit(root: string, signal: AbortSignal): Promise<string[]> {
 			stderr += chunk.toString().slice(0, 4096 - stderr.length);
 		}
 	});
+	const exitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+		(resolve) => {
+			child.once('close', (code, signalCode) => resolve({ code, signal: signalCode }));
+		}
+	);
 
 	try {
 		for await (const chunk of child.stdout) {
 			throwIfAborted(signal);
 			buffered = Buffer.concat([buffered, Buffer.from(chunk)]);
 			if (buffered.length > MAX_GIT_PATH_BYTES) {
-				throw new Error('Git returned an excessively long file path.');
+				throw new GitAutocompleteError(
+					'listing',
+					'Git returned an excessively long file path.',
+					root
+				);
 			}
 
 			while (true) {
@@ -297,7 +517,7 @@ async function runGit(root: string, signal: AbortSignal): Promise<string[]> {
 					break;
 				}
 
-				const candidate = buffered.subarray(0, separator).toString('utf8');
+				const candidate = decodeGitPath(buffered.subarray(0, separator), root);
 				buffered = buffered.subarray(separator + 1);
 				candidateCount += 1;
 				const path = await validateProjectFileCandidate(root, candidate, signal);
@@ -319,26 +539,33 @@ async function runGit(root: string, signal: AbortSignal): Promise<string[]> {
 		}
 
 		if (!deliberatelyStopped && buffered.length) {
-			candidateCount += 1;
-			if (candidateCount <= MAX_GIT_CANDIDATES) {
-				const path = await validateProjectFileCandidate(root, buffered.toString('utf8'), signal);
-				if (path && !seen.has(path)) {
-					seen.add(path);
-					paths.push(path);
-				}
-			}
+			throw new GitAutocompleteError(
+				'listing',
+				'Git file listing ended with an unterminated path.',
+				root
+			);
 		}
 
 		if (deliberatelyStopped) {
 			return paths.sort((a, b) => a.localeCompare(b));
 		}
 
+		const exit = await exitPromise;
 		if (childError) {
-			throw childError;
+			const code = 'code' in childError ? childError.code : undefined;
+			throw new GitAutocompleteError(
+				'listing',
+				`${childError.message}${code ? ` (${String(code)})` : ''}${stderr ? ` ${boundedDiagnostic(stderr)}` : ''}`,
+				root
+			);
 		}
 
-		if (child.exitCode !== 0) {
-			throw new Error(`Git file listing failed${stderr ? `: ${stderr.trim()}` : '.'}`);
+		if (exit.code !== 0) {
+			throw new GitAutocompleteError(
+				'listing',
+				`Git file listing exited with ${String(exit.code)}.${stderr ? ` ${boundedDiagnostic(stderr)}` : ''}`,
+				root
+			);
 		}
 
 		return paths.sort((a, b) => a.localeCompare(b));
@@ -361,15 +588,12 @@ async function runGit(root: string, signal: AbortSignal): Promise<string[]> {
  * ignore-aware traversal, which has no Git index to distinguish tracked files.
  */
 async function buildGitIndex(root: string, signal: AbortSignal): Promise<string[] | undefined> {
-	try {
-		return await runGit(root, signal);
-	} catch (error) {
-		if (isAbortError(error, signal)) {
-			throw createAbortError();
-		}
-
+	const isGitRepository = await probeGitRepository(root, signal);
+	if (!isGitRepository) {
 		return undefined;
 	}
+
+	return runGit(root, signal);
 }
 
 async function buildFallbackIndex(root: string, signal: AbortSignal): Promise<string[]> {
@@ -440,10 +664,46 @@ async function buildFallbackIndex(root: string, signal: AbortSignal): Promise<st
 }
 
 async function buildIndex(root: string, signal: AbortSignal): Promise<FileIndex> {
-	const paths = (await buildGitIndex(root, signal)) ?? (await buildFallbackIndex(root, signal));
-	const now = Date.now();
+	try {
+		const paths = (await buildGitIndex(root, signal)) ?? (await buildFallbackIndex(root, signal));
+		const now = Date.now();
 
-	return { paths, builtAt: now, lastAccessedAt: now };
+		return { paths, builtAt: now, lastAccessedAt: now };
+	} catch (error) {
+		if (isAbortError(error, signal)) {
+			throw createAbortError();
+		}
+
+		if (error instanceof GitAutocompleteError) {
+			logGitFailure(error);
+			throw new Error('Project file autocomplete is unavailable.', { cause: error });
+		}
+
+		throw error;
+	}
+}
+
+function hasProjectActivity(projectId: string): boolean {
+	for (const key of indexes.keys()) {
+		if (projectIdFromCacheKey(key) === projectId) {
+			return true;
+		}
+	}
+
+	for (const key of builds.keys()) {
+		if (projectIdFromCacheKey(key) === projectId) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function maybeCleanupProjectState(projectId: string): void {
+	const state = projectStates.get(projectId);
+	if (state && state.activeSearches === 0 && !hasProjectActivity(projectId)) {
+		projectStates.delete(projectId);
+	}
 }
 
 function storeIndex(key: string, index: FileIndex): void {
@@ -457,13 +717,76 @@ function storeIndex(key: string, index: FileIndex): void {
 		}
 
 		indexes.delete(oldest[0]);
+		maybeCleanupProjectState(projectIdFromCacheKey(oldest[0]));
+	}
+}
+
+function removeQueuedBuild(build: IndexBuild): void {
+	const index = queuedBuilds.indexOf(build);
+	if (index !== -1) {
+		queuedBuilds.splice(index, 1);
+	}
+
+	build.state = 'finished';
+	build.finished = true;
+	if (builds.get(build.key) === build) {
+		builds.delete(build.key);
+	}
+
+	build.reject(createAbortError());
+	maybeCleanupProjectState(projectIdFromCacheKey(build.key));
+}
+
+function pumpBuildQueue(): void {
+	while (activeBuildCount < PROJECT_FILE_INDEX_MAX_ACTIVE_BUILDS && queuedBuilds.length) {
+		const build = queuedBuilds.shift();
+		if (!build || build.state !== 'queued' || builds.get(build.key) !== build) {
+			continue;
+		}
+
+		if (build.waiters === 0) {
+			removeQueuedBuild(build);
+			continue;
+		}
+
+		build.state = 'running';
+		activeBuildCount += 1;
+		buildCount += 1;
+		projectFileTestHooks?.onIndexBuildStarted?.(build.root);
+		void buildIndex(build.root, build.controller.signal)
+			.then((index) => {
+				if (!build.controller.signal.aborted) {
+					storeIndex(build.key, index);
+				}
+
+				build.resolve(index);
+			})
+			.catch((error) => {
+				build.reject(error);
+			})
+			.finally(() => {
+				build.state = 'finished';
+				build.finished = true;
+				activeBuildCount -= 1;
+				if (builds.get(build.key) === build) {
+					builds.delete(build.key);
+				}
+
+				maybeCleanupProjectState(projectIdFromCacheKey(build.key));
+				pumpBuildQueue();
+			});
 	}
 }
 
 function releaseBuildWaiter(build: IndexBuild): void {
 	build.waiters -= 1;
 	if (build.waiters === 0 && !build.finished) {
-		build.controller.abort();
+		if (build.state === 'queued') {
+			removeQueuedBuild(build);
+			pumpBuildQueue();
+		} else {
+			build.controller.abort();
+		}
 	}
 }
 
@@ -506,6 +829,7 @@ async function getIndex(projectId: string, root: string, signal?: AbortSignal): 
 
 	if (cached) {
 		indexes.delete(key);
+		maybeCleanupProjectState(projectId);
 	}
 
 	const existing = builds.get(key);
@@ -513,59 +837,76 @@ async function getIndex(projectId: string, root: string, signal?: AbortSignal): 
 		return waitForBuild(existing, signal);
 	}
 
-	const controller = new AbortController();
-	const build: IndexBuild = {
-		controller,
-		waiters: 0,
-		finished: false,
-		promise: Promise.resolve(undefined as never)
-	};
-	buildCount += 1;
-	build.promise = buildIndex(root, controller.signal)
-		.then((index) => {
-			if (!controller.signal.aborted) {
-				storeIndex(key, index);
-			}
+	if (queuedBuilds.length >= PROJECT_FILE_INDEX_MAX_QUEUED_BUILDS) {
+		throw new Error('Project file autocomplete is busy.');
+	}
 
-			return index;
-		})
-		.finally(() => {
-			build.finished = true;
-			if (builds.get(key) === build) {
-				builds.delete(key);
-			}
-		});
+	const deferred = createDeferred<FileIndex>();
+	const build: IndexBuild = {
+		key,
+		root,
+		controller: new AbortController(),
+		waiters: 0,
+		state: 'queued',
+		finished: false,
+		promise: deferred.promise,
+		resolve: deferred.resolve,
+		reject: deferred.reject
+	};
+	builds.set(key, build);
+	projectFileTestHooks?.onIndexBuildEnqueued?.(root);
+	const result = waitForBuild(build, signal);
+	queuedBuilds.push(build);
+	pumpBuildQueue();
+
 	// The shared promise can reject after every waiter has aborted. Keep that
 	// cancellation from becoming an unhandled rejection while waiters still receive it.
 	void build.promise.catch(() => undefined);
-	builds.set(key, build);
 
-	return waitForBuild(build, signal);
+	return result;
 }
 
 /** Evict all cached and in-flight indexes belonging to a removed or moved project. */
 export function invalidateProjectFileCache(projectId: string): void {
+	// Deleting the opaque token revokes every request that captured the previous
+	// state, even if it retained a completed FileIndex object locally.
+	projectStates.delete(projectId);
 	for (const [key] of indexes) {
 		if (projectIdFromCacheKey(key) === projectId) {
 			indexes.delete(key);
 		}
 	}
 
-	for (const [key, build] of builds) {
-		if (projectIdFromCacheKey(key) === projectId) {
+	for (const build of [...builds.values()]) {
+		if (projectIdFromCacheKey(build.key) !== projectId) {
+			continue;
+		}
+
+		if (build.state === 'queued') {
+			removeQueuedBuild(build);
+		} else {
 			build.controller.abort();
 		}
 	}
+
+	pumpBuildQueue();
 }
 
 /** Test/diagnostic helper; production callers normally rely on TTL and LRU eviction. */
 export function clearProjectFileCache(): void {
-	for (const build of builds.values()) {
-		build.controller.abort();
+	projectFileTestHooks = undefined;
+	for (const build of [...builds.values()]) {
+		if (build.state === 'queued') {
+			removeQueuedBuild(build);
+		} else {
+			build.controller.abort();
+		}
 	}
 
+	queuedBuilds.length = 0;
 	indexes.clear();
 	builds.clear();
+	projectStates.clear();
 	buildCount = 0;
 }
 
@@ -574,6 +915,9 @@ export function getProjectFileCacheStats(): {
 	cachedFiles: number;
 	inFlightBuilds: number;
 	inFlightWaiters: number;
+	activeBuilds: number;
+	queuedBuilds: number;
+	invalidationStates: number;
 	buildCount: number;
 } {
 	return {
@@ -581,6 +925,9 @@ export function getProjectFileCacheStats(): {
 		cachedFiles: [...indexes.values()].reduce((total, index) => total + index.paths.length, 0),
 		inFlightBuilds: builds.size,
 		inFlightWaiters: [...builds.values()].reduce((total, build) => total + build.waiters, 0),
+		activeBuilds: activeBuildCount,
+		queuedBuilds: queuedBuilds.length,
+		invalidationStates: projectStates.size,
 		buildCount
 	};
 }
@@ -593,7 +940,7 @@ export async function searchProjectFiles(
 	projectId: string,
 	query: string,
 	signal?: AbortSignal
-): Promise<ProjectFileSuggestion[]> {
+): Promise<ProjectFileSearchResult> {
 	throwIfAborted(signal);
 	const normalizedQuery = normalizeQuery(query);
 	let project;
@@ -604,46 +951,81 @@ export async function searchProjectFiles(
 		throw error;
 	}
 
-	const key = cacheKey(project.id, project.cwd);
-	// A registry edit can move a project without changing its ID. Do not retain the
-	// old root's index after the canonical root observed by this request changes.
-	for (const [existingKey] of indexes) {
-		if (projectIdFromCacheKey(existingKey) === projectId && existingKey !== key) {
-			indexes.delete(existingKey);
-		}
+	let state = projectStates.get(projectId);
+	if (state && state.root !== project.cwd) {
+		// Advance the token before starting a replacement-root build. Requests that
+		// retained the previous completed index fail their next generation check.
+		invalidateProjectFileCache(projectId);
+		state = undefined;
 	}
 
-	for (const [existingKey, build] of builds) {
-		if (projectIdFromCacheKey(existingKey) === projectId && existingKey !== key) {
-			build.controller.abort();
-		}
+	if (!state) {
+		state = { root: project.cwd, token: {}, activeSearches: 0 };
+		projectStates.set(projectId, state);
 	}
 
-	const index = await getIndex(project.id, project.cwd, signal);
-	throwIfAborted(signal);
-	const matches: ScoredPath[] = [];
-	for (const path of index.paths) {
-		const score = scorePath(path.toLowerCase(), normalizedQuery);
-		if (score !== undefined) {
-			matches.push({ path, score });
+	state.activeSearches += 1;
+	const token = state.token;
+
+	try {
+		const index = await getIndex(project.id, project.cwd, signal);
+		if (projectStates.get(projectId)?.token !== token) {
+			throw createAbortError();
+		}
+
+		throwIfAborted(signal);
+		const matches: ScoredPath[] = [];
+		for (const path of index.paths) {
+			if (projectStates.get(projectId)?.token !== token) {
+				throw createAbortError();
+			}
+
+			const score = scorePath(path.toLowerCase(), normalizedQuery);
+			if (score !== undefined) {
+				matches.push({ path, score });
+			}
+		}
+
+		index.lastAccessedAt = Date.now();
+		const rankedMatches = matches.sort(
+			(a, b) => a.score - b.score || a.path.length - b.path.length || a.path.localeCompare(b.path)
+		);
+		const validMatches: ProjectFileSuggestion[] = [];
+		for (const { path } of rankedMatches) {
+			if (validMatches.length >= MAX_RESULTS) {
+				break;
+			}
+
+			if (projectStates.get(projectId)?.token !== token) {
+				throw createAbortError();
+			}
+
+			await projectFileTestHooks?.beforeCandidateRevalidation?.(project.cwd, path);
+			const validPath = await validateProjectFileCandidate(project.cwd, path, signal);
+			if (projectStates.get(projectId)?.token !== token) {
+				throw createAbortError();
+			}
+
+			if (validPath) {
+				validMatches.push({ path: validPath });
+			}
+		}
+
+		if (projectStates.get(projectId)?.token !== token) {
+			throw createAbortError();
+		}
+
+		throwIfAborted(signal);
+
+		return {
+			files: validMatches,
+			freshForMs: Math.max(0, PROJECT_FILE_INDEX_TTL_MS - (Date.now() - index.builtAt))
+		};
+	} finally {
+		const currentState = projectStates.get(projectId);
+		if (currentState?.token === token) {
+			currentState.activeSearches -= 1;
+			maybeCleanupProjectState(projectId);
 		}
 	}
-
-	index.lastAccessedAt = Date.now();
-	const rankedMatches = matches.sort(
-		(a, b) => a.score - b.score || a.path.length - b.path.length || a.path.localeCompare(b.path)
-	);
-	const validMatches: ProjectFileSuggestion[] = [];
-	for (const { path } of rankedMatches) {
-		if (validMatches.length >= MAX_RESULTS) {
-			break;
-		}
-
-		const validPath = await validateProjectFileCandidate(project.cwd, path, signal);
-		if (validPath) {
-			validMatches.push({ path: validPath });
-		}
-	}
-
-	return validMatches;
 }

@@ -48,9 +48,9 @@
 	let fileSuggestions = $state.raw<ProjectFileSuggestion[]>([]);
 	let loadedFileKey = $state<string>();
 	let pendingFileKey = $state<string>();
-	let loadedFileAt = $state<number>();
+	let loadedFileExpiresAt = $state<number>();
 	let fileResultCache = $state.raw<
-		SvelteMap<string, { files: ProjectFileSuggestion[]; loadedAt: number }>
+		SvelteMap<string, { files: ProjectFileSuggestion[]; expiresAt: number }>
 	>(new SvelteMap());
 	let commandController: AbortController | undefined;
 	let fileController: AbortController | undefined;
@@ -187,11 +187,11 @@
 	function rememberFileResult(
 		requestKey: string,
 		files: ProjectFileSuggestion[],
-		loadedAt: number
+		expiresAt: number
 	): void {
 		const nextCache = new SvelteMap(fileResultCache);
 		nextCache.delete(requestKey);
-		nextCache.set(requestKey, { files, loadedAt });
+		nextCache.set(requestKey, { files, expiresAt });
 		while (nextCache.size > MAX_FILE_RESULT_CACHE_ENTRIES) {
 			const oldestKey = nextCache.keys().next().value;
 			if (oldestKey === undefined) {
@@ -216,20 +216,20 @@
 		}
 
 		const cached = fileResultCache.get(requestKey);
-		if (cached && Date.now() - cached.loadedAt < FILE_RESULT_TTL_MS) {
+		if (cached && Date.now() < cached.expiresAt) {
 			cancelFileSearch();
-			rememberFileResult(requestKey, cached.files, cached.loadedAt);
+			rememberFileResult(requestKey, cached.files, cached.expiresAt);
 			fileSuggestions = cached.files;
 			loadedFileKey = requestKey;
-			loadedFileAt = cached.loadedAt;
+			loadedFileExpiresAt = cached.expiresAt;
 			selectedIndex = 0;
 			updateAria();
 
 			return;
 		}
 
-		if (loadedFileKey === requestKey && loadedFileAt !== undefined) {
-			if (Date.now() - loadedFileAt < FILE_RESULT_TTL_MS) {
+		if (loadedFileKey === requestKey && loadedFileExpiresAt !== undefined) {
+			if (Date.now() < loadedFileExpiresAt) {
 				return;
 			}
 		}
@@ -251,11 +251,16 @@
 					return;
 				}
 
-				const loadedAt = Date.now();
-				rememberFileResult(requestKey, response.files, loadedAt);
+				const now = Date.now();
+				const freshForMs = Math.max(0, Math.min(response.freshForMs, FILE_RESULT_TTL_MS));
+				const expiresAt = now + freshForMs;
+				if (freshForMs > 0) {
+					rememberFileResult(requestKey, response.files, expiresAt);
+				}
+
 				fileSuggestions = response.files;
 				loadedFileKey = requestKey;
-				loadedFileAt = loadedAt;
+				loadedFileExpiresAt = expiresAt;
 				selectedIndex = 0;
 				updateAria();
 			} catch {
