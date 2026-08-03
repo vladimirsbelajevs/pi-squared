@@ -398,4 +398,19 @@ describe('ChatComposer', () => {
 		expect(screen.container.querySelector('[role="listbox"]')).toBe(listbox);
 		expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledOnce();
 	});
+
+	it('does not refetch a completed file query during selection synchronization', async () => {
+		autocompleteApi.searchProjectFiles.mockReset();
+		autocompleteApi.searchProjectFiles.mockResolvedValue({ files: [{ path: 'src/lib/chat.ts' }] });
+		const screen = render(ChatComposer, props({ projectId: 'project-1' }));
+		const textbox = screen.getByRole('textbox', { name: 'Message Pi' });
+
+		await userEvent.click(textbox);
+		await textbox.fill('Inspect @cha');
+		await vi.waitFor(() => expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledOnce());
+		textbox.element().dispatchEvent(new Event('select', { bubbles: true }));
+		await new Promise((resolve) => setTimeout(resolve, 220));
+
+		expect(autocompleteApi.searchProjectFiles).toHaveBeenCalledOnce();
+	});
 });

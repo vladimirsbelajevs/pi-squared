@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import {
 		listProjectSlashCommands,
 		listRuntimeSlashCommands,
@@ -47,10 +48,16 @@
 	let fileSuggestions = $state.raw<ProjectFileSuggestion[]>([]);
 	let loadedFileKey = $state<string>();
 	let pendingFileKey = $state<string>();
+	let loadedFileAt = $state<number>();
+	let fileResultCache = $state.raw<
+		SvelteMap<string, { files: ProjectFileSuggestion[]; loadedAt: number }>
+	>(new SvelteMap());
 	let commandController: AbortController | undefined;
 	let fileController: AbortController | undefined;
 	let fileDebounce: number | undefined;
 	let fileGeneration = 0;
+	const FILE_RESULT_TTL_MS = 30_000;
+	const MAX_FILE_RESULT_CACHE_ENTRIES = 64;
 
 	let listboxId = $derived(`${inputId}-autocomplete`);
 	let suggestions = $derived.by((): AutocompleteSuggestion[] => {
@@ -177,6 +184,26 @@
 		}
 	}
 
+	function rememberFileResult(
+		requestKey: string,
+		files: ProjectFileSuggestion[],
+		loadedAt: number
+	): void {
+		const nextCache = new SvelteMap(fileResultCache);
+		nextCache.delete(requestKey);
+		nextCache.set(requestKey, { files, loadedAt });
+		while (nextCache.size > MAX_FILE_RESULT_CACHE_ENTRIES) {
+			const oldestKey = nextCache.keys().next().value;
+			if (oldestKey === undefined) {
+				break;
+			}
+
+			nextCache.delete(oldestKey);
+		}
+
+		fileResultCache = nextCache;
+	}
+
 	function queueFileSearch(token: Extract<ChatAutocompleteToken, { kind: 'file' }>): void {
 		if (!projectId) {
 			return;
@@ -186,6 +213,25 @@
 		const requestKey = fileRequestKey(token);
 		if (pendingFileKey === requestKey) {
 			return;
+		}
+
+		const cached = fileResultCache.get(requestKey);
+		if (cached && Date.now() - cached.loadedAt < FILE_RESULT_TTL_MS) {
+			cancelFileSearch();
+			rememberFileResult(requestKey, cached.files, cached.loadedAt);
+			fileSuggestions = cached.files;
+			loadedFileKey = requestKey;
+			loadedFileAt = cached.loadedAt;
+			selectedIndex = 0;
+			updateAria();
+
+			return;
+		}
+
+		if (loadedFileKey === requestKey && loadedFileAt !== undefined) {
+			if (Date.now() - loadedFileAt < FILE_RESULT_TTL_MS) {
+				return;
+			}
 		}
 
 		cancelFileSearch();
@@ -205,8 +251,11 @@
 					return;
 				}
 
+				const loadedAt = Date.now();
+				rememberFileResult(requestKey, response.files, loadedAt);
 				fileSuggestions = response.files;
 				loadedFileKey = requestKey;
+				loadedFileAt = loadedAt;
 				selectedIndex = 0;
 				updateAria();
 			} catch {

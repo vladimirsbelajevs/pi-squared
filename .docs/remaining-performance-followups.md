@@ -23,7 +23,7 @@ The following major findings are already addressed and are not repeated as work 
 | High | Long-conversation DOM growth | Closed |
 | High | Eager hydration of restored chat tabs | Open |
 | Medium | Live tool updates invalidate unrelated tool-group inputs | Closed |
-| Medium | Project file autocomplete rescans the filesystem | Open |
+| Medium | Project file autocomplete rescans the filesystem | Closed |
 | Medium | Attachment files are read, decoded, and validated repeatedly | Open |
 | Low | Stream presentation flushes are coupled to workspace/cursor persistence | Open |
 | Low | Timeline-wide hover state and formatter allocation | Open |
@@ -170,24 +170,25 @@ The current route must be authoritative. A direct chat URL can differ from persi
 
 ## 4. Project file autocomplete rescans the filesystem
 
-**Status:** Open  
+**Status:** Closed
 **Priority:** Medium
 
-### Current behavior
+### Implemented
 
-The browser debounces file autocomplete by 180 ms, aborts the previous fetch, and rejects stale results. The server nevertheless creates a fresh ignore matcher and traverses up to 20,000 filesystem entries for every request.
-
-The client deduplicates an in-flight request key but does not suppress an already-loaded identical key, so later selection/click synchronization can issue the same request and scan again.
-
-Client cancellation stops consuming a response but does not stop server work: the endpoint does not forward `request.signal`, and `searchProjectFiles()` accepts no signal.
+- Added a bounded per-project index keyed by project ID and the canonical project root. Indexes retain at most 20,000 files, the cache retains at most 32 project/root indexes, and entries expire after the documented 30-second TTL.
+- Concurrent first requests share one build. A request's abort signal only releases its waiter; traversal or the direct Git child is aborted when no waiter remains.
+- Git projects use `git ls-files -z --cached --others --exclude-standard` through a directly spawned child with the canonical root as `cwd` and no shell. NUL-delimited output is parsed incrementally and stops at the 20,000-candidate bound. Tracked files remain eligible even when a later ignore rule matches them; ignored untracked files remain excluded. Deleted tracked files, symlinks, absolute paths, escaping paths, missing entries, and non-files are validated out before exposure.
+- Non-Git roots retain the ignore-aware, non-symlink-following traversal as a cached fallback. Ranked candidates are revalidated immediately before each response so TTL-cached paths cannot expose newly missing or symlinked entries. Cache entries are evicted on project removal or when a registry edit changes the canonical root.
+- The files endpoint forwards `request.signal`. The composer keeps its debounce/abort/stale-result behavior and suppresses completed project/query requests while the client-side 30-second result is fresh.
 
 ### Relevant files
 
 - `src/lib/components/ChatComposer/ComposerAutocomplete.svelte`
-- `src/lib/components/ChatComposer/ComposerTextInput.svelte`
+- `src/lib/components/ChatComposer/ChatComposer.svelte.spec.ts`
 - `src/lib/server/project-files.ts`
+- `src/lib/server/project-files.spec.ts`
+- `src/lib/server/projects.ts`
 - `src/routes/api/projects/[projectId]/files/+server.ts`
-- `src/lib/harness/api.ts`
 
 ### Recommended implementation
 
@@ -218,6 +219,12 @@ Client cancellation stops consuming a response but does not stop server work: th
 - Aborting one waiter does not cancel an index build still needed by another waiter.
 - Cache size and index entry count are bounded.
 - Large-project build and query latency are measured with a representative fixture.
+
+### Validation evidence
+
+`src/lib/server/project-files.spec.ts` covers cache reuse and TTL freshness, concurrent build sharing and waiter cancellation, sole-waiter cancellation without an unhandled rejection, Git tracked/ignored semantics, streamed listings beyond the old 8 MiB buffer, absolute/escaping/missing/non-file/symlink validation, query-time revalidation, project-removal eviction, and cache bounds. Its representative measurement fixture creates 20,000 files in batches, records build and cached-query latency without wall-clock assertions, and one validation run recorded `indexed=20000`, `results=30`, `build-ms=329.09`, and `cached-query-ms=7.89`.
+
+`ChatComposer.svelte.spec.ts` covers suppression of an identical completed query during selection synchronization. The full validation commands and unrelated repository failures are recorded in the implementation handoff.
 
 ---
 

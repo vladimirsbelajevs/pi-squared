@@ -197,6 +197,8 @@ export async function removeProject(projectId: string): Promise<void> {
 		}
 
 		await writeDocument({ version: 1, projects });
+		const { invalidateProjectFileCache } = await import('./project-files.js');
+		invalidateProjectFileCache(projectId);
 	});
 }
 
