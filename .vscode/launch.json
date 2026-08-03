@@ -6,6 +6,10 @@
 			"type": "chrome",
 			"request": "launch",
 			"runtimeExecutable": "/var/lib/flatpak/exports/bin/com.google.Chrome",
+			"runtimeArgs": [
+				"--remote-debugging-address=127.0.0.1",
+				"--remote-debugging-port=9222"
+			],
 			"url": "http://127.0.0.1:5173",
 			"userDataDir": "${env:HOME}/.var/app/com.google.Chrome/cache/vscode-debug",
 			"webRoot": "${workspaceFolder}",
