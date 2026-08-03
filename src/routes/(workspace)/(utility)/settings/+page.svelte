@@ -131,6 +131,20 @@
 		background: #2aa198;
 	}
 
+	.theme-tokyonight-night span,
+	.theme-tokyonight-storm span {
+		background: #7aa2f7;
+	}
+
+	.theme-tokyonight-moon span {
+		background: #82aaff;
+	}
+
+	.theme-tokyonight-day span {
+		border: 1px solid #4094a3;
+		background: #2e7de9;
+	}
+
 	.theme-everforest-dark-hard span {
 		background: #7fbbb3;
 	}

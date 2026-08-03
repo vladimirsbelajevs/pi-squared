@@ -22,10 +22,22 @@ test('opens a new tab from a fresh workspace', async ({ page }) => {
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await expect(page).toHaveURL(/\/settings$/);
 	await expect(page.getByRole('heading', { name: 'Theme' })).toBeVisible();
-	await page.getByRole('button', { name: 'Everforest Dark Medium' }).click();
+	for (const [label, theme] of [
+		['Tokyo Night', 'tokyonight-night'],
+		['Tokyo Storm', 'tokyonight-storm'],
+		['Tokyo Moon', 'tokyonight-moon'],
+		['Tokyo Day', 'tokyonight-day']
+	] as const) {
+		await page.getByRole('button', { name: label }).click();
+		await expect
+			.poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+			.toBe(theme);
+	}
+
+	await page.reload();
 	await expect
 		.poll(() => page.evaluate(() => document.documentElement.dataset.theme))
-		.toBe('everforest-dark-medium');
+		.toBe('tokyonight-day');
 });
 
 test('restores the saved active tab from root', async ({ page }) => {

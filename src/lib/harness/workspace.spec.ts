@@ -80,6 +80,7 @@ function storedChats(count: number) {
 
 beforeEach(() => {
 	const values = new Map<string, string>();
+	vi.stubGlobal('document', { documentElement: { dataset: {} } });
 	vi.stubGlobal('localStorage', {
 		getItem: (key: string) => values.get(key) ?? null,
 		setItem: (key: string, value: string) => values.set(key, value),
@@ -98,6 +99,21 @@ afterEach(() => {
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
 	vi.clearAllMocks();
+});
+
+describe('HarnessWorkspace theme restoration', () => {
+	it.each(['tokyonight-night', 'tokyonight-storm', 'tokyonight-moon', 'tokyonight-day'] as const)(
+		'restores %s',
+		async (theme) => {
+			localStorage.setItem('pi-squared:theme', theme);
+			const workspace = new HarnessWorkspace();
+
+			await workspace.start();
+
+			expect(workspace.theme).toBe(theme);
+			expect(document.documentElement.dataset.theme).toBe(theme);
+		}
+	);
 });
 
 describe('HarnessWorkspace chat hydration', () => {
