@@ -7,7 +7,6 @@
 		"runtimeExecutable": "/var/lib/flatpak/exports/bin/com.google.Chrome",
 		"runtimeArgs": ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=9222"],
 		"url": "http://127.0.0.1:5173",
-		"userDataDir": "$HOME/.var/app/com.google.Chrome/cache/zed-debug",
 		"webRoot": "$ZED_WORKTREE_ROOT",
 		"resolveSourceMapLocations": ["$ZED_WORKTREE_ROOT/**", "!**/node_modules/**"],
 		"build": "Start SvelteKit dev server"
