@@ -3,7 +3,6 @@ import type {
 	ModelOption,
 	McpStatusSnapshot,
 	PermissionResponse,
-	PromptAttachment,
 	PromptRuntimeResult,
 	Project,
 	RuntimeCheckpoint,
@@ -15,8 +14,8 @@ import type {
 	SlashCommand,
 	ThinkingLevel
 } from '$lib/contracts';
-import { validatePromptAttachments } from '$lib/attachments';
 import { promptWithAttachments } from '$lib/prompt-attachments';
+import type { ValidatedPromptAttachment } from '$lib/server/attachments';
 import { AssistantDeltaBatcher } from '$lib/server/assistant-delta-batcher';
 import { eventBroker } from '$lib/server/event-broker';
 import { PermissionBridge } from '$lib/server/permission-bridge';
@@ -536,11 +535,10 @@ export async function listProjectRuntimeSlashCommands(projectId: string): Promis
 export function promptRuntime(
 	runtimeId: string,
 	text: string,
-	attachments: unknown = [],
+	validatedAttachments: readonly ValidatedPromptAttachment[] = [],
 	streamingBehavior?: 'steer' | 'followUp'
 ): PromptRuntimeResult {
 	const record = getRecord(runtimeId);
-	const validatedAttachments = validatePromptAttachments(attachments);
 	const visibleText = text.trim();
 	if (!visibleText && !validatedAttachments.length) {
 		throw new Error('Messages cannot be empty.');
@@ -570,7 +568,7 @@ export function promptRuntime(
 	record.promptActive = true;
 	const images: NonNullable<PromptOptions['images']> = validatedAttachments
 		.filter(
-			(attachment): attachment is PromptAttachment & { kind: 'image' } =>
+			(attachment): attachment is Extract<ValidatedPromptAttachment, { kind: 'image' }> =>
 				attachment.kind === 'image'
 		)
 		.map((attachment) => ({ type: 'image', data: attachment.data, mimeType: attachment.mimeType }));

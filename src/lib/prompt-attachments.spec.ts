@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { promptWithAttachments, userPromptFromStoredText } from './prompt-attachments';
 
 describe('prompt attachments', () => {
@@ -10,7 +10,7 @@ describe('prompt attachments', () => {
 				name: 'config.ts',
 				mimeType: 'text/plain',
 				size: 28,
-				data: 'ZXhwb3J0IGNvbnN0IGVuYWJsZWQgPSB0cnVlOw=='
+				text: 'export const enabled = true;'
 			}
 		]);
 
@@ -27,6 +27,24 @@ describe('prompt attachments', () => {
 				}
 			]
 		});
+	});
+
+	it('uses server-retained text without decoding base64 again', () => {
+		const atobSpy = vi.spyOn(globalThis, 'atob');
+		const prompt = promptWithAttachments('Review this.', [
+			{
+				id: 'text-1',
+				kind: 'text',
+				name: 'config.ts',
+				mimeType: 'text/plain',
+				size: 5,
+				text: 'Hello'
+			}
+		]);
+
+		expect(prompt).toContain('Hello');
+		expect(atobSpy).not.toHaveBeenCalled();
+		atobSpy.mockRestore();
 	});
 
 	it('adds a private instruction for image-only prompts while retaining an empty visible message', () => {
@@ -53,7 +71,7 @@ describe('prompt attachments', () => {
 				name: 'config.ts',
 				mimeType: 'text/plain',
 				size: 28,
-				data: 'ZXhwb3J0IGNvbnN0IGVuYWJsZWQgPSB0cnVlOw=='
+				text: 'export const enabled = true;'
 			}
 		]);
 

@@ -6,7 +6,7 @@ import {
 	MAX_IMAGE_BYTES,
 	MAX_TEXT_FILE_BYTES,
 	MAX_TOTAL_ATTACHMENT_BYTES,
-	validatePromptAttachments
+	hasExpectedImageSignature
 } from '$lib/attachments';
 
 export const ATTACHMENT_ACCEPT =
@@ -49,9 +49,31 @@ export function attachmentLimitError(
 	}
 }
 
+async function readFileBytes(file: File): Promise<Uint8Array> {
+	try {
+		return new Uint8Array(await file.arrayBuffer());
+	} catch {
+		throw new Error(`Unable to read “${file.name}”.`);
+	}
+}
+
+function decodeUtf8(bytes: Uint8Array): string {
+	return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+	let binary = '';
+	const chunkSize = 0x8000;
+	for (let start = 0; start < bytes.length; start += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(start, start + chunkSize));
+	}
+
+	return btoa(binary);
+}
+
 export async function verifyUtf8Text(file: File): Promise<void> {
 	try {
-		new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(await file.arrayBuffer()));
+		decodeUtf8(await readFileBytes(file));
 	} catch {
 		throw new Error(`“${file.name}” must be UTF-8 text.`);
 	}
@@ -59,14 +81,7 @@ export async function verifyUtf8Text(file: File): Promise<void> {
 
 export async function readFileAsBase64(file: File): Promise<string> {
 	try {
-		const bytes = new Uint8Array(await file.arrayBuffer());
-		let binary = '';
-		const chunkSize = 0x8000;
-		for (let start = 0; start < bytes.length; start += chunkSize) {
-			binary += String.fromCharCode(...bytes.subarray(start, start + chunkSize));
-		}
-
-		return btoa(binary);
+		return bytesToBase64(await readFileBytes(file));
 	} catch {
 		throw new Error(`Unable to read “${file.name}”.`);
 	}
@@ -103,20 +118,39 @@ export async function createPromptAttachmentDrafts(
 		}
 
 		try {
-			if (supported.kind === 'text') {
-				await verifyUtf8Text(file);
+			const bytes = await readFileBytes(file);
+			if (bytes.length === 0) {
+				throw new Error(`“${file.name}” cannot be empty.`);
 			}
 
-			const attachment: PromptAttachment = {
+			const actualLimitError = attachmentLimitError(
+				[...existing, ...attachments],
+				supported.kind,
+				bytes.length
+			);
+			if (actualLimitError) {
+				errors.push(actualLimitError);
+				continue;
+			}
+
+			if (supported.kind === 'text') {
+				try {
+					decodeUtf8(bytes);
+				} catch {
+					throw new Error(`“${file.name}” must be UTF-8 text.`);
+				}
+			} else if (!hasExpectedImageSignature(supported.mimeType, bytes)) {
+				throw new Error(`${file.name} does not match its image type.`);
+			}
+
+			attachments.push({
 				id: crypto.randomUUID(),
 				kind: supported.kind,
 				name: file.name,
 				mimeType: supported.mimeType,
-				size: file.size,
-				data: await readFileAsBase64(file)
-			};
-			validatePromptAttachments([...existing, ...attachments, attachment]);
-			attachments.push(attachment);
+				size: bytes.length,
+				data: bytesToBase64(bytes)
+			});
 		} catch (error) {
 			errors.push(error instanceof Error ? error.message : `Unable to attach “${file.name}”.`);
 		}

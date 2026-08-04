@@ -9,7 +9,6 @@
 		SessionTokenUsage,
 		ThinkingLevel
 	} from '$lib/contracts';
-	import { validatePromptAttachments } from '$lib/attachments';
 	import { errorNotices } from '$lib/error-notices';
 	import AttachmentPreview from '../AttachmentPreview.svelte';
 	import ComposerStatusPanel from '../ComposerStatusPanel/ComposerStatusPanel.svelte';
@@ -188,7 +187,6 @@
 		attachments = [];
 
 		try {
-			validatePromptAttachments(previousAttachments);
 			if (!(await onSend({ text, attachments: previousAttachments }))) {
 				resetDraft(previousDraft);
 				attachments = previousAttachments;

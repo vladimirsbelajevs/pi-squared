@@ -26,6 +26,10 @@
 - For UI component stories and Storybook component tests, read and follow
   [`.agents/skills/storybook-tests/SKILL.md`](.agents/skills/storybook-tests/SKILL.md).
 
+## Temp files
+Do not make temp files outside of the project directory. If you need to make temp files, use the `/tmp` directory in the project root and clean them up after use. Do not make temp files in the home directory or any other system directories.
+
+
 ## Code style
 
 ### General coding guidlines

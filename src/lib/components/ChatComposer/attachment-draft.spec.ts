@@ -64,6 +64,92 @@ describe('attachment draft helpers', () => {
 		).resolves.toBe('AP8KFA==');
 	});
 
+	it('reads a selected file once while preparing all browser feedback and encoding', async () => {
+		const file = new File(['Hello, π'], 'notes.txt', { type: 'text/plain' });
+		const arrayBuffer = vi.spyOn(file, 'arrayBuffer');
+
+		const result = await createPromptAttachmentDrafts([file], [], true);
+
+		expect(result.errors).toEqual([]);
+		expect(result.attachments[0]).toMatchObject({
+			name: 'notes.txt',
+			kind: 'text',
+			size: new TextEncoder().encode('Hello, π').length
+		});
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+	});
+
+	it('rejects zero-byte files after one read during candidate preparation', async () => {
+		const file = new File([], 'empty.txt', { type: 'text/plain' });
+		const arrayBuffer = vi.spyOn(file, 'arrayBuffer');
+
+		const result = await createPromptAttachmentDrafts([file], [], true);
+
+		expect(result).toEqual({
+			attachments: [],
+			errors: ['“empty.txt” cannot be empty.']
+		});
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+	});
+
+	it('reports a stable filename-specific error when candidate reading fails', async () => {
+		const file = new File(['content'], 'unreadable.txt', { type: 'text/plain' });
+		const arrayBuffer = vi
+			.spyOn(file, 'arrayBuffer')
+			.mockRejectedValue(new Error('private underlying read detail'));
+
+		const result = await createPromptAttachmentDrafts([file], [], true);
+
+		expect(result).toEqual({
+			attachments: [],
+			errors: ['Unable to read “unreadable.txt”.']
+		});
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+	});
+
+	it('keeps browser checks local to the selected file instead of revalidating existing drafts', async () => {
+		const result = await createPromptAttachmentDrafts(
+			[new File(['new'], 'new.txt', { type: 'text/plain' })],
+			[
+				{
+					id: 'existing',
+					kind: 'text',
+					name: 'existing.txt',
+					mimeType: 'text/plain',
+					size: 1,
+					data: 'not base64'
+				}
+			],
+			true
+		);
+
+		expect(result.attachments).toHaveLength(1);
+		expect(result.errors).toEqual([]);
+	});
+
+	it('checks image signatures from the single selected-file buffer', async () => {
+		const invalid = await createPromptAttachmentDrafts(
+			[new File(['not png'], 'diagram.png', { type: 'image/png' })],
+			[],
+			true
+		);
+		expect(invalid).toEqual({
+			attachments: [],
+			errors: ['diagram.png does not match its image type.']
+		});
+
+		const valid = await createPromptAttachmentDrafts(
+			[
+				new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'diagram.png', {
+					type: 'image/png'
+				})
+			],
+			[],
+			true
+		);
+		expect(valid.attachments).toHaveLength(1);
+	});
+
 	it('keeps accepted and rejected files in input order', async () => {
 		const result = await createPromptAttachmentDrafts(
 			[

@@ -101,7 +101,7 @@ describe('mapSessionEntry', () => {
 								name: 'config.ts',
 								mimeType: 'text/plain',
 								size: 18,
-								data: 'ZXhwb3J0IGNvbnN0IGZvbyA9IDE7'
+								text: 'export const foo = 1;'
 							}
 						])
 					},

@@ -24,7 +24,7 @@ The following major findings are already addressed and are not repeated as work 
 | High | Eager hydration of restored chat tabs | Open |
 | Medium | Live tool updates invalidate unrelated tool-group inputs | Closed |
 | Medium | Project file autocomplete rescans the filesystem | Partially closed |
-| Medium | Attachment files are read, decoded, and validated repeatedly | Open |
+| Medium | Attachment files are read, decoded, and validated repeatedly | Closed |
 | Low | Stream presentation flushes are coupled to workspace/cursor persistence | Open |
 | Low | Timeline-wide hover state and formatter allocation | Open |
 | Low | Historical image previews are not browser-lazy | Open |
@@ -320,16 +320,15 @@ Project removal or canonical-root changes evict cached indexes and abort in-flig
 
 ## 5. Attachment work is repeated
 
-**Status:** Open  
+**Status:** Closed  
 **Priority:** Medium
 
-### Current behavior
+### Implemented
 
-For text attachments, composer preparation calls `File.arrayBuffer()` once for UTF-8 verification and again for base64 conversion. Adding each accepted file then deeply validates and re-decodes the accumulated attachment array, and submission validates the complete array again.
-
-On the server, the prompt route validates and decodes every attachment, `promptRuntime()` validates and decodes the normalized result again, and `promptWithAttachments()` decodes text attachments a third time to inject their UTF-8 contents into the persisted prompt. Images are currently decoded twice server-side; text attachments are decoded three times.
-
-At the 20 MiB decoded limit, base64 alone is roughly 26.7 MiB before JSON overhead. Each validation performs regex checks, base64 decoding, byte copying, signature checks, and/or UTF-8 decoding. This demonstrably processes tens of megabytes per pass, but profiling is still required to quantify the user-visible stall. `request.json()` also allocates the complete body before decoded-byte limits are enforced.
+- Composer preparation reads each selected `File` into one `Uint8Array`, then performs size, UTF-8, image-signature, and base64 work from that buffer. Adding and submitting drafts no longer re-decodes previously accepted attachments.
+- The prompt endpoint applies a 32 MiB streamed JSON-body limit before parsing and performs authoritative attachment validation once. Its opaque server-only result retains decoded bytes, decoded text content, and image base64 where Pi's image API requires it.
+- `promptRuntime()` and `promptWithAttachments()` consume the validated representation without validating or decoding base64 again. Attachment-only prompts, optimistic preview data, persisted metadata, and existing attachment constraints remain intact.
+- Focused tests cover single browser reads, local candidate checks, one server decode per attachment, retained text, authoritative MIME/UTF-8 validation, and both declared and streamed request-body limits.
 
 ### Relevant files
 

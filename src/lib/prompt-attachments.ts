@@ -3,6 +3,20 @@ import type { ChatAttachment, PromptAttachment } from '$lib/contracts';
 const START = '\n\n<pi-squared-attachments>\n';
 const END = '\n</pi-squared-attachments>';
 
+type PromptAttachmentMetadata = Omit<PromptAttachment, 'data'>;
+
+export type PromptAttachmentContent =
+	| (PromptAttachmentMetadata & {
+			kind: 'image';
+			/** Retained for Pi's image content block API. */
+			data: string;
+	  })
+	| (PromptAttachmentMetadata & {
+			kind: 'text';
+			/** Retained by HTTP-boundary validation; no base64 decode is needed here. */
+			text: string;
+	  });
+
 type AttachmentManifest = {
 	version: 1;
 	visibleText: string;
@@ -18,7 +32,7 @@ type AttachmentManifest = {
 
 function attachmentManifest(
 	visibleText: string,
-	attachments: readonly PromptAttachment[]
+	attachments: readonly PromptAttachmentContent[]
 ): AttachmentManifest {
 	return {
 		version: 1,
@@ -29,24 +43,12 @@ function attachmentManifest(
 			name: attachment.name,
 			mimeType: attachment.mimeType,
 			size: attachment.size,
-			...(attachment.kind === 'text'
-				? { text: new TextDecoder('utf-8', { fatal: true }).decode(base64Bytes(attachment.data)) }
-				: {})
+			...(attachment.kind === 'text' ? { text: attachment.text } : {})
 		}))
 	};
 }
 
-function base64Bytes(data: string): Uint8Array {
-	const binary = atob(data);
-	const bytes = new Uint8Array(binary.length);
-	for (let index = 0; index < binary.length; index += 1) {
-		bytes[index] = binary.charCodeAt(index);
-	}
-
-	return bytes;
-}
-
-function attachmentOnlyInstruction(attachments: readonly PromptAttachment[]): string {
+function attachmentOnlyInstruction(attachments: readonly PromptAttachmentContent[]): string {
 	const hasImages = attachments.some((attachment) => attachment.kind === 'image');
 	const hasTextFiles = attachments.some((attachment) => attachment.kind === 'text');
 	if (hasImages && hasTextFiles) {
@@ -63,7 +65,7 @@ function attachmentOnlyInstruction(attachments: readonly PromptAttachment[]): st
 /** Formats text/code file contents into the persisted text prompt while images travel in Pi content blocks. */
 export function promptWithAttachments(
 	visibleText: string,
-	attachments: readonly PromptAttachment[]
+	attachments: readonly PromptAttachmentContent[]
 ): string {
 	if (!attachments.length) {
 		return visibleText;
