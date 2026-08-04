@@ -51,6 +51,8 @@ import { resolve } from '$app/paths';
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 const STORAGE_KEY = 'pi-squared:workspace:v1';
+const EVENT_CURSOR_STORAGE_KEY = 'pi-squared:event-cursor:v2';
+const CURSOR_PERSIST_THROTTLE_MS = 1_000;
 const LEGACY_OPEN_CHATS_KEY = 'pi-squared:open-chats';
 const LAST_PROJECT_KEY = 'pi-squared:last-project';
 const LAST_MODEL_KEY = 'pi-squared:last-model';
@@ -121,6 +123,11 @@ function normalizeError(error: unknown, fallback: string): Error {
 	return error instanceof Error ? error : new Error(fallback);
 }
 
+type RestoredWorkspace = {
+	workspace: StoredWorkspaceV1;
+	legacyLastEventId?: string;
+};
+
 export class HarnessWorkspace {
 	projects = $state<Project[]>([]);
 	models = $state<ModelOption[]>([]);
@@ -137,15 +144,16 @@ export class HarnessWorkspace {
 	#startPromise: Promise<void> | undefined;
 	#events: EventSource | undefined;
 	#lastEventId: string | undefined;
+	#cursorDirty = false;
+	#cursorPersistTimer: ReturnType<typeof setTimeout> | undefined;
+	#pagehideRegistered = false;
+	readonly #pagehideListener = (): void => this.flushPendingPersistence();
 	#chatLoads = new SvelteMap<string, Promise<ChatTab | undefined>>();
 	#hydrationControllers = new SvelteMap<string, AbortController>();
 	#inactiveRuntimeTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>();
 	#activeChatId: string | undefined;
 	#scrollStates = new SvelteMap<string, ScrollState>();
-	#streamUpdates = new StreamUpdateBatcher(
-		(callback) => requestAnimationFrame(callback),
-		() => this.schedulePersist()
-	);
+	#streamUpdates = new StreamUpdateBatcher((callback) => requestAnimationFrame(callback));
 	#persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 	async start(): Promise<void> {
@@ -162,8 +170,14 @@ export class HarnessWorkspace {
 	}
 
 	disposeConnection(): void {
-		this.#events?.close();
-		this.#events = undefined;
+		try {
+			this.flushPendingPersistence();
+		} finally {
+			this.#events?.close();
+			this.#events = undefined;
+			this.#removePagehideListener();
+		}
+
 		this.#streamUpdates.discardAll();
 		for (const tab of this.tabs) {
 			if (tab.kind === 'chat') {
@@ -173,7 +187,7 @@ export class HarnessWorkspace {
 	}
 
 	schedulePersist(): void {
-		if (this.#persistTimer) {
+		if (this.#persistTimer !== undefined) {
 			clearTimeout(this.#persistTimer);
 		}
 
@@ -181,6 +195,80 @@ export class HarnessWorkspace {
 			this.#persistTimer = undefined;
 			this.persist();
 		}, 150);
+	}
+
+	setQueueMode(chat: ChatTab, mode: QueueMode): void {
+		chat.queueMode = mode;
+		this.persist();
+	}
+
+	flushPendingPersistence(): void {
+		let workspaceError: unknown;
+		if (this.#persistTimer !== undefined) {
+			clearTimeout(this.#persistTimer);
+			this.#persistTimer = undefined;
+
+			try {
+				this.persist();
+			} catch (error) {
+				workspaceError = error;
+			}
+		}
+
+		try {
+			this.#flushCursorPersist();
+		} catch (error) {
+			if (workspaceError === undefined) {
+				workspaceError = error;
+			}
+		}
+
+		if (workspaceError !== undefined) {
+			throw workspaceError;
+		}
+	}
+
+	#scheduleCursorPersist(): void {
+		this.#cursorDirty = true;
+		if (this.#cursorPersistTimer !== undefined) {
+			return;
+		}
+
+		this.#cursorPersistTimer = setTimeout(() => {
+			this.#cursorPersistTimer = undefined;
+			this.#flushCursorPersist();
+		}, CURSOR_PERSIST_THROTTLE_MS);
+	}
+
+	#flushCursorPersist(): void {
+		if (this.#cursorPersistTimer !== undefined) {
+			clearTimeout(this.#cursorPersistTimer);
+			this.#cursorPersistTimer = undefined;
+		}
+
+		if (!this.#cursorDirty) {
+			return;
+		}
+
+		if (this.#lastEventId === undefined) {
+			localStorage.removeItem(EVENT_CURSOR_STORAGE_KEY);
+		} else {
+			localStorage.setItem(EVENT_CURSOR_STORAGE_KEY, this.#lastEventId);
+		}
+
+		this.#cursorDirty = false;
+	}
+
+	#clearPersistedCursor(): void {
+		this.#lastEventId = undefined;
+		if (this.#cursorPersistTimer !== undefined) {
+			clearTimeout(this.#cursorPersistTimer);
+			this.#cursorPersistTimer = undefined;
+		}
+
+		this.#cursorDirty = false;
+
+		localStorage.removeItem(EVENT_CURSOR_STORAGE_KEY);
 	}
 
 	newHref(tabId: string): string {
@@ -339,12 +427,12 @@ export class HarnessWorkspace {
 			});
 			const chat = this.#createChatTab(tab.id, checkpoint);
 			this.tabs = this.tabs.map((candidate) => (candidate.id === tab.id ? chat : candidate));
+			this.persist();
 			const accepted = await this.sendPrompt(chat, openingPrompt);
 			if (!accepted) {
 				chat.draft = openingPrompt.text;
+				this.persist();
 			}
-
-			this.persist();
 
 			return chat;
 		} catch (error) {
@@ -377,6 +465,7 @@ export class HarnessWorkspace {
 				pendingUserMessages: []
 			};
 			this.tabs.push(chat);
+			this.persist();
 		}
 
 		this.#setActiveChat(chat);
@@ -408,8 +497,6 @@ export class HarnessWorkspace {
 				// An entry can arrive over SSE before the prompt response does.
 				this.#reconcilePendingUserMessages(chat);
 			}
-
-			this.persist();
 
 			return true;
 		} catch (error) {
@@ -640,11 +727,30 @@ export class HarnessWorkspace {
 		}
 
 		this.#events = openEventStream(this.#lastEventId, (event) => this.#handleEvent(event));
+		this.#registerPagehideListener();
+	}
+
+	#registerPagehideListener(): void {
+		if (this.#pagehideRegistered || typeof window === 'undefined') {
+			return;
+		}
+
+		window.addEventListener('pagehide', this.#pagehideListener);
+		this.#pagehideRegistered = true;
+	}
+
+	#removePagehideListener(): void {
+		if (!this.#pagehideRegistered || typeof window === 'undefined') {
+			return;
+		}
+
+		window.removeEventListener('pagehide', this.#pagehideListener);
+		this.#pagehideRegistered = false;
 	}
 
 	#handleEvent(message: StreamMessage): void {
 		if (!('id' in message)) {
-			this.#lastEventId = undefined;
+			this.#clearPersistedCursor();
 			const activeChat = this.tabs.find(
 				(tab): tab is ChatTab => tab.kind === 'chat' && tab.id === this.#activeChatId
 			);
@@ -656,6 +762,7 @@ export class HarnessWorkspace {
 		}
 
 		this.#lastEventId = message.id;
+		this.#scheduleCursorPersist();
 		const chat = this.tabs.find(
 			(tab): tab is ChatTab => tab.kind === 'chat' && tab.runtimeId === message.runtimeId
 		);
@@ -919,10 +1026,6 @@ export class HarnessWorkspace {
 				if (this.#chatLoads.get(key) === load) {
 					this.#chatLoads.delete(key);
 				}
-
-				if (chat.hydrationGeneration === generation && this.tabs.some((tab) => tab === chat)) {
-					this.persist();
-				}
 			});
 		this.#chatLoads.set(key, load);
 
@@ -1046,6 +1149,8 @@ export class HarnessWorkspace {
 	}
 
 	#applyCheckpoint(chat: ChatTab, checkpoint: RuntimeCheckpoint): void {
+		const previousRuntimeId = chat.runtimeId;
+		const previousTitle = chat.title;
 		this.#streamUpdates.discard(chat.id);
 		chat.runtime = stateFromCheckpoint(checkpoint, chat.runtime);
 		const snapshot = snapshotFromState(chat.runtime);
@@ -1059,6 +1164,9 @@ export class HarnessWorkspace {
 		chat.streamThinking = checkpoint.live.thinking;
 		chat.streamTools = checkpoint.live.tools.map((tool) => ({ ...tool }));
 		chat.streamToolsByCallId = streamToolMap(chat.streamTools);
+		if (chat.runtimeId !== previousRuntimeId || chat.title !== previousTitle) {
+			this.schedulePersist();
+		}
 	}
 
 	#createChatTab(id: string, checkpoint: RuntimeCheckpoint): ChatTab {
@@ -1133,16 +1241,22 @@ export class HarnessWorkspace {
 	}
 
 	#restoreTabs(): void {
+		const separateCursor = localStorage.getItem(EVENT_CURSOR_STORAGE_KEY);
 		const restored = this.#readStoredWorkspace();
+		this.#lastEventId = separateCursor ?? restored?.legacyLastEventId;
+		if (separateCursor === null && restored?.legacyLastEventId !== undefined) {
+			localStorage.setItem(EVENT_CURSOR_STORAGE_KEY, restored.legacyLastEventId);
+		}
+
 		if (!restored) {
 			return;
 		}
 
-		this.#lastEventId = restored.lastEventId;
+		const { workspace } = restored;
 		const tabs: WorkspaceTab[] = [];
 		const tabIds = new SvelteSet<string>();
 		const chatSessions = new SvelteSet<string>();
-		for (const tab of restored.tabs) {
+		for (const tab of workspace.tabs) {
 			if (tabIds.has(tab.id)) {
 				continue;
 			}
@@ -1161,15 +1275,15 @@ export class HarnessWorkspace {
 		}
 
 		this.tabs = tabs;
-		this.activeTabId = tabs.some((tab) => tab.id === restored.activeTabId)
-			? restored.activeTabId
+		this.activeTabId = tabs.some((tab) => tab.id === workspace.activeTabId)
+			? workspace.activeTabId
 			: undefined;
-		if (tabs.length !== restored.tabs.length || this.activeTabId !== restored.activeTabId) {
+		if (tabs.length !== workspace.tabs.length || this.activeTabId !== workspace.activeTabId) {
 			this.persist();
 		}
 	}
 
-	#readStoredWorkspace(): StoredWorkspaceV1 | undefined {
+	#readStoredWorkspace(): RestoredWorkspace | undefined {
 		try {
 			const raw = localStorage.getItem(STORAGE_KEY);
 			if (raw) {
@@ -1178,11 +1292,14 @@ export class HarnessWorkspace {
 					const tabs = parsed.tabs.flatMap((tab) => this.#parseStoredTab(tab));
 
 					return {
-						version: 1,
+						workspace: {
+							version: 1,
+							activeTabId: typeof parsed.activeTabId === 'string' ? parsed.activeTabId : undefined,
+							tabs
+						},
 						// Numeric v1 cursors cannot be interpreted as epoch-qualified v2 cursors.
-						lastEventId: typeof parsed.lastEventId === 'string' ? parsed.lastEventId : undefined,
-						activeTabId: typeof parsed.activeTabId === 'string' ? parsed.activeTabId : undefined,
-						tabs
+						legacyLastEventId:
+							typeof parsed.lastEventId === 'string' ? parsed.lastEventId : undefined
 					};
 				}
 			}
@@ -1229,7 +1346,7 @@ export class HarnessWorkspace {
 			this.#writeStoredWorkspace(migrated);
 			localStorage.removeItem(LEGACY_OPEN_CHATS_KEY);
 
-			return migrated;
+			return { workspace: migrated };
 		} catch {
 			localStorage.removeItem(STORAGE_KEY);
 
@@ -1333,9 +1450,13 @@ export class HarnessWorkspace {
 	}
 
 	persist(): void {
+		if (this.#persistTimer !== undefined) {
+			clearTimeout(this.#persistTimer);
+			this.#persistTimer = undefined;
+		}
+
 		const document: StoredWorkspaceV1 = {
 			version: 1,
-			lastEventId: this.#lastEventId,
 			activeTabId: this.tabs.some((tab) => tab.id === this.activeTabId)
 				? this.activeTabId
 				: undefined,

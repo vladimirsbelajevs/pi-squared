@@ -36,7 +36,6 @@ export class StreamUpdateBatcher {
 
 	constructor(
 		private readonly scheduleFrame: FrameScheduler = (callback) => requestAnimationFrame(callback),
-		private readonly onFlush: () => void = () => undefined,
 		private readonly scheduleTimeout: TimeoutScheduler = (callback, delay) =>
 			setTimeout(callback, delay),
 		private readonly clearScheduledTimeout: TimeoutCanceller = (handle) => clearTimeout(handle)
@@ -64,7 +63,6 @@ export class StreamUpdateBatcher {
 
 		this.#commit(pending);
 		this.#pending.delete(chatId);
-		this.onFlush();
 	}
 
 	discard(chatId: string): void {
@@ -105,7 +103,6 @@ export class StreamUpdateBatcher {
 			}
 
 			this.#pending.clear();
-			this.onFlush();
 		});
 	}
 

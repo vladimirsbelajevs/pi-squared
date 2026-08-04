@@ -17,14 +17,12 @@ type FakeTimer = {
 function createBatcher() {
 	let frame: FrameRequestCallback | undefined;
 	const timers: FakeTimer[] = [];
-	const onFlush = () => undefined;
 	const batcher = new StreamUpdateBatcher(
 		(callback) => {
 			frame = callback;
 
 			return 1;
 		},
-		onFlush,
 		(callback, delay) => {
 			const timer = { callback, delay };
 			timers.push(timer);

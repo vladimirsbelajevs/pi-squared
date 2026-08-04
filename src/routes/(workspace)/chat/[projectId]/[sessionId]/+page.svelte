@@ -77,10 +77,7 @@
 				onStop={() => workspace.stopChat(chat)}
 				onModelChange={(key) => workspace.changeModel(chat, key)}
 				onThinkingChange={(level) => workspace.changeThinking(chat, level)}
-				onQueueModeChange={(mode) => {
-					chat.queueMode = mode;
-					workspace.persist();
-				}}
+				onQueueModeChange={(mode) => workspace.setQueueMode(chat, mode)}
 			>
 				{#snippet overlay()}
 					<TransientNoticePopup
