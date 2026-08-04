@@ -18,9 +18,9 @@ tools:
   - bash
   - edit
   - write
-  - contact_supervisor
   - mcp:svelte
   - mcp:chrome-devtools
+  - contact_supervisor
 
 defaultContext: fork
 defaultProgress: true

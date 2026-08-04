@@ -14,3 +14,5 @@ For browser profiling, use the browser-profiler agent.
 
 If user explicitly requests that he does not want to use subagents then follow
 the instructions in the main agent and do not spawn any subagents.
+
+If the task to implement is quite small then you can implement it directly in the main agent without spawning subagents.

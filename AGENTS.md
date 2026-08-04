@@ -93,6 +93,25 @@ Generates a Svelte Playground link with the provided code. After completing the
 code, ask the user if they want a playground link. Only call this tool after
 user confirmation and NEVER if code was written to files in their project.
 
-## Chrome MCP:
+## Browser tooling
 
-You have chrome MCP available, see skill [`.agents/skills/chrome-devtools/SKILL.md`](.agents/skills/chrome-devtools/SKILL.md) for more information.
+Use `playwright-cli` as the default browser automation tool for:
+
+- navigation
+- UI interaction
+- functional verification
+- screenshots
+- user-flow testing
+
+Use the `chrome-devtools` MCP only for:
+see skill [`.agents/skills/chrome-devtools/SKILL.md`](.agents/skills/chrome-devtools/SKILL.md) for more information.
+
+- performance profiling
+- network diagnostics
+- Lighthouse audits
+- JavaScript heap and memory analysis
+- detailed console and source-map debugging
+
+Do not use Playwright CLI and Chrome DevTools MCP to control the same
+browser or CDP endpoint concurrently. Use separate browser sessions unless
+the task explicitly requires sequential inspection of the same session.
