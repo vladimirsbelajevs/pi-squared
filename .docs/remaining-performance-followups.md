@@ -34,7 +34,6 @@ The following major findings are already addressed and are not work items here:
 - Do not introduce `$effect` for persistence, hover/focus handling, image loading, or derived state.
 - Prefer deterministic attribute/state tests over timing assertions about browser heuristics.
 - Run the Svelte autofixer on every changed `.svelte` file until it has no findings.
-- If a Storybook story is changed, follow `.agents/skills/storybook-tests/SKILL.md` and use the live Storybook instructions before editing the story.
 
 ---
 
@@ -321,7 +320,6 @@ These tests protect against accidentally relying on the removed stream callback.
 
 - `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.svelte`
 - `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.svelte.spec.ts`
-- `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.stories.svelte`
 - optional follow-up only: `src/routes/(workspace)/chat/[projectId]/[sessionId]/MessageRow.svelte`
 
 ### Goal
@@ -433,9 +431,9 @@ The existing test currently expects zero `.message-meta-content` nodes before ho
 
 The source-level contract is that `hoveredMessageId` and row mouse handlers no longer exist. Component tests should prove behavior and access, not Svelte internals.
 
-### Long-history measurement and Storybook fixture
+### Long-history measurement fixture
 
-Use the existing `200-message performance fixture` in `ChatTimeline.stories.svelte`.
+Use a dedicated `200-message performance fixture` in the application preview or a maintained browser test harness.
 
 Before profiling:
 
@@ -443,11 +441,11 @@ Before profiling:
 - retain mixed Markdown, large code blocks, notices, closed tool groups, and six images;
 - collect the baseline from the old implementation with that fixture-only change applied;
 - apply the hover/formatter implementation without changing fixture data, then collect the candidate profile;
-- update the story play assertions for the candidate to include the expected metadata and copy-action counts after the controls become always mounted.
+- update the fixture assertions in the selected test harness to include the expected metadata and copy-action counts after the controls become always mounted.
 
 The baseline and candidate must render byte-for-byte-equivalent fixture data. Do not compare the current untimestamped fixture against a timestamped candidate; that would confound formatter and DOM costs with the implementation change.
 
-Profile a production Storybook build or production app preview, not the dev server. Record:
+Profile a production application preview, not the dev server. Record:
 
 - commit/build identifier;
 - Chrome version and OS;
@@ -495,7 +493,6 @@ If the always-mounted metadata causes a clearly material regression in the 200-r
 - `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.svelte`
 - `src/lib/components/ChatComposer/ChatComposer.svelte.spec.ts`
 - `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.svelte.spec.ts`
-- optional fixture assertion: `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.stories.svelte`
 
 ### Goal
 
@@ -593,7 +590,7 @@ Keep both existing image-viewer tests. Strengthen at least the persisted-history
 
 Do not attempt to prove actual network deferral or decode timing in Vitest. Browser lazy-loading thresholds vary, and tiny `data:` fixtures may decode before test code runs. The deterministic contracts are the caller-specific attributes and viewer independence.
 
-If the long-history story is already being edited for issue 2, also assert that all six fixture thumbnails have `loading="lazy"` and `decoding="async"`. Do not edit the story only to duplicate the component assertions unless the fixture will be used for profiling.
+If the long-history fixture is already being edited for issue 2, also assert that all six fixture thumbnails have `loading="lazy"` and `decoding="async"`. Do not add a separate fixture-only change solely to duplicate the component assertions unless the fixture will be used for profiling.
 
 ### Production measurement
 
@@ -630,7 +627,7 @@ Do not infer decode-count savings from attribute inspection alone.
 2. **Timeline hover/formatters** — accessibility-visible and requires production fixture measurement.
 3. **Persistence/cursor separation** — largest correctness surface; implement only after the replay/reset tests are understood.
 
-Prefer one commit per item. If issue 2 and issue 3 both update the long-history story, they may share a final fixture-only commit, but their source/test changes should remain reviewable separately.
+Prefer one commit per item. If issue 2 and issue 3 both update the long-history fixture, they may share a final fixture-only commit, but their source/test changes should remain reviewable separately.
 
 ## Validation checklist
 
