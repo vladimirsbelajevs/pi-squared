@@ -8,7 +8,7 @@ thinking: xhigh
 
 systemPromptMode: replace
 inheritProjectContext: true
-inheritSkills: false
+inheritSkills: true
 defaultContext: fork
 
 tools:
