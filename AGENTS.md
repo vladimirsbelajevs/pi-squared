@@ -29,6 +29,8 @@
 ## Temp files
 Do not make temp files outside of the project directory. If you need to make temp files, use the `/tmp` directory in the project root and clean them up after use. Do not make temp files in the home directory or any other system directories.
 
+## Work implementation flow
+Use subagents for doing development work - use gpt-5.6-Luna thinking:Max for development. Use main agent for reviewing the job that gpt-5.6-Luna has done. If aditional work is needed, use gpt-5.6-Luna thinking Max to do the work and then review it again with main agent. Repeat this process until the job is done. Do not spawn gtp-5.6-Sol max subagents (you can spawn lower thinking vairants if necessary)
 
 ## Code style
 
