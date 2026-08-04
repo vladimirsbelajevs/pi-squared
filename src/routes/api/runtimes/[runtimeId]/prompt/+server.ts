@@ -4,11 +4,11 @@ import { errorResponse, optionalString, readObject, requiredParam } from '$lib/s
 import { promptRuntime } from '$lib/server/runtimes';
 
 // 20 MiB decoded attachments expand to about 26.7 MiB of base64; leave JSON metadata headroom.
-export const MAX_PROMPT_BODY_BYTES = 32 * 1024 * 1024;
+export const _MAX_PROMPT_BODY_BYTES = 32 * 1024 * 1024;
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
-		const body = await readObject(request, MAX_PROMPT_BODY_BYTES);
+		const body = await readObject(request, _MAX_PROMPT_BODY_BYTES);
 		const streamingBehavior = optionalString(body.streamingBehavior, 'Streaming behavior');
 		if (streamingBehavior && streamingBehavior !== 'steer' && streamingBehavior !== 'followUp') {
 			throw new Error('Streaming behavior must be “steer” or “followUp”.');

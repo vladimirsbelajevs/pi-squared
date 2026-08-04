@@ -6,7 +6,7 @@ const runtimeApi = vi.hoisted(() => ({ promptRuntime: vi.fn() }));
 vi.mock('$lib/server/runtimes', () => runtimeApi);
 
 import {
-	MAX_PROMPT_BODY_BYTES,
+	_MAX_PROMPT_BODY_BYTES,
 	POST
 } from '../../routes/api/runtimes/[runtimeId]/prompt/+server.js';
 
@@ -124,7 +124,7 @@ describe('POST /api/runtimes/[runtimeId]/prompt', () => {
 
 	it('rejects a prompt body above the request limit before JSON parsing', async () => {
 		const response = await POST(
-			event({ text: 'small' }, { 'Content-Length': String(MAX_PROMPT_BODY_BYTES + 1) })
+			event({ text: 'small' }, { 'Content-Length': String(_MAX_PROMPT_BODY_BYTES + 1) })
 		);
 
 		expect(response.status).toBe(400);
