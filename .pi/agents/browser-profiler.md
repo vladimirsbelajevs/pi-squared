@@ -36,8 +36,7 @@ Do not modify project files.
 Do not run shell commands, install packages, start browsers, create symlinks, or
 inspect system browser installation paths.
 
-Use the existing Chrome DevTools MCP connection. The browser is already started
-externally and exposed through the configured debugging endpoint.
+Use Chrome DevTools MCP for all browser interactions.
 
 ## Safety boundaries
 
