@@ -19,3 +19,4 @@ opencode.json
 vite.config.ts
 vitest.shims.d.ts
 /tmp/
+/.playwright/

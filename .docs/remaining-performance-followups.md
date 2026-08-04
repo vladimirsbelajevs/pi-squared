@@ -521,7 +521,53 @@ Observed interaction behavior:
 
 The candidate added 1,700 initial DOM nodes (**+67.5%**) and increased median post-interaction heap by approximately **10.1%**. The representative style-recalculation proxy also increased by **42.9%**. These results meet this handoff's material-regression escalation threshold even though pointer and keyboard interaction behavior improved.
 
-The CSS-only strategy therefore closes the timeline-wide hover invalidation and formatter-allocation findings only partially. Full closure would require a separately approved implementation that preserves permanently mounted, keyboard-reachable copy actions without the measured metadata DOM overhead. The documented fallback remains a carefully scoped `MessageRow.svelte` extraction with row-local reveal behavior; it is not implemented at this time.
+The CSS-only strategy therefore closes the timeline-wide hover invalidation and formatter-allocation findings only partially. Full closure requires preserving permanently mounted, keyboard-reachable copy actions without retaining every message's complete metadata subtree.
+
+#### Recommended next step: benchmark-gated row extraction
+
+Proceed with a narrow, separately reviewable `MessageRow.svelte` follow-up, but treat it as a benchmark-first prototype rather than an automatic merge. Do not roll back formatter reuse or restore timeline-level hover state.
+
+The extraction should use this boundary:
+
+- `ChatTimeline.svelte` continues to own timeline construction, Markdown rendering, delegated code copying, reasoning markup, attachments, notices, tools, streaming output, the image viewer, and the shared copy-error alert.
+- `MessageRow.svelte` owns only the finalized conversational row shell, row-local pointer/focus state, the metadata reveal, and copy-success state/timer.
+- Pass the message body and attachments into the row as typed snippets. This keeps the large Markdown/reasoning/role style surface in `ChatTimeline.svelte` rather than moving or globalizing it. Move only selectors that style the child-owned row shell and metadata.
+- Keep the two formatter instances outside per-row component initialization. The simplest option is to retain them in `ChatTimeline.svelte` and pass the already formatted short time and title into the row. Do not allocate formatters in each `MessageRow` instance.
+
+Use a two-tier metadata DOM:
+
+1. For each non-empty user or assistant message, always mount one native copy button. It must remain in sequential tab order even while visually hidden and must become visible through `:hover`, `:focus-within`, and the existing coarse-pointer rule.
+2. Keep the always-mounted button structurally minimal. Prefer button text plus a CSS pseudo-element/mask for the icon instead of the current nested SVG subtree. The button must retain an explicit accessible name and visible `Copy`/`Copied` text.
+3. Mount model, thinking level, and `<time>` only while that row is pointer-active, focus-within, or showing copy success. Pointer/focus state must be local to that `MessageRow`; changing rows must not write reactive state in `ChatTimeline.svelte`.
+4. On touch/coarse pointers, the copy button remains visible at rest. Focusing or activating it may mount the supplementary metadata; the supplementary metadata does not need to remain mounted for all 200 rows merely to satisfy the coarse-pointer rule.
+5. Localize `copiedMessageId` into a per-row boolean/timer. Let the parent clipboard helper continue to report failures through the shared alert, and clean up a row's success timer if the row is destroyed. Do not introduce `$effect`.
+
+This deliberately avoids extracting tool rows, notices, streaming output, Markdown internals, or image-viewer behavior. It also avoids an imperative shared overlay, event-to-DOM mutation, virtualization, or restoring conditional mounting of the only keyboard action.
+
+#### Prototype and decision sequence
+
+1. Add the smallest viable `MessageRow.svelte` and update only the 200-message fixture needed to measure it.
+2. Build and profile the production preview before completing broad test refactors. Use byte-identical fixture data and the same viewport, 4× CPU throttle, hover traversal, and keyboard traversal as the recorded baseline.
+3. Collect at least five runs because the prior three-run candidate included a large LCP outlier. Compare medians and retain the traces.
+4. Continue to full component tests and merge only if the prototype meets the budgets below. If it fails, discard the extraction prototype and leave the item partially closed pending either an explicit acceptance of the current DOM cost or a separately scoped timeline-virtualization/product change. Do not proceed to a more complex imperative hover overlay as an unreviewed fallback.
+
+Use these merge budgets against the recorded baseline:
+
+- initial DOM: no more than 15% above 2,520 nodes (maximum 2,898), which requires removing at least 77% of the current candidate's 1,700 added nodes;
+- post-interaction heap: no more than 5% above 6,604,681 bytes;
+- style recalculation: no repeatable median regression greater than 15%;
+- keyboard order and copy behavior: no regression;
+- pointer/keyboard interaction latency: no material regression from the baseline median, with any variance called out rather than hidden by the median.
+
+The DOM budget is expected to allow 200 minimal buttons plus a bounded active-row metadata subtree. The heap budget is the important check on the cost of 200 component instances and their local state.
+
+#### Required test updates if the prototype passes
+
+- Add focused `MessageRow.svelte` tests proving that every non-empty row has a copy button before hover, Tab reaches successive row buttons, focus reveals the control, exact text is copied, success resets, and failure reaches the shared alert callback.
+- Prove row isolation: pointer/focus changes in one row mount supplementary metadata only for that row and do not change sibling metadata DOM.
+- Keep `ChatTimeline.svelte.spec.ts` integration coverage for role labels, model fallback, thinking level, timestamp `datetime`/title semantics, Markdown/code copy, reasoning, attachments, and the image viewer. Do not duplicate all timeline behavior in row tests.
+- Update the performance fixture assertions from 200 always-mounted timestamps/metadata trees to 200 always-mounted copy buttons, a bounded supplementary metadata count at rest, and exactly the interacted row's details after hover/focus.
+- Run the Svelte autofixer on both components until clean, then run the focused suites, `npm run check`, `npm run lint`, the full unit suite, and the production fixture profile.
 
 ### Acceptance criteria
 
