@@ -10,8 +10,7 @@ do the additional work and then review it again with main agent. Repeat this
 process until the job is done. Do not spawn gtp-5.6-Sol max subagents (you can
 spawn lower thinking vairants if necessary for reviewing)
 
-For browser profiling, use the browser-profiler agent. Do not spawn gtp-5.6-Sol
-max subagents for browser profiling.
+For browser profiling, use the browser-profiler agent.
 
 If user explicitly requests that he does not want to use subagents then follow
 the instructions in the main agent and do not spawn any subagents.

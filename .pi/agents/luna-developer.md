@@ -19,6 +19,9 @@ tools:
   - edit
   - write
   - contact_supervisor
+  - mcp:svelte
+  - mcp:pi-squared-storybook-mcp
+  - mcp:chrome-devtools
 
 defaultContext: fork
 defaultProgress: true
