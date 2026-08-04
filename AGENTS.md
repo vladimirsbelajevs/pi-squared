@@ -27,10 +27,8 @@
   [`.agents/skills/storybook-tests/SKILL.md`](.agents/skills/storybook-tests/SKILL.md).
 
 ## Temp files
-Do not make temp files outside of the project directory. If you need to make temp files, use the `/tmp` directory in the project root and clean them up after use. Do not make temp files in the home directory or any other system directories.
 
-## Work implementation flow
-Use subagents for doing development work - use luna-developer for development. Use main agent for reviewing the job that luna-developer has done. If aditional work is needed, use luna-developer to do the work and then review it again with main agent. Repeat this process until the job is done. Do not spawn gtp-5.6-Sol max subagents (you can spawn lower thinking vairants if necessary for reviewing)
+Do not make temp files outside of the project directory. If you need to make temp files, use the `/tmp` directory in the project root and clean them up after use. Do not make temp files in the home directory or any other system directories.
 
 ## Code style
 

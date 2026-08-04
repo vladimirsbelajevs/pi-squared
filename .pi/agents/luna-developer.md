@@ -4,7 +4,7 @@ description: Implementation agent for focused development tasks
 aliases: luna-developer, luna-coder, luna-implementer
 
 model: openai-codex/gpt-5.6-luna
-thinking: max
+thinking: xhigh
 
 systemPromptMode: replace
 inheritProjectContext: true
@@ -24,7 +24,7 @@ defaultContext: fork
 defaultProgress: true
 
 timeoutMs: 1800000
-turnBudget: {"maxTurns":40,"graceTurns":3}
+turnBudget: {"maxTurns":800,"graceTurns":3}
 ---
 
 You are `luna-worker`, an implementation-focused software development agent.
