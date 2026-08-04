@@ -23,7 +23,7 @@ The following major findings are already addressed and are not work items here:
 | Priority | Issue | Current status |
 | --- | --- | --- |
 | Low | Stream presentation flushes are coupled to workspace/cursor persistence | Closed |
-| Low | Timeline-wide hover state and formatter allocation | Open |
+| Low | Timeline-wide hover state and formatter allocation | Partially closed |
 | Low | Historical image previews are not browser-lazy | Open |
 
 ## Cross-cutting implementation rules
@@ -314,7 +314,7 @@ These tests protect against accidentally relying on the removed stream callback.
 
 ## 2. Remove timeline-wide hover state and reuse timestamp formatters
 
-**Status:** Open
+**Status:** Partially closed
 **Priority:** Low
 **Primary files:**
 
@@ -460,6 +460,68 @@ Profile a production application preview, not the dev server. Record:
 Capture at least three runs before and after and compare medians. The purpose is to ensure that eliminating timeline-wide reactive hover updates did not introduce a worse initial-render or DOM cost.
 
 If the always-mounted metadata causes a clearly material regression in the 200-row fixture, stop and escalate before merging. The fallback is a `MessageRow.svelte` with row-local reveal state while keeping the copy button permanently mounted and keyboard reachable; do not silently restore timeline-wide hover state or unmount the only action.
+
+### Implementation and measurement outcome — 2026-08-04
+
+This item is **partially closed**. The implementation completed the formatter reuse and removed timeline-level hover writes, but the selected always-mounted metadata strategy produced a material long-history DOM and memory regression. The fallback `MessageRow.svelte` extraction was escalated and explicitly not pursued, so the item must not be treated as fully closed.
+
+Completed behavior:
+
+- `ChatTimeline.svelte` reuses exactly two component-level `Intl.DateTimeFormat` instances.
+- `hoveredMessageId`, row enter/leave handlers, and transition-driven conditional metadata mounting were removed.
+- Hover and focus reveal are CSS-only, with coarse-pointer visibility and reduced-motion handling.
+- Copy actions are mounted before pointer interaction and remain keyboard reachable.
+- The focused component suite passed 31 tests; the full unit suite passed 230 tests; `npm run check` completed with zero errors or warnings.
+- The maintained `/demo/timeline-performance` fixture and its Playwright count assertions cover 200 conversational messages, four notices, five closed tool groups, five large fenced code blocks, six images, 200 timestamps, and 200 candidate copy actions.
+
+#### Production-preview profile
+
+Both builds used byte-identical fixture data. The baseline used the old `ChatTimeline.svelte`; the candidate used the CSS-only implementation.
+
+- Repository baseline: `fa433a7fb882`
+- Baseline component/fixture hash: `35938326371f08a570232d29a1d1ec6ce26e4737ad01a40e5d4fa514a79643f8`
+- Candidate component/fixture hash: `2fc22890c1db9668ab4a05b1d3f8719e91bea2d1639ad662e338076a969ddd97`
+- Chrome: `151.0.7922.71`, Linux x86_64
+- Viewport: 1280 × 900
+- CPU throttling: 4×; network unthrottled
+- Runs: three full runs per build
+- Per-run flow: reload, settle, hover ten alternating rows, traverse copy actions with nine Tab presses, then idle for one second
+- Build caveat: both isolated profile copies made the unrelated invalid endpoint export `MAX_PROMPT_BODY_BYTES` non-exported so the production preview could build. No application source measurement difference was introduced between baseline and candidate by that workaround.
+
+Heap values are `usedJSHeapSize` bytes.
+
+| Build | Run | LCP | INP | Initial DOM | Initial heap | Post-interaction DOM | Post-interaction heap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 1 | 9,754 ms | 25 ms | 2,520 | 8,289,065 | 2,530 | 6,601,397 |
+| Baseline | 2 | 9,125 ms | 34 ms | 2,520 | 8,308,572 | 2,530 | 6,604,681 |
+| Baseline | 3 | 9,176 ms | 36 ms | 2,520 | 8,203,925 | 2,530 | 6,609,941 |
+| **Baseline median** | — | **9,176 ms** | **34 ms** | **2,520** | **8,289,065** | **2,530** | **6,604,681** |
+| Candidate | 1 | 9,912 ms | 27 ms | 4,220 | 8,592,337 | 4,220 | 7,272,264 |
+| Candidate | 2 | 9,415 ms | 20 ms | 4,220 | 8,569,081 | 4,220 | 7,230,391 |
+| Candidate | 3 | 14,471 ms | 27 ms | 4,220 | 8,571,207 | 4,220 | 7,283,432 |
+| **Candidate median** | — | **9,912 ms** | **27 ms** | **4,220** | **8,571,207** | **4,220** | **7,272,264** |
+
+Representative single startup traces, which are not three-run medians, produced:
+
+| Main-thread event sum | Baseline | Candidate | Change |
+| --- | ---: | ---: | ---: |
+| `EvaluateScript` | 2.934 ms | 3.049 ms | +3.9% |
+| `UpdateLayoutTree` / style-recalculation proxy | 8.330 ms | 11.906 ms | +42.9% |
+| `Layout` | 18.393 ms | 18.402 ms | effectively flat |
+
+Observed interaction behavior:
+
+- The baseline started with no metadata, timestamps, or copy actions mounted. Hovering mounted one metadata block at a time and increased the DOM from 2,520 to 2,530 nodes during traversal.
+- The candidate started with 200 metadata blocks, 200 timestamps, and 200 copy actions. Hover traversal kept the DOM at 4,220 nodes and changed only CSS opacity.
+- Candidate keyboard focus revealed metadata after the 100 ms transition and Tab reached successive copy actions.
+- No console errors, interaction-triggered network requests, broad Svelte invalidation, or candidate DOM churn were observed.
+- Candidate median INP improved from 34 ms to 27 ms. Candidate median LCP was 736 ms slower, but LCP was render-delay dominated and included a 14.471-second outlier, so that difference is not attributed solely to this change.
+
+#### Closure decision and remaining work
+
+The candidate added 1,700 initial DOM nodes (**+67.5%**) and increased median post-interaction heap by approximately **10.1%**. The representative style-recalculation proxy also increased by **42.9%**. These results meet this handoff's material-regression escalation threshold even though pointer and keyboard interaction behavior improved.
+
+The CSS-only strategy therefore closes the timeline-wide hover invalidation and formatter-allocation findings only partially. Full closure would require a separately approved implementation that preserves permanently mounted, keyboard-reachable copy actions without the measured metadata DOM overhead. The documented fallback remains a carefully scoped `MessageRow.svelte` extraction with row-local reveal behavior; it is not implemented at this time.
 
 ### Acceptance criteria
 

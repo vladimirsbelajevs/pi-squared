@@ -1,5 +1,6 @@
 import { flushSync } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
+import { userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { StreamUpdateBatcher } from '$lib/harness/stream-update-batcher';
@@ -344,7 +345,67 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByText('Reasoning changed to high')).toBeVisible();
 	});
 
-	it('renders metadata and copy controls for user and assistant messages', async () => {
+	it('mounts metadata and copy controls before hover and preserves timestamp semantics', async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		const restoreClipboard = mockClipboard(writeText);
+		const base = chat();
+
+		try {
+			const screen = render(ChatTimeline, {
+				chat: chat({
+					snapshot: {
+						...base.snapshot!,
+						isStreaming: false,
+						items: [
+							{
+								id: 'user-1',
+								kind: 'message',
+								role: 'user',
+								text: 'Inspect this message.',
+								timestamp: '2026-07-28T23:35:00.000Z'
+							},
+							{
+								id: 'assistant-1',
+								kind: 'message',
+								role: 'assistant',
+								text: 'The message metadata is ready.',
+								modelName: 'GPT-5.6 Terra',
+								timestamp: '2026-07-28T23:36:00.000Z'
+							}
+						]
+					}
+				})
+			});
+
+			expect(screen.container.querySelectorAll('.message-meta-row')).toHaveLength(2);
+			expect(screen.container.querySelectorAll('.message-meta-content')).toHaveLength(2);
+			expect(screen.container.querySelectorAll('button[aria-label="Copy message"]')).toHaveLength(
+				2
+			);
+
+			const times = [...screen.container.querySelectorAll('time')];
+			expect(times).toHaveLength(2);
+			for (const time of times) {
+				expect(time.textContent?.trim()).not.toBe('');
+				expect(time.getAttribute('datetime')).toMatch(/^2026-07-28T23:3[56]:00.000Z$/);
+				expect(time.getAttribute('title')).not.toBe('');
+			}
+
+			expect(screen.container.textContent).toContain('GPT-5.6 Terra');
+			expect(screen.container.textContent).toContain('medium');
+
+			const firstCopy = screen.container.querySelector<HTMLButtonElement>(
+				'button[aria-label="Copy message"]'
+			)!;
+			await firstCopy.click();
+			await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('Inspect this message.'));
+			await expect.element(screen.getByRole('button', { name: 'Copied message' })).toBeVisible();
+		} finally {
+			restoreClipboard();
+		}
+	});
+
+	it('reveals only the hovered or focused message metadata', async () => {
 		const base = chat();
 		const screen = render(ChatTimeline, {
 			chat: chat({
@@ -352,37 +413,46 @@ describe('ChatTimeline', () => {
 					...base.snapshot!,
 					isStreaming: false,
 					items: [
-						{
-							id: 'user-1',
-							kind: 'message',
-							role: 'user',
-							text: 'Inspect this message.',
-							timestamp: '2026-07-28T23:35:00.000Z'
-						},
-						{
-							id: 'assistant-1',
-							kind: 'message',
-							role: 'assistant',
-							text: 'The message metadata is ready.',
-							modelName: 'GPT-5.6 Terra',
-							timestamp: '2026-07-28T23:36:00.000Z'
-						}
+						{ id: 'user-1', kind: 'message', role: 'user', text: 'First message.' },
+						{ id: 'assistant-1', kind: 'message', role: 'assistant', text: 'Second message.' }
 					]
 				}
 			})
 		});
 
-		expect(screen.container.querySelectorAll('.message-meta-row')).toHaveLength(2);
-		expect(screen.container.querySelectorAll('.message-meta-content')).toHaveLength(0);
+		const entries = [...screen.container.querySelectorAll<HTMLElement>('.message-entry')];
+		const metadata = [...screen.container.querySelectorAll<HTMLElement>('.message-meta-content')];
+		expect(metadata.map((element) => getComputedStyle(element).opacity)).toEqual(['0', '0']);
 
 		await screen.getByRole('group', { name: 'user message' }).hover();
-		await expect.element(screen.getByRole('button', { name: 'Copy message' })).toBeVisible();
-		expect(screen.container.querySelectorAll('.message-meta-content time')).toHaveLength(1);
-		expect(screen.container.textContent).not.toContain('Reasoning: medium');
+		await vi.waitFor(() =>
+			expect(Number(getComputedStyle(metadata[0]).opacity)).toBeGreaterThan(0.99)
+		);
+		expect(Number(getComputedStyle(metadata[1]).opacity)).toBeLessThan(0.01);
 
 		await screen.getByRole('group', { name: 'assistant message' }).hover();
-		await expect.element(screen.getByText('GPT-5.6 Terra')).toBeVisible();
-		await expect.element(screen.getByText('medium')).toBeVisible();
+		await vi.waitFor(() =>
+			expect(Number(getComputedStyle(metadata[1]).opacity)).toBeGreaterThan(0.99)
+		);
+		expect(Number(getComputedStyle(metadata[0]).opacity)).toBeLessThan(0.01);
+
+		const focusStart = document.createElement('button');
+		focusStart.type = 'button';
+		focusStart.tabIndex = 0;
+		screen.container.prepend(focusStart);
+		focusStart.focus();
+		await userEvent.tab();
+		expect(document.activeElement).toBe(entries[0].querySelector('button'));
+		await vi.waitFor(() =>
+			expect(Number(getComputedStyle(metadata[0]).opacity)).toBeGreaterThan(0.99)
+		);
+		const firstFocusedButton = document.activeElement as HTMLButtonElement;
+		expect(firstFocusedButton.matches(':focus-visible')).toBe(true);
+		await userEvent.tab();
+		expect(document.activeElement).toBe(entries[1].querySelector('button'));
+		await vi.waitFor(() =>
+			expect(Number(getComputedStyle(metadata[1]).opacity)).toBeGreaterThan(0.99)
+		);
 	});
 
 	it('renders persisted assistant text as Markdown', async () => {

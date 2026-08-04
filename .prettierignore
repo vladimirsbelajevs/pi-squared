@@ -18,3 +18,4 @@ eslint.config.js
 opencode.json
 vite.config.ts
 vitest.shims.d.ts
+/tmp/

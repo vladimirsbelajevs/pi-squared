@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { fade, fly } from 'svelte/transition';
 	import { on } from 'svelte/events';
 	import type { ChatItem } from '$lib/contracts';
 	import { buildFinalizedTimeline } from '$lib/harness/timeline';
@@ -16,8 +15,15 @@
 	let copyError = $state<string>();
 	let copiedMessageTimer: ReturnType<typeof setTimeout> | undefined;
 	const copiedCodeTimers = new WeakMap<HTMLButtonElement, ReturnType<typeof setTimeout>>();
-	let hoveredMessageId = $state<string>();
 	let selectedImage = $state<ImageViewerImage>();
+	const shortTimeFormatter = new Intl.DateTimeFormat(undefined, {
+		hour: 'numeric',
+		minute: '2-digit'
+	});
+	const fullTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+		dateStyle: 'medium',
+		timeStyle: 'short'
+	});
 	const expandedToolIds = new SvelteSet<string>();
 	let waitingForResponse = $derived(
 		chat.snapshot?.isStreaming === true &&
@@ -63,14 +69,11 @@
 			return undefined;
 		}
 
-		return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
+		return shortTimeFormatter.format(date);
 	}
 
 	function formatTimestampTitle(timestamp: string): string {
-		return new Intl.DateTimeFormat(undefined, {
-			dateStyle: 'medium',
-			timeStyle: 'short'
-		}).format(new Date(timestamp));
+		return fullTimestampFormatter.format(new Date(timestamp));
 	}
 
 	function openImageViewer(image: ImageViewerImage): void {
@@ -187,18 +190,7 @@
 		{@const role = item.role ?? 'assistant'}
 		{@const isConversational = role === 'user' || role === 'assistant'}
 		{@const timestamp = formatTimestamp(item.timestamp)}
-		{@const showMessageMeta = hoveredMessageId === item.id}
-		<div
-			class={`message-entry message-entry-${role}`}
-			role="group"
-			aria-label={`${role} message`}
-			onmouseenter={() => (hoveredMessageId = item.id)}
-			onmouseleave={() => {
-				if (hoveredMessageId === item.id) {
-					hoveredMessageId = undefined;
-				}
-			}}
-		>
+		<div class={`message-entry message-entry-${role}`} role="group" aria-label={`${role} message`}>
 			<article class={['message', `message-${role}`, isConversational && 'message-conversational']}>
 				{#if !isConversational}
 					<header>{item.label || role}</header>
@@ -228,55 +220,49 @@
 			{/if}
 			{#if item.role === 'user' || item.role === 'assistant'}
 				<div class="message-meta-row">
-					{#if showMessageMeta}
-						<div
-							class="message-meta-content"
-							in:fly={{ y: -3, duration: 140 }}
-							out:fade={{ duration: 100 }}
-						>
-							{#if item.role === 'assistant' && modelName(item)}
-								<span>{modelName(item)}</span>
-							{/if}
-							{#if item.role === 'assistant' && chat.snapshot?.thinkingLevel}
-								<span>-</span>
-								<span>{chat.snapshot.thinkingLevel}</span>
-							{/if}
-							{#if timestamp && item.timestamp}
-								<time datetime={item.timestamp} title={formatTimestampTitle(item.timestamp)}
-									>{timestamp}</time
-								>
-							{/if}
-							{#if item.text}
-								<button
-									class:copied={copiedMessageId === item.id}
-									class="copy-action"
-									type="button"
-									aria-label={copiedMessageId === item.id ? 'Copied message' : 'Copy message'}
-									title="Copy message"
-									onclick={() => copyMessage(item)}
-								>
-									<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-										<rect
-											x="7"
-											y="6"
-											width="8"
-											height="9"
-											rx="1.25"
-											stroke="currentColor"
-											stroke-width="1.5"
-										/>
-										<path
-											d="M5 12V5.25C5 4.56 5.56 4 6.25 4H12"
-											stroke="currentColor"
-											stroke-width="1.5"
-											stroke-linecap="round"
-										/>
-									</svg>
-									<span>{copiedMessageId === item.id ? 'Copied' : 'Copy'}</span>
-								</button>
-							{/if}
-						</div>
-					{/if}
+					<div class="message-meta-content">
+						{#if item.role === 'assistant' && modelName(item)}
+							<span>{modelName(item)}</span>
+						{/if}
+						{#if item.role === 'assistant' && chat.snapshot?.thinkingLevel}
+							<span>-</span>
+							<span>{chat.snapshot.thinkingLevel}</span>
+						{/if}
+						{#if timestamp && item.timestamp}
+							<time datetime={item.timestamp} title={formatTimestampTitle(item.timestamp)}
+								>{timestamp}</time
+							>
+						{/if}
+						{#if item.text}
+							<button
+								class:copied={copiedMessageId === item.id}
+								class="copy-action"
+								type="button"
+								aria-label={copiedMessageId === item.id ? 'Copied message' : 'Copy message'}
+								title="Copy message"
+								onclick={() => copyMessage(item)}
+							>
+								<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+									<rect
+										x="7"
+										y="6"
+										width="8"
+										height="9"
+										rx="1.25"
+										stroke="currentColor"
+										stroke-width="1.5"
+									/>
+									<path
+										d="M5 12V5.25C5 4.56 5.56 4 6.25 4H12"
+										stroke="currentColor"
+										stroke-width="1.5"
+										stroke-linecap="round"
+									/>
+								</svg>
+								<span>{copiedMessageId === item.id ? 'Copied' : 'Copy'}</span>
+							</button>
+						{/if}
+					</div>
 				</div>
 			{/if}
 		</div>
@@ -386,6 +372,19 @@
 		color: var(--text-muted);
 		font-size: 0.72rem;
 		white-space: nowrap;
+		opacity: 0;
+		pointer-events: none;
+		transform: translateY(-0.15rem);
+		transition:
+			opacity 100ms ease,
+			transform 100ms ease;
+	}
+
+	.message-entry:hover .message-meta-content,
+	.message-entry:focus-within .message-meta-content {
+		opacity: 1;
+		pointer-events: auto;
+		transform: none;
 	}
 
 	.copy-action {
@@ -734,7 +733,19 @@
 		}
 	}
 
+	@media (hover: none), (pointer: coarse) {
+		.message-meta-content {
+			opacity: 1;
+			pointer-events: auto;
+			transform: none;
+		}
+	}
+
 	@media (prefers-reduced-motion: reduce) {
+		.message-meta-content {
+			transition: none;
+		}
+
 		.thinking-dots i {
 			animation: none;
 		}
