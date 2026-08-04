@@ -3,7 +3,7 @@
 - **Language**: TypeScript
 - **Package Manager**: npm
 - **Add-ons**: prettier, eslint, vitest, playwright, tailwindcss, mcp,
-  sveltekit-adapter, storybook ([Svelte component tests](https://svelte.dev/docs/svelte/testing#Component-tests-with-Storybook))
+  sveltekit-adapter
 
 ## Svelte Reactivity:
 
@@ -20,11 +20,6 @@
 
 - For Bits UI development, configuration, troubleshooting, or API questions,
   read and follow [`.agents/skills/bits-ui/SKILL.md`](.agents/skills/bits-ui/SKILL.md).
-
-## Storybook component testing
-
-- For UI component stories and Storybook component tests, read and follow
-  [`.agents/skills/storybook-tests/SKILL.md`](.agents/skills/storybook-tests/SKILL.md).
 
 ## Temp files
 

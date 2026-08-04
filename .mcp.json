@@ -9,10 +9,6 @@
         "@sveltejs/mcp"
       ]
     },
-    "pi-squared-storybook-mcp": {
-      "url": "http://localhost:6006/mcp",
-      "type": "http"
-    },
     "chrome-devtools": {
       "command": "npx",
       "args": [
