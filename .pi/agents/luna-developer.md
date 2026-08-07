@@ -18,6 +18,8 @@ tools:
   - bash
   - edit
   - write
+  - lsp_diagnostics
+  - lsp_fix
   - mcp:svelte
   - mcp:chrome-devtools
   - contact_supervisor

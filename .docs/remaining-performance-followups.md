@@ -561,6 +561,25 @@ Use these merge budgets against the recorded baseline:
 
 The DOM budget is expected to allow 200 minimal buttons plus a bounded active-row metadata subtree. The heap budget is the important check on the cost of 200 component instances and their local state.
 
+#### MessageRow prototype outcome — 2026-08-04
+
+A narrow `MessageRow.svelte` prototype was implemented and profiled, then discarded because it failed the benchmark gate. The prototype kept 200 minimal copy buttons mounted, conditionally mounted supplementary metadata, passed finalized message body and attachments as typed snippets, retained the two formatters in `ChatTimeline.svelte`, and localized pointer, focus, and copy-success state. A second allocation pass replaced three reactive booleans plus a derived value with one reactive bitmask; it did not materially reduce heap usage.
+
+Both profiles used a production preview with Chrome 151 on Linux x86_64, a 1280 × 900 viewport, 4× CPU throttling, unthrottled networking, and the unchanged 200-message fixture. Five fresh isolated-context runs of the optimized prototype produced:
+
+| Run | Post-interaction DOM | Post-interaction heap |
+| ---: | ---: | ---: |
+| 1 | 2,527 | 7,621,479 bytes |
+| 2 | 2,527 | 7,338,207 bytes |
+| 3 | 2,522 | 7,416,921 bytes |
+| 4 | 2,527 | 7,349,535 bytes |
+| 5 | 2,527 | 7,356,507 bytes |
+| **Median** | **2,527** | **7,356,507 bytes** |
+
+The DOM result passed the 2,898-node budget and was effectively flat against the 2,520-node initial baseline. Keyboard traversal reached successive copy actions, supplementary metadata remained bounded to interacted rows, and sampled interaction events remained at or below 40 ms. However, median post-interaction heap exceeded the 6,934,915-byte budget by 421,592 bytes and was approximately 11.4% above the recorded 6,604,681-byte baseline. The pre-optimization profile had a 7,326,542-byte median, so the bitmask result was 0.4% higher and within measurement noise rather than an improvement.
+
+The available Chrome DevTools MCP trace summaries did not expose defensible five-run style-recalculation totals, so the style budget was not attested. The heap failure alone is a merge blocker. In accordance with the decision sequence above, the extraction source and test changes were removed. This item remains partially closed pending explicit acceptance of the CSS-only DOM cost or a separately scoped timeline-virtualization/product change.
+
 #### Required test updates if the prototype passes
 
 - Add focused `MessageRow.svelte` tests proving that every non-empty row has a copy button before hover, Tab reaches successive row buttons, focus reveals the control, exact text is copied, success resets, and failure reaches the shared alert callback.
