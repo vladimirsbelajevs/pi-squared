@@ -253,6 +253,7 @@
 						<AttachmentPreview
 							{attachment}
 							onOpen={openImageViewer}
+							loading="eager"
 							onRemove={() => removeAttachment(attachment.id)}
 							removeLabel={`Remove ${attachment.name} attachment ${index + 1}`}
 						/>

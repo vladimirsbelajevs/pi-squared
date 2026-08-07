@@ -203,7 +203,12 @@
 		{#snippet attachments()}
 			<ul class="message-attachments" aria-label={`${role} attachments`}>
 				{#each item.attachments ?? [] as attachment (attachment.id)}
-					<AttachmentPreview {attachment} onOpen={openImageViewer} />
+					<AttachmentPreview
+						{attachment}
+						onOpen={openImageViewer}
+						loading="lazy"
+						decoding="async"
+					/>
 				{/each}
 			</ul>
 		{/snippet}

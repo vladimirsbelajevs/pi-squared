@@ -203,6 +203,8 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByRole('list', { name: 'assistant attachments' })).toBeVisible();
 		const preview = attachments.querySelector<HTMLImageElement>('.attachment-preview-thumbnail');
 		expect(preview?.src).toMatch(/^data:image\/png;base64,/);
+		expect(preview).toHaveAttribute('loading', 'lazy');
+		expect(preview).toHaveAttribute('decoding', 'async');
 		await expect
 			.element(screen.getByRole('button', { name: 'Open preview of diagram.png' }))
 			.toBeVisible();
@@ -243,16 +245,32 @@ describe('ChatTimeline', () => {
 		});
 
 		const thumbnail = screen.getByRole('button', { name: 'Open preview of diagram.png' });
+		const thumbnailImage = screen.container.querySelector<HTMLImageElement>(
+			'.attachment-preview-thumbnail'
+		);
+		const thumbnailSrc = thumbnailImage?.src;
+		expect(thumbnailSrc).toMatch(/^data:image\/png;base64,/);
+
 		await thumbnail.click();
 		await expect
 			.element(screen.getByRole('dialog', { name: 'Image preview: diagram.png' }))
 			.toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Close image preview' })).toBeVisible();
+		expect(screen.container.querySelector<HTMLImageElement>('.image-viewer-image')?.src).toBe(
+			thumbnailSrc
+		);
 
 		await screen.getByRole('button', { name: 'Close image preview' }).click();
 		await vi.waitFor(() => expect(screen.container.querySelector('[role="dialog"]')).toBeNull());
 
+		thumbnailImage?.dispatchEvent(new Event('load'));
 		await thumbnail.click();
+		await expect
+			.element(screen.getByRole('dialog', { name: 'Image preview: diagram.png' }))
+			.toBeVisible();
+		expect(screen.container.querySelector<HTMLImageElement>('.image-viewer-image')?.src).toBe(
+			thumbnailSrc
+		);
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 		await vi.waitFor(() => expect(screen.container.querySelector('[role="dialog"]')).toBeNull());
 	});

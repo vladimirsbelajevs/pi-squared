@@ -20,9 +20,18 @@
 		onOpen: (image: PreviewImage) => void;
 		onRemove?: () => void;
 		removeLabel?: string;
+		loading?: 'eager' | 'lazy';
+		decoding?: 'sync' | 'async' | 'auto';
 	};
 
-	let { attachment, onOpen, onRemove, removeLabel }: Props = $props();
+	let {
+		attachment,
+		onOpen,
+		onRemove,
+		removeLabel,
+		loading = 'eager',
+		decoding = 'auto'
+	}: Props = $props();
 	let preview = $derived(attachmentDataUrl(attachment));
 
 	function attachmentName(): string {
@@ -56,6 +65,8 @@
 				class="attachment-preview-thumbnail"
 				src={preview}
 				alt={`Preview of ${attachmentName()}`}
+				{loading}
+				{decoding}
 			/>
 		</button>
 	{:else}

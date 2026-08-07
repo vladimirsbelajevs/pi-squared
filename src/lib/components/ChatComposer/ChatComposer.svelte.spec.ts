@@ -135,6 +135,7 @@ describe('ChatComposer', () => {
 			'.attachment-preview-thumbnail'
 		);
 		expect(preview?.src).toMatch(/^data:image\/png;base64,/);
+		expect(preview).toHaveAttribute('loading', 'eager');
 		await expect.element(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
 
 		await screen.getByRole('button', { name: 'Send message' }).click();
