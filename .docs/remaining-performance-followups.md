@@ -23,7 +23,7 @@ The following major findings are already addressed and are not work items here:
 | Priority | Issue | Current status |
 | --- | --- | --- |
 | Low | Stream presentation flushes are coupled to workspace/cursor persistence | Closed |
-| Low | Timeline-wide hover state and formatter allocation | Partially closed |
+| Low | Finalized message row extraction | Open |
 | Low | Historical image previews are not browser-lazy | Open |
 
 ## Cross-cutting implementation rules
@@ -312,300 +312,167 @@ These tests protect against accidentally relying on the removed stream callback.
 
 ---
 
-## 2. Remove timeline-wide hover state and reuse timestamp formatters
+## 2. Extract finalized messages into a separate component
 
-**Status:** Partially closed
-**Priority:** Low
+**Status:** Open
 **Primary files:**
 
 - `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.svelte`
+- `src/routes/(workspace)/chat/[projectId]/[sessionId]/MessageRow.svelte`
+- `src/routes/(workspace)/chat/[projectId]/[sessionId]/MessageRow.svelte.spec.ts`
 - `src/routes/(workspace)/chat/[projectId]/[sessionId]/ChatTimeline.svelte.spec.ts`
-- optional follow-up only: `src/routes/(workspace)/chat/[projectId]/[sessionId]/MessageRow.svelte`
 
 ### Goal
 
-Hovering between finalized messages must not mutate timeline-level Svelte state. The copy action must exist in the tab order before pointer interaction, and timestamp formatting must reuse formatter instances.
+Create a separate `MessageRow.svelte` component for each finalized timeline item currently rendered by the message branch in `ChatTimeline.svelte`. The extraction should give the row ownership of its shell, metadata, and message-copy interaction while leaving timeline orchestration and rich message content in `ChatTimeline.svelte`.
 
-### Chosen first implementation
+### Component boundary
 
-Use a **CSS-only reveal with always-mounted metadata/action content** in `ChatTimeline.svelte` first.
+`ChatTimeline.svelte` continues to own:
 
-Do not start by extracting `MessageRow.svelte`. The existing message branch owns extensive scoped Markdown, code-copy, reasoning, responsive, and role styling; moving it creates a large regression surface unrelated to the finding. Extract a row only if the long-history measurement shows a remaining parent invalidation problem or the always-mounted metadata DOM is unacceptable.
+- construction and keyed iteration of the finalized timeline;
+- branching for stopped rows, tool groups, notices, live tools, and streaming output;
+- Markdown rendering and delegated code-block copying;
+- reasoning markup;
+- attachment rendering and opening `ImageViewer`;
+- the shared clipboard-error alert;
+- model fallback resolution and timestamp formatting.
 
-This choice intentionally leaves rare copy-success state (`copiedMessageId`) at timeline scope. This issue is about pointer traversal, which is frequent; copying a message is not. A later row extraction may localize copy state separately if profiling justifies it.
+`MessageRow.svelte` owns:
 
-### Implementation steps
+- the finalized row's outer `role="group"` element and role-specific accessible label;
+- row layout and user/assistant role classes;
+- the metadata row and its hover, focus, touch, and reduced-motion styles;
+- assistant model, thinking-level, and timestamp display;
+- the message copy button;
+- row-local copy-success state and timer cleanup.
 
-#### 1. Reuse formatter instances
+Use typed snippet props for the content that must remain authored by `ChatTimeline.svelte`. This preserves the existing Markdown, reasoning, attachment, and code-copy behavior without moving the large rich-content style surface into the new component.
 
-Create exactly two formatter constants in the component script, outside the helper functions:
+### Proposed component API
+
+Use an API equivalent to:
 
 ```ts
-const shortTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  hour: 'numeric',
-  minute: '2-digit'
-});
-const fullTimestampFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short'
-});
+import type { Snippet } from 'svelte';
+import type { ChatItem } from '$lib/contracts';
+
+type TimestampView = {
+  datetime: string;
+  text: string;
+  title: string;
+};
+
+type Props = {
+  item: ChatItem;
+  modelName?: string;
+  thinkingLevel?: string;
+  timestamp?: TimestampView;
+  content: Snippet;
+  attachments?: Snippet;
+  onCopyMessage: (text: string) => Promise<boolean>;
+};
 ```
 
-Update `formatTimestamp()` and `formatTimestampTitle()` to call those instances. Keep the current missing/invalid timestamp guard. Do not introduce an explicit locale or change options; the output must retain the user's runtime locale and current meaning.
+The component derives `role` from `item.role ?? 'assistant'` and treats only `user` and `assistant` as conversational rows. Do not mutate `item` or introduce bindable props.
 
-A component-level allocation is sufficient because there is one timeline instance. Module-level constants are also acceptable, but are not required.
+`timestamp` is already validated and formatted by `ChatTimeline.svelte`. Keep the two existing `Intl.DateTimeFormat` instances in the timeline and pass their results into each row so formatter instances are not created per `MessageRow`.
 
-#### 2. Remove reactive hover state
+`onCopyMessage` performs the clipboard write and reports any failure through the timeline's existing shared alert. It returns `true` only when the write succeeds. `MessageRow` uses that result solely to manage its local `Copied` presentation.
 
-Delete:
+### `MessageRow.svelte` behavior
 
-- `hoveredMessageId`;
-- `showMessageMeta`;
-- `onmouseenter` and `onmouseleave` handlers on `.message-entry`;
-- the conditional block that mounts `.message-meta-content` only while hovered;
-- `fly`/`fade` imports if no other markup in this component uses them.
+Render the row using this structure:
 
-Keep `.message-meta-row` and its reserved height so revealing metadata does not shift message layout.
+```svelte
+<div class={`message-entry message-entry-${role}`} role="group" aria-label={`${role} message`}>
+  {@render content()}
+  {@render attachments?.()}
 
-#### 3. Always mount the action and reveal with CSS
-
-Always render `.message-meta-content` for user and assistant messages. Keep the copy button conditional on `item.text`; empty messages should not gain a meaningless action.
-
-Use CSS opacity/transform for visual hiding. Do not use `display: none`, `visibility: hidden`, `hidden`, `aria-hidden`, `inert`, or a conditional block for the only focusable action.
-
-The intended behavior is:
-
-```css
-.message-meta-content {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-0.15rem);
-  transition:
-    opacity 100ms ease,
-    transform 100ms ease;
-}
-
-.message-entry:hover .message-meta-content,
-.message-entry:focus-within .message-meta-content {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-}
+  {#if isConversational}
+    <div class="message-meta-row">
+      <div class="message-meta-content">
+        <!-- model, thinking level, timestamp, and copy action -->
+      </div>
+    </div>
+  {/if}
+</div>
 ```
 
-Also add a coarse-pointer/no-hover rule that leaves the metadata visible, so touch users do not need to discover an invisible target:
+Keep the following behavior:
 
-```css
-@media (hover: none), (pointer: coarse) {
-  .message-meta-content {
-    opacity: 1;
-    pointer-events: auto;
-    transform: none;
-  }
-}
-```
+- Render model and thinking level only for assistant rows.
+- Render `<time>` only when the parent supplied a valid `timestamp`; use its `datetime`, `title`, and visible `text` unchanged.
+- Render the copy action only when `item.text` is non-empty.
+- Keep the copy action mounted before pointer interaction and reveal the metadata row with `:hover` and `:focus-within` CSS.
+- Keep the coarse-pointer rule that makes metadata visible without hover.
+- Preserve `Copy message`/`Copied message` accessible labels and visible `Copy`/`Copied` text.
+- Preserve the existing 1,600 ms success duration.
+- Do not use `$effect`.
 
-Under `prefers-reduced-motion: reduce`, remove the metadata transition along with the existing animation accommodation.
+Implement copy success as row-local state:
 
-Do not add `tabindex` to the message `role="group"`; the copy button should be the tab stop. `pointer-events: none` does not remove the button from sequential keyboard focus. When Tab focuses the button, `:focus-within` reveals the row before the focus indicator is presented.
+1. Call `await onCopyMessage(item.text)`.
+2. Return without changing local state when the callback fails.
+3. On success, set a local `copied` boolean, clear any previous row timer, and schedule the reset.
+4. Use `onDestroy` to clear a pending timer so a removed row cannot retain a callback.
 
-#### 4. Preserve existing behavior
+A clipboard failure remains parent-owned because `ChatTimeline.svelte` already provides one shared `role="alert"`. The child must not render a second error message.
 
-- Keep `role="group"` and role-specific accessible labels.
-- Keep model fallback resolution, thinking-level display, `<time datetime>`, localized title, copy labels, clipboard behavior, and the shared copy error alert.
-- Keep delegated finalized-code copying and streaming Markdown behavior unchanged.
-- Do not alter tool groups, notices, stopped rows, live tools, or the streaming response as part of this item.
+### Parent integration
 
-### Focused component tests
+In `ChatTimeline.svelte`:
 
-Replace the pointer-only assumptions in `ChatTimeline.svelte.spec.ts`.
+1. Import `MessageRow.svelte`.
+2. Remove `copiedMessageId`, `copiedMessageTimer`, and the item-based `copyMessage()` function.
+3. Keep the generic `copyText()` helper for both message and code copying.
+4. Add a stable `copyMessageText(text)` helper that calls `copyText(text, 'Unable to copy the message.')` and pass it as `onCopyMessage`.
+5. Continue resolving the assistant model fallback and validating/formatting timestamps in the timeline.
+6. Define typed `content` and `attachments` snippets in the finalized item branch and pass them to `MessageRow`.
+7. Keep the article, reasoning, Markdown, plain-text message, and `AttachmentPreview` markup inside those parent-authored snippets.
+8. Leave notice, stopped, tool, live-tool, and streaming branches unchanged.
 
-The existing test currently expects zero `.message-meta-content` nodes before hover; remove that expectation. Add assertions for:
+The content snippet should contain the existing `<article>` and all of its current role, reasoning, Markdown, and plain-text branches. The optional attachments snippet should contain the current keyed attachment list and continue to call the parent's `openImageViewer` function.
 
-1. **Mounted controls:** two text messages produce two `Copy message` buttons before any hover.
-2. **Keyboard order:** start from a known focus position, use `userEvent.tab()`, and assert focus reaches the first message copy action and then the second.
-3. **Focus reveal:** after focus enters a row, wait for CSS transition completion if necessary and assert that row's metadata has visible opacity and the button has its focus-visible styling.
-4. **Pointer isolation:** hovering one row reveals that row and not the other. This is a CSS behavior assertion; do not add render-count instrumentation.
-5. **Copy behavior:** use the existing clipboard mock, activate a focused copy action, and assert exact copied text plus the `Copied message` label.
-6. **Metadata semantics:** retain assertions for assistant model, thinking level, non-empty time text, `datetime`, and title. Do not assert an exact localized display string because CI browser locales can differ.
+### Style movement
 
-The source-level contract is that `hoveredMessageId` and row mouse handlers no longer exist. Component tests should prove behavior and access, not Svelte internals.
+Move only selectors for elements created by `MessageRow.svelte`:
 
-### Long-history measurement fixture
+- `.message-entry` and `.message-entry-user`, including the mobile override;
+- `.message-meta-row` and `.message-meta-content`;
+- the row hover/focus reveal selectors;
+- `.copy-action` and its icon, hover, focus, copied, and disabled styles;
+- the coarse-pointer metadata rule;
+- the metadata transition rule under `prefers-reduced-motion`.
 
-Use a dedicated `200-message performance fixture` in the application preview or a maintained browser test harness.
+Also move the row's `content-visibility` and intrinsic-size declarations into `MessageRow.svelte`. Keep `.timeline-notice` and `.stopped-row` declarations in the timeline.
 
-Before profiling:
+Keep article, Markdown, code-block, reasoning, plain-text, and attachment selectors in `ChatTimeline.svelte`, because those elements remain authored by its snippets. Avoid converting those selectors to broad `:global(...)` rules.
 
-- create a fixture-only change that adds timestamps to representative user and assistant messages so formatter/title and `<time>` DOM are exercised;
-- retain mixed Markdown, large code blocks, notices, closed tool groups, and six images;
-- collect the baseline from the old implementation with that fixture-only change applied;
-- apply the hover/formatter implementation without changing fixture data, then collect the candidate profile;
-- update the fixture assertions in the selected test harness to include the expected metadata and copy-action counts after the controls become always mounted.
+### Test updates
 
-The baseline and candidate must render byte-for-byte-equivalent fixture data. Do not compare the current untimestamped fixture against a timestamped candidate; that would confound formatter and DOM costs with the implementation change.
+Add focused `MessageRow.svelte.spec.ts` coverage. Because the component accepts snippets, use a small Svelte test wrapper that supplies representative article and attachment content.
 
-Profile a production application preview, not the dev server. Record:
+Cover:
 
-- commit/build identifier;
-- Chrome version and OS;
-- viewport and CPU throttling;
-- fixture item/message/image counts;
-- total DOM node count;
-- initial scripting, style, and layout time;
-- pointer traversal across alternating rows;
-- keyboard traversal across several copy actions;
-- JS heap after the fixture settles.
+- user and assistant group labels and role-specific classes;
+- assistant model, thinking level, and timestamp semantics;
+- omission of assistant-only metadata for user rows;
+- omission of the copy action for empty text;
+- successful copying, the `Copied` label, timer reset, and timer replacement after repeated clicks;
+- failure leaving the button in its normal state while invoking the parent callback;
+- timer cleanup when the row is destroyed;
+- keyboard focus reaching the copy action without prior hover.
 
-Capture at least three runs before and after and compare medians. The purpose is to ensure that eliminating timeline-wide reactive hover updates did not introduce a worse initial-render or DOM cost.
+Keep integration coverage in `ChatTimeline.svelte.spec.ts` for:
 
-If the always-mounted metadata causes a clearly material regression in the 200-row fixture, stop and escalate before merging. The fallback is a `MessageRow.svelte` with row-local reveal state while keeping the copy button permanently mounted and keyboard reachable; do not silently restore timeline-wide hover state or unmount the only action.
+- resolved model fallback and formatted timestamp values passed through to the row;
+- exact message clipboard text and the shared copy-error alert;
+- Markdown and delegated code copying;
+- reasoning, attachments, and image-viewer behavior;
+- non-message timeline branches and streaming output.
 
-### Implementation and measurement outcome — 2026-08-04
-
-This item is **partially closed**. The implementation completed the formatter reuse and removed timeline-level hover writes, but the selected always-mounted metadata strategy produced a material long-history DOM and memory regression. The fallback `MessageRow.svelte` extraction was escalated and explicitly not pursued, so the item must not be treated as fully closed.
-
-Completed behavior:
-
-- `ChatTimeline.svelte` reuses exactly two component-level `Intl.DateTimeFormat` instances.
-- `hoveredMessageId`, row enter/leave handlers, and transition-driven conditional metadata mounting were removed.
-- Hover and focus reveal are CSS-only, with coarse-pointer visibility and reduced-motion handling.
-- Copy actions are mounted before pointer interaction and remain keyboard reachable.
-- The focused component suite passed 31 tests; the full unit suite passed 230 tests; `npm run check` completed with zero errors or warnings.
-- The maintained `/demo/timeline-performance` fixture and its Playwright count assertions cover 200 conversational messages, four notices, five closed tool groups, five large fenced code blocks, six images, 200 timestamps, and 200 candidate copy actions.
-
-#### Production-preview profile
-
-Both builds used byte-identical fixture data. The baseline used the old `ChatTimeline.svelte`; the candidate used the CSS-only implementation.
-
-- Repository baseline: `fa433a7fb882`
-- Baseline component/fixture hash: `35938326371f08a570232d29a1d1ec6ce26e4737ad01a40e5d4fa514a79643f8`
-- Candidate component/fixture hash: `2fc22890c1db9668ab4a05b1d3f8719e91bea2d1639ad662e338076a969ddd97`
-- Chrome: `151.0.7922.71`, Linux x86_64
-- Viewport: 1280 × 900
-- CPU throttling: 4×; network unthrottled
-- Runs: three full runs per build
-- Per-run flow: reload, settle, hover ten alternating rows, traverse copy actions with nine Tab presses, then idle for one second
-- Build caveat: both isolated profile copies made the unrelated invalid endpoint export `MAX_PROMPT_BODY_BYTES` non-exported so the production preview could build. No application source measurement difference was introduced between baseline and candidate by that workaround.
-
-Heap values are `usedJSHeapSize` bytes.
-
-| Build | Run | LCP | INP | Initial DOM | Initial heap | Post-interaction DOM | Post-interaction heap |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Baseline | 1 | 9,754 ms | 25 ms | 2,520 | 8,289,065 | 2,530 | 6,601,397 |
-| Baseline | 2 | 9,125 ms | 34 ms | 2,520 | 8,308,572 | 2,530 | 6,604,681 |
-| Baseline | 3 | 9,176 ms | 36 ms | 2,520 | 8,203,925 | 2,530 | 6,609,941 |
-| **Baseline median** | — | **9,176 ms** | **34 ms** | **2,520** | **8,289,065** | **2,530** | **6,604,681** |
-| Candidate | 1 | 9,912 ms | 27 ms | 4,220 | 8,592,337 | 4,220 | 7,272,264 |
-| Candidate | 2 | 9,415 ms | 20 ms | 4,220 | 8,569,081 | 4,220 | 7,230,391 |
-| Candidate | 3 | 14,471 ms | 27 ms | 4,220 | 8,571,207 | 4,220 | 7,283,432 |
-| **Candidate median** | — | **9,912 ms** | **27 ms** | **4,220** | **8,571,207** | **4,220** | **7,272,264** |
-
-Representative single startup traces, which are not three-run medians, produced:
-
-| Main-thread event sum | Baseline | Candidate | Change |
-| --- | ---: | ---: | ---: |
-| `EvaluateScript` | 2.934 ms | 3.049 ms | +3.9% |
-| `UpdateLayoutTree` / style-recalculation proxy | 8.330 ms | 11.906 ms | +42.9% |
-| `Layout` | 18.393 ms | 18.402 ms | effectively flat |
-
-Observed interaction behavior:
-
-- The baseline started with no metadata, timestamps, or copy actions mounted. Hovering mounted one metadata block at a time and increased the DOM from 2,520 to 2,530 nodes during traversal.
-- The candidate started with 200 metadata blocks, 200 timestamps, and 200 copy actions. Hover traversal kept the DOM at 4,220 nodes and changed only CSS opacity.
-- Candidate keyboard focus revealed metadata after the 100 ms transition and Tab reached successive copy actions.
-- No console errors, interaction-triggered network requests, broad Svelte invalidation, or candidate DOM churn were observed.
-- Candidate median INP improved from 34 ms to 27 ms. Candidate median LCP was 736 ms slower, but LCP was render-delay dominated and included a 14.471-second outlier, so that difference is not attributed solely to this change.
-
-#### Closure decision and remaining work
-
-The candidate added 1,700 initial DOM nodes (**+67.5%**) and increased median post-interaction heap by approximately **10.1%**. The representative style-recalculation proxy also increased by **42.9%**. These results meet this handoff's material-regression escalation threshold even though pointer and keyboard interaction behavior improved.
-
-The CSS-only strategy therefore closes the timeline-wide hover invalidation and formatter-allocation findings only partially. Full closure requires preserving permanently mounted, keyboard-reachable copy actions without retaining every message's complete metadata subtree.
-
-#### Recommended next step: benchmark-gated row extraction
-
-Proceed with a narrow, separately reviewable `MessageRow.svelte` follow-up, but treat it as a benchmark-first prototype rather than an automatic merge. Do not roll back formatter reuse or restore timeline-level hover state.
-
-The extraction should use this boundary:
-
-- `ChatTimeline.svelte` continues to own timeline construction, Markdown rendering, delegated code copying, reasoning markup, attachments, notices, tools, streaming output, the image viewer, and the shared copy-error alert.
-- `MessageRow.svelte` owns only the finalized conversational row shell, row-local pointer/focus state, the metadata reveal, and copy-success state/timer.
-- Pass the message body and attachments into the row as typed snippets. This keeps the large Markdown/reasoning/role style surface in `ChatTimeline.svelte` rather than moving or globalizing it. Move only selectors that style the child-owned row shell and metadata.
-- Keep the two formatter instances outside per-row component initialization. The simplest option is to retain them in `ChatTimeline.svelte` and pass the already formatted short time and title into the row. Do not allocate formatters in each `MessageRow` instance.
-
-Use a two-tier metadata DOM:
-
-1. For each non-empty user or assistant message, always mount one native copy button. It must remain in sequential tab order even while visually hidden and must become visible through `:hover`, `:focus-within`, and the existing coarse-pointer rule.
-2. Keep the always-mounted button structurally minimal. Prefer button text plus a CSS pseudo-element/mask for the icon instead of the current nested SVG subtree. The button must retain an explicit accessible name and visible `Copy`/`Copied` text.
-3. Mount model, thinking level, and `<time>` only while that row is pointer-active, focus-within, or showing copy success. Pointer/focus state must be local to that `MessageRow`; changing rows must not write reactive state in `ChatTimeline.svelte`.
-4. On touch/coarse pointers, the copy button remains visible at rest. Focusing or activating it may mount the supplementary metadata; the supplementary metadata does not need to remain mounted for all 200 rows merely to satisfy the coarse-pointer rule.
-5. Localize `copiedMessageId` into a per-row boolean/timer. Let the parent clipboard helper continue to report failures through the shared alert, and clean up a row's success timer if the row is destroyed. Do not introduce `$effect`.
-
-This deliberately avoids extracting tool rows, notices, streaming output, Markdown internals, or image-viewer behavior. It also avoids an imperative shared overlay, event-to-DOM mutation, virtualization, or restoring conditional mounting of the only keyboard action.
-
-#### Prototype and decision sequence
-
-1. Add the smallest viable `MessageRow.svelte` and update only the 200-message fixture needed to measure it.
-2. Build and profile the production preview before completing broad test refactors. Use byte-identical fixture data and the same viewport, 4× CPU throttle, hover traversal, and keyboard traversal as the recorded baseline.
-3. Collect at least five runs because the prior three-run candidate included a large LCP outlier. Compare medians and retain the traces.
-4. Continue to full component tests and merge only if the prototype meets the budgets below. If it fails, discard the extraction prototype and leave the item partially closed pending either an explicit acceptance of the current DOM cost or a separately scoped timeline-virtualization/product change. Do not proceed to a more complex imperative hover overlay as an unreviewed fallback.
-
-Use these merge budgets against the recorded baseline:
-
-- initial DOM: no more than 15% above 2,520 nodes (maximum 2,898), which requires removing at least 77% of the current candidate's 1,700 added nodes;
-- post-interaction heap: no more than 5% above 6,604,681 bytes;
-- style recalculation: no repeatable median regression greater than 15%;
-- keyboard order and copy behavior: no regression;
-- pointer/keyboard interaction latency: no material regression from the baseline median, with any variance called out rather than hidden by the median.
-
-The DOM budget is expected to allow 200 minimal buttons plus a bounded active-row metadata subtree. The heap budget is the important check on the cost of 200 component instances and their local state.
-
-#### MessageRow prototype outcome — 2026-08-04
-
-A narrow `MessageRow.svelte` prototype was implemented and profiled, then discarded because it failed the benchmark gate. The prototype kept 200 minimal copy buttons mounted, conditionally mounted supplementary metadata, passed finalized message body and attachments as typed snippets, retained the two formatters in `ChatTimeline.svelte`, and localized pointer, focus, and copy-success state. A second allocation pass replaced three reactive booleans plus a derived value with one reactive bitmask; it did not materially reduce heap usage.
-
-Both profiles used a production preview with Chrome 151 on Linux x86_64, a 1280 × 900 viewport, 4× CPU throttling, unthrottled networking, and the unchanged 200-message fixture. Five fresh isolated-context runs of the optimized prototype produced:
-
-| Run | Post-interaction DOM | Post-interaction heap |
-| ---: | ---: | ---: |
-| 1 | 2,527 | 7,621,479 bytes |
-| 2 | 2,527 | 7,338,207 bytes |
-| 3 | 2,522 | 7,416,921 bytes |
-| 4 | 2,527 | 7,349,535 bytes |
-| 5 | 2,527 | 7,356,507 bytes |
-| **Median** | **2,527** | **7,356,507 bytes** |
-
-The DOM result passed the 2,898-node budget and was effectively flat against the 2,520-node initial baseline. Keyboard traversal reached successive copy actions, supplementary metadata remained bounded to interacted rows, and sampled interaction events remained at or below 40 ms. However, median post-interaction heap exceeded the 6,934,915-byte budget by 421,592 bytes and was approximately 11.4% above the recorded 6,604,681-byte baseline. The pre-optimization profile had a 7,326,542-byte median, so the bitmask result was 0.4% higher and within measurement noise rather than an improvement.
-
-The available Chrome DevTools MCP trace summaries did not expose defensible five-run style-recalculation totals, so the style budget was not attested. The heap failure alone is a merge blocker. In accordance with the decision sequence above, the extraction source and test changes were removed. This item remains partially closed pending explicit acceptance of the CSS-only DOM cost or a separately scoped timeline-virtualization/product change.
-
-#### Required test updates if the prototype passes
-
-- Add focused `MessageRow.svelte` tests proving that every non-empty row has a copy button before hover, Tab reaches successive row buttons, focus reveals the control, exact text is copied, success resets, and failure reaches the shared alert callback.
-- Prove row isolation: pointer/focus changes in one row mount supplementary metadata only for that row and do not change sibling metadata DOM.
-- Keep `ChatTimeline.svelte.spec.ts` integration coverage for role labels, model fallback, thinking level, timestamp `datetime`/title semantics, Markdown/code copy, reasoning, attachments, and the image viewer. Do not duplicate all timeline behavior in row tests.
-- Update the performance fixture assertions from 200 always-mounted timestamps/metadata trees to 200 always-mounted copy buttons, a bounded supplementary metadata count at rest, and exactly the interacted row's details after hover/focus.
-- Run the Svelte autofixer on both components until clean, then run the focused suites, `npm run check`, `npm run lint`, the full unit suite, and the production fixture profile.
-
-### Acceptance criteria
-
-- `ChatTimeline.svelte` has no timeline-level hover state and no row enter/leave state writes.
-- Hovering a row is handled by CSS only.
-- The copy action is mounted and in sequential tab order before hover.
-- Focusing the action visibly reveals the metadata/action row.
-- Touch/coarse-pointer users receive a visible action without hover.
-- Exactly two `Intl.DateTimeFormat` instances are reused by the timeline instance, and output remains locale-aware with the same options.
-- Existing message copy, code copy, Markdown, attachments, reasoning, and image-viewer tests continue to pass.
-- The updated long-history fixture and before/after production measurements are recorded with the implementation.
-
-### Non-goals and risks
-
-- Do not virtualize the timeline in this item.
-- Do not change timestamp locale or wording.
-- Opacity-hidden metadata remains in the DOM and accessibility tree by design so its action is reachable.
-- Always-mounted metadata increases DOM size. This is why the production fixture comparison is mandatory.
-- Do not perform a broad `MessageRow` extraction without accounting for Svelte scoped styles used by both finalized and streaming messages.
+Run the Svelte autofixer on both changed components until it reports no findings, then run the focused component suites, `npm run check`, `npm run lint`, and the full unit suite.
 
 ---
 
@@ -751,7 +618,7 @@ Do not infer decode-count savings from attribute inspection alone.
 ## Suggested implementation order
 
 1. **Image policy** — smallest change; establishes the caller-specific test pattern.
-2. **Timeline hover/formatters** — accessibility-visible and requires production fixture measurement.
+2. **Message row extraction** — separates finalized row behavior from timeline orchestration.
 3. **Persistence/cursor separation** — largest correctness surface; implement only after the replay/reset tests are understood.
 
 Prefer one commit per item. If issue 2 and issue 3 both update the long-history fixture, they may share a final fixture-only commit, but their source/test changes should remain reviewable separately.

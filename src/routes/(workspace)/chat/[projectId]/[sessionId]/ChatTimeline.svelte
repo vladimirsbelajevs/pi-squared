@@ -7,13 +7,12 @@
 	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
 	import ImageViewer, { type ImageViewerImage } from '$lib/components/ImageViewer.svelte';
 	import ToolGroup, { type ToolGroupTool } from './ToolGroup.svelte';
+	import MessageRow from './MessageRow.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	type Props = { chat: ChatTab; showReasoning?: boolean; showModelChanges?: boolean };
 	let { chat, showReasoning = false, showModelChanges = false }: Props = $props();
-	let copiedMessageId = $state<string>();
 	let copyError = $state<string>();
-	let copiedMessageTimer: ReturnType<typeof setTimeout> | undefined;
 	const copiedCodeTimers = new WeakMap<HTMLButtonElement, ReturnType<typeof setTimeout>>();
 	let selectedImage = $state<ImageViewerImage>();
 	const shortTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -101,19 +100,8 @@
 		}
 	}
 
-	async function copyMessage(item: ChatItem): Promise<void> {
-		if (!item.text || !(await copyText(item.text, 'Unable to copy the message.'))) {
-			return;
-		}
-
-		copiedMessageId = item.id;
-		if (copiedMessageTimer) {
-			clearTimeout(copiedMessageTimer);
-		}
-
-		copiedMessageTimer = setTimeout(() => {
-			copiedMessageId = undefined;
-		}, 1600);
+	function copyMessageText(text: string): Promise<boolean> {
+		return copyText(text, 'Unable to copy the message.');
 	}
 
 	async function copyCodeBlock(button: HTMLButtonElement, code: string): Promise<void> {
@@ -190,7 +178,7 @@
 		{@const role = item.role ?? 'assistant'}
 		{@const isConversational = role === 'user' || role === 'assistant'}
 		{@const timestamp = formatTimestamp(item.timestamp)}
-		<div class={`message-entry message-entry-${role}`} role="group" aria-label={`${role} message`}>
+		{#snippet content()}
 			<article class={['message', `message-${role}`, isConversational && 'message-conversational']}>
 				{#if !isConversational}
 					<header>{item.label || role}</header>
@@ -211,61 +199,29 @@
 					{/if}
 				{/if}
 			</article>
-			{#if item.attachments?.length}
-				<ul class="message-attachments" aria-label={`${role} attachments`}>
-					{#each item.attachments as attachment (attachment.id)}
-						<AttachmentPreview {attachment} onOpen={openImageViewer} />
-					{/each}
-				</ul>
-			{/if}
-			{#if item.role === 'user' || item.role === 'assistant'}
-				<div class="message-meta-row">
-					<div class="message-meta-content">
-						{#if item.role === 'assistant' && modelName(item)}
-							<span>{modelName(item)}</span>
-						{/if}
-						{#if item.role === 'assistant' && chat.snapshot?.thinkingLevel}
-							<span>-</span>
-							<span>{chat.snapshot.thinkingLevel}</span>
-						{/if}
-						{#if timestamp && item.timestamp}
-							<time datetime={item.timestamp} title={formatTimestampTitle(item.timestamp)}
-								>{timestamp}</time
-							>
-						{/if}
-						{#if item.text}
-							<button
-								class:copied={copiedMessageId === item.id}
-								class="copy-action"
-								type="button"
-								aria-label={copiedMessageId === item.id ? 'Copied message' : 'Copy message'}
-								title="Copy message"
-								onclick={() => copyMessage(item)}
-							>
-								<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-									<rect
-										x="7"
-										y="6"
-										width="8"
-										height="9"
-										rx="1.25"
-										stroke="currentColor"
-										stroke-width="1.5"
-									/>
-									<path
-										d="M5 12V5.25C5 4.56 5.56 4 6.25 4H12"
-										stroke="currentColor"
-										stroke-width="1.5"
-										stroke-linecap="round"
-									/>
-								</svg>
-								<span>{copiedMessageId === item.id ? 'Copied' : 'Copy'}</span>
-							</button>
-						{/if}
-					</div>
-				</div>
-			{/if}
-		</div>
+		{/snippet}
+		{#snippet attachments()}
+			<ul class="message-attachments" aria-label={`${role} attachments`}>
+				{#each item.attachments ?? [] as attachment (attachment.id)}
+					<AttachmentPreview {attachment} onOpen={openImageViewer} />
+				{/each}
+			</ul>
+		{/snippet}
+		<MessageRow
+			{item}
+			modelName={modelName(item)}
+			thinkingLevel={chat.snapshot?.thinkingLevel}
+			timestamp={timestamp && item.timestamp
+				? {
+						datetime: item.timestamp,
+						text: timestamp,
+						title: formatTimestampTitle(item.timestamp)
+					}
+				: undefined}
+			{content}
+			attachments={item.attachments?.length ? attachments : undefined}
+			onCopyMessage={copyMessageText}
+		/>
 	{/if}
 {/each}
 
@@ -317,16 +273,10 @@
 		font-size: 0.82rem;
 	}
 
-	.message-entry,
 	.timeline-notice,
 	.stopped-row {
 		content-visibility: auto;
 		contain-intrinsic-size: auto 240px;
-	}
-
-	.message-entry {
-		max-width: 54rem;
-		margin: 0 auto 1rem;
 	}
 
 	.message {
@@ -355,69 +305,6 @@
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-	}
-
-	.message-meta-row {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		height: 1.75rem;
-	}
-
-	.message-meta-content {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 0.3rem;
-		color: var(--text-muted);
-		font-size: 0.72rem;
-		white-space: nowrap;
-		opacity: 0;
-		pointer-events: none;
-		transform: translateY(-0.15rem);
-		transition:
-			opacity 100ms ease,
-			transform 100ms ease;
-	}
-
-	.message-entry:hover .message-meta-content,
-	.message-entry:focus-within .message-meta-content {
-		opacity: 1;
-		pointer-events: auto;
-		transform: none;
-	}
-
-	.copy-action {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		border: 0;
-		border-radius: 0.25rem;
-		background: transparent;
-		color: inherit;
-		padding: 0.2rem;
-		font: inherit;
-	}
-
-	.copy-action:hover:not(:disabled),
-	.copy-action:focus-visible,
-	.copy-action.copied {
-		background: var(--surface-muted);
-		color: var(--text);
-	}
-
-	.copy-action:disabled {
-		cursor: not-allowed;
-		opacity: 0.45;
-	}
-
-	.copy-action svg {
-		width: 0.9rem;
-		height: 0.9rem;
-	}
-
-	.message-entry-user {
-		margin-left: max(0px, calc((100% - 54rem) / 2 + 7rem));
 	}
 
 	.message-user {
@@ -727,25 +614,7 @@
 		}
 	}
 
-	@media (max-width: 700px) {
-		.message-entry-user {
-			margin-left: 1.5rem;
-		}
-	}
-
-	@media (hover: none), (pointer: coarse) {
-		.message-meta-content {
-			opacity: 1;
-			pointer-events: auto;
-			transform: none;
-		}
-	}
-
 	@media (prefers-reduced-motion: reduce) {
-		.message-meta-content {
-			transition: none;
-		}
-
 		.thinking-dots i {
 			animation: none;
 		}
