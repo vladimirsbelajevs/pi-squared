@@ -10,6 +10,23 @@ const models: ModelOption[] = [
 	{ provider: 'example', id: 'plain-test', name: 'Plain Test', reasoning: false }
 ];
 
+const projects: Project[] = [
+	{
+		id: 'project-1',
+		name: 'Pi Project',
+		cwd: '/workspace/pi',
+		addedAt: '2025-01-01T00:00:00.000Z',
+		lastOpenedAt: '2025-01-01T00:00:00.000Z'
+	},
+	{
+		id: 'project-2',
+		name: 'Other Project',
+		cwd: '/workspace/other',
+		addedAt: '2025-01-02T00:00:00.000Z',
+		lastOpenedAt: '2025-01-02T00:00:00.000Z'
+	}
+];
+
 const sessions: HistoricalSession[] = [
 	{
 		projectId: 'project-1',
@@ -86,6 +103,7 @@ function chatTab(isStreaming = false): ChatTab {
 function workspace(tabs: WorkspaceTab[] = [], overrides: Record<string, unknown> = {}) {
 	return {
 		models,
+		projects,
 		sessions,
 		tabs,
 		hrefForTab: (tab: WorkspaceTab) =>
@@ -268,18 +286,122 @@ describe('WorkspaceCommandMenu', () => {
 		await expect.element(screen.getByRole('option', { name: 'Change model' })).not.toBeDisabled();
 	});
 
-	it('searches saved sessions with @ keywords and navigates to the selected session', async () => {
+	it('lists every open tab in @ mode and marks the routed tab as current', async () => {
+		const draft = newTab();
+		const chat = { ...chatTab(), id: 'chat-2', title: 'Other saved chat', projectId: 'project-2' };
+		const unassigned = {
+			...newTab(),
+			id: 'draft-2',
+			title: 'Unassigned draft',
+			draft: { ...newTab().draft, projectId: '' }
+		};
+		const screen = renderMenu({
+			tabs: [draft, chat, unassigned],
+			activeTab: draft,
+			pathname: '/new/draft-1'
+		});
+		await openMenu();
+		await screen.getByRole('combobox').fill('@');
+
+		await expect.element(screen.getByRole('option', { name: /New chat.*Current/ })).toBeVisible();
+		await expect
+			.element(screen.getByRole('option', { name: /Other saved chat.*Other Project/ }))
+			.toBeVisible();
+		await expect
+			.element(screen.getByRole('option', { name: /Unassigned draft.*No project/ }))
+			.toBeVisible();
+		expect(document.body.textContent).not.toContain('Start new chat');
+		expect(document.body.textContent).not.toContain('Refactor the parser');
+	});
+
+	it('marks the routed tab as current when the workspace has a base path', async () => {
+		const draft = newTab();
+		const state = workspace([draft], {
+			hrefForTab: (tab: WorkspaceTab) =>
+				tab.kind === 'new' ? `/base/new/${tab.id}` : `/base/chat/${tab.projectId}/${tab.sessionId}`
+		});
+		const screen = render(WorkspaceCommandMenu, {
+			workspace: state,
+			pathname: '/base/new/draft-1',
+			activeTab: draft,
+			onNew: vi.fn(),
+			onClose: vi.fn(),
+			onNavigate: vi.fn()
+		});
+		await openMenu();
+		await screen.getByRole('combobox').fill('@');
+
+		await expect.element(screen.getByRole('option', { name: /New chat.*Current/ })).toBeVisible();
+	});
+
+	it('filters @ tabs by title, project name, and project ID', async () => {
+		const draft = { ...newTab(), title: 'Parser draft' };
+		const chat = {
+			...chatTab(),
+			id: 'chat-2',
+			title: 'Deployment chat',
+			projectId: 'unlisted/project'
+		};
+		const screen = renderMenu({ tabs: [draft, chat] });
+		await openMenu();
+		const input = screen.getByRole('combobox');
+
+		await input.fill('@Parser');
+		await expect.element(screen.getByRole('option', { name: /Parser draft/ })).toBeVisible();
+		await input.fill('@Pi Project');
+		await expect.element(screen.getByRole('option', { name: /Parser draft/ })).toBeVisible();
+		await input.fill('@unlisted/project');
+		await expect
+			.element(screen.getByRole('option', { name: /Deployment chat.*unlisted\/project/ }))
+			.toBeVisible();
+	});
+
+	it('selecting an open draft or chat closes the menu and navigates to encoded routes', async () => {
+		const draft = { ...newTab(), id: 'draft/one', title: 'Draft with slash' };
+		const chat = {
+			...chatTab(),
+			id: 'chat-2',
+			title: 'Chat with slash',
+			projectId: 'project/two',
+			sessionId: 'session/two'
+		};
+		const onNavigate = vi.fn();
+		const screen = renderMenu({ tabs: [draft, chat], onNavigate });
+		await openMenu();
+		const input = screen.getByRole('combobox');
+
+		await input.fill('@Draft with slash');
+		await screen.getByRole('option', { name: /Draft with slash/ }).click();
+		expect(onNavigate).toHaveBeenCalledWith('/new/draft%2Fone');
+		await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+
+		await openMenu();
+		await input.fill('@Chat with slash');
+		await screen.getByRole('option', { name: /Chat with slash/ }).click();
+		expect(onNavigate).toHaveBeenCalledWith('/chat/project%2Ftwo/session%2Ftwo');
+		await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+	});
+
+	it('shows the open-tab empty state when @ search has no matches', async () => {
+		const screen = renderMenu({ tabs: [] });
+		await openMenu();
+		await screen.getByRole('combobox').fill('@missing');
+
+		await expect.element(screen.getByText('No open tabs match this search.')).toBeVisible();
+	});
+
+	it('searches saved sessions with ! keywords and navigates to the selected session', async () => {
 		const onNavigate = vi.fn();
 		const screen = renderMenu({ onNavigate });
 		await openMenu();
 		const input = screen.getByRole('combobox');
 
-		await input.fill('@');
+		await input.fill('!');
 		await expect.element(screen.getByRole('option', { name: /Refactor the parser/ })).toBeVisible();
 		await expect
 			.element(screen.getByRole('option', { name: /Review deployment settings/ }))
 			.toBeVisible();
-		await input.fill('@deployment');
+		await input.fill('!deployment');
 		await expect
 			.element(screen.getByRole('option', { name: /Review deployment settings/ }))
 			.toBeVisible();
@@ -289,7 +411,7 @@ describe('WorkspaceCommandMenu', () => {
 		expect(onNavigate).toHaveBeenCalledWith('/chat/project-2/session-2');
 	});
 
-	it('matches @ searches by session name, first message, and project name', async () => {
+	it('matches ! searches by session name, first message, and project name', async () => {
 		const fieldSessions: HistoricalSession[] = [
 			{
 				...sessions[0],
@@ -324,16 +446,16 @@ describe('WorkspaceCommandMenu', () => {
 		await openMenu();
 		const input = screen.getByRole('combobox');
 
-		await input.fill('@NameOnly');
+		await input.fill('!NameOnly');
 		await expect.element(screen.getByRole('option', { name: /NameOnly/ })).toBeVisible();
-		await input.fill('@FirstOnly');
+		await input.fill('!FirstOnly');
 		await expect.element(screen.getByRole('option', { name: /First session/ })).toBeVisible();
-		await input.fill('@ProjectOnly');
+		await input.fill('!ProjectOnly');
 		await expect.element(screen.getByRole('option', { name: /Another session/ })).toBeVisible();
 		expect(document.body.textContent).not.toContain('Start new chat');
 	});
 
-	it('shows an empty state when @ search has no saved-session matches', async () => {
+	it('shows an empty state when ! search has no saved-session matches', async () => {
 		const state = workspace([], { sessions: [] });
 		const screen = render(WorkspaceCommandMenu, {
 			workspace: state,
@@ -343,7 +465,7 @@ describe('WorkspaceCommandMenu', () => {
 			onNavigate: vi.fn()
 		});
 		await openMenu();
-		await screen.getByRole('combobox').fill('@missing');
+		await screen.getByRole('combobox').fill('!missing');
 
 		await expect.element(screen.getByText('No saved sessions match this search.')).toBeVisible();
 	});

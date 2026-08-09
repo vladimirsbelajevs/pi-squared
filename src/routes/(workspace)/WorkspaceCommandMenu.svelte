@@ -65,7 +65,26 @@
 			: undefined
 	);
 	let thinkingDisabled = $derived(chatBusy || selectedModel?.reasoning === false);
-	let atMode = $derived(page === 'root' && query.startsWith('@'));
+	let sessionMode = $derived(page === 'root' && query.startsWith('!'));
+	let tabMode = $derived(page === 'root' && query.startsWith('@'));
+	let openTabEntries = $derived.by(() =>
+		workspace.tabs.map((tab) => {
+			const projectId = tab.kind === 'new' ? tab.draft.projectId : tab.projectId;
+			const projectName = projectId
+				? workspace.projects.find((project) => project.id === projectId)?.name ||
+					(tab.kind === 'chat' ? tab.snapshot?.project.name : undefined)
+				: undefined;
+			const projectLabel = projectName || projectId || 'No project';
+
+			return {
+				tab,
+				title: tab.title,
+				projectId,
+				projectLabel,
+				pathname: workspace.hrefForTab(tab)
+			};
+		})
+	);
 
 	function handleKeydown(event: KeyboardEvent): void {
 		if (
@@ -130,7 +149,9 @@
 
 	function filterCommand(value: string, search: string, keywords?: string[]): number {
 		const normalizedSearch =
-			page === 'root' && search.startsWith('@') ? search.slice(1).trim() : search;
+			page === 'root' && (search.startsWith('@') || search.startsWith('!'))
+				? search.slice(1).trim()
+				: search;
 
 		return computeCommandScore(value, normalizedSearch, keywords);
 	}
@@ -169,6 +190,16 @@
 		);
 	}
 
+	function tabPath(tab: WorkspaceTab): Pathname {
+		return tab.kind === 'new'
+			? `/new/${encodeURIComponent(tab.id)}`
+			: `/chat/${encodeURIComponent(tab.projectId)}/${encodeURIComponent(tab.sessionId)}`;
+	}
+
+	function selectTab(tab: WorkspaceTab): void {
+		navigate(tabPath(tab));
+	}
+
 	function sessionTitle(session: HistoricalSession): string {
 		return session.name || session.firstMessage || 'Untitled session';
 	}
@@ -184,7 +215,8 @@
 				>Workspace command menu</Dialog.Title
 			>
 			<Dialog.Description class="command-menu-description" data-command-menu>
-				Search workspace actions, model settings, and saved sessions.
+				Search workspace actions, model settings, open tabs with @tabs, and saved sessions with
+				!history.
 			</Dialog.Description>
 
 			<Command.Root
@@ -207,7 +239,7 @@
 							? 'Change model…'
 							: page === 'thinking'
 								? 'Change thinking mode…'
-								: 'Search commands or @sessions…'}
+								: 'Search commands, @tabs, or !history…'}
 						onkeydown={handleInputKeydown}
 					/>
 				</div>
@@ -215,8 +247,10 @@
 				<Command.List class="command-menu-list">
 					<Command.Viewport>
 						<Command.Empty class="command-menu-empty">
-							{#if atMode}
+							{#if sessionMode}
 								No saved sessions match this search.
+							{:else if tabMode}
+								No open tabs match this search.
 							{:else if page === 'model'}
 								No models are loaded.
 							{:else if page === 'thinking'}
@@ -233,7 +267,7 @@
 						{/if}
 
 						{#if page === 'root'}
-							{#if atMode}
+							{#if sessionMode}
 								<Command.Group value="saved-sessions">
 									<Command.GroupHeading>Saved sessions</Command.GroupHeading>
 									<Command.GroupItems>
@@ -247,6 +281,28 @@
 													<strong>{sessionTitle(session)}</strong>
 													<small>{session.projectName}</small>
 												</span>
+											</Command.Item>
+										{/each}
+									</Command.GroupItems>
+								</Command.Group>
+							{:else if tabMode}
+								<Command.Group value="open-tabs">
+									<Command.GroupHeading>Open tabs</Command.GroupHeading>
+									<Command.GroupItems>
+										{#each openTabEntries as entry (entry.tab.id)}
+											<Command.Item
+												value={entry.tab.id}
+												keywords={[entry.title, entry.projectLabel, entry.projectId]}
+												aria-label={`${entry.title} (${entry.projectLabel})${pathname === entry.pathname ? ' Current' : ''}`}
+												onSelect={() => selectTab(entry.tab)}
+											>
+												<span class="command-item-copy">
+													<strong>{entry.title}</strong>
+													<small>{entry.projectLabel}</small>
+												</span>
+												{#if pathname === entry.pathname}
+													<span class="command-current">Current</span>
+												{/if}
 											</Command.Item>
 										{/each}
 									</Command.GroupItems>
