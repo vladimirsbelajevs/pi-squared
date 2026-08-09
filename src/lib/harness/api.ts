@@ -9,6 +9,8 @@ import type {
 	RuntimeCheckpoint,
 	SlashCommand,
 	StreamMessage,
+	SubagentRunsResponse,
+	SubagentTimelineResponse,
 	ThinkingLevel
 } from '$lib/contracts';
 
@@ -53,6 +55,31 @@ export function listProjects(): Promise<{ projects: Project[] }> {
 
 export function listModels(): Promise<{ models: ModelOption[] }> {
 	return request('/api/models');
+}
+
+export function listSubagentRuns(
+	projectId: string,
+	sessionId: string,
+	signal?: AbortSignal
+): Promise<SubagentRunsResponse> {
+	const query = new URLSearchParams({ sessionId });
+
+	return request(`/api/projects/${encodeURIComponent(projectId)}/subagents?${query.toString()}`, {
+		signal
+	});
+}
+
+export function getSubagentTimeline(
+	projectId: string,
+	sessionId: string,
+	childSessionId: string,
+	signal?: AbortSignal
+): Promise<SubagentTimelineResponse> {
+	const query = new URLSearchParams({ sessionId, childSessionId });
+
+	return request(`/api/projects/${encodeURIComponent(projectId)}/subagents?${query.toString()}`, {
+		signal
+	});
 }
 
 export function listSessions(): Promise<{ sessions: HistoricalSession[] }> {

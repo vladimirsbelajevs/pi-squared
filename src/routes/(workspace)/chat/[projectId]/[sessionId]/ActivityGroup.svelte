@@ -8,6 +8,7 @@
 	type Props = {
 		chatId: string;
 		activityId: string;
+		activityAliasIds?: string[];
 		entries: FinalActivityEntry[];
 		liveTools?: ToolGroupTool[];
 		liveToolForCallId?: (callId: string) => StreamingTool | undefined;
@@ -18,6 +19,7 @@
 	let {
 		chatId,
 		activityId,
+		activityAliasIds = [],
 		entries,
 		liveTools = [],
 		liveToolForCallId,
@@ -30,7 +32,10 @@
 		return `${chatId}:activity:${activityId}`;
 	}
 
-	let groupOpen = $derived(expandedActivityIds.has(activityKey()));
+	let groupOpen = $derived(
+		expandedActivityIds.has(activityKey()) ||
+			activityAliasIds.some((alias) => expandedActivityIds.has(`${chatId}:activity:${alias}`))
+	);
 	let visibleEntries = $derived(entries.filter((entry) => entry.kind === 'tools' || showReasoning));
 	let hasVisibleEntries = $derived(visibleEntries.length > 0 || liveTools.length > 0);
 	let toolCount = $derived(
@@ -45,6 +50,9 @@
 			expandedActivityIds.add(activityKey());
 		} else {
 			expandedActivityIds.delete(activityKey());
+			for (const alias of activityAliasIds) {
+				expandedActivityIds.delete(`${chatId}:activity:${alias}`);
+			}
 		}
 	}
 

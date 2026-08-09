@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { on } from 'svelte/events';
-	import type { ChatItem } from '$lib/contracts';
-	import { buildFinalizedTimeline, type FinalActivityEntry } from '$lib/harness/timeline';
+	import type { ChatItem, SubagentRun } from '$lib/contracts';
+	import { listSubagentRuns } from '$lib/harness/api';
+	import {
+		buildFinalizedTimeline,
+		inferRunningSubagentRuns,
+		shouldContinueSubagentPolling,
+		type FinalActivityEntry
+	} from '$lib/harness/timeline';
 	import type { ChatTab } from '$lib/harness/types';
 	import { renderAssistantMarkdown, renderStreamingMarkdown } from '$lib/markdown';
 	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
@@ -11,10 +17,51 @@
 	import type { ToolGroupTool } from './ToolGroup.svelte';
 	import MessageRow from './MessageRow.svelte';
 	import ReasoningMarkdown from './ReasoningMarkdown.svelte';
+	import SubagentCard from './SubagentCard.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 
-	type Props = { chat: ChatTab; showReasoning?: boolean; showModelChanges?: boolean };
-	let { chat, showReasoning = false, showModelChanges = false }: Props = $props();
+	type Props = {
+		chat: ChatTab;
+		showReasoning?: boolean;
+		showModelChanges?: boolean;
+		showSubagentCards?: boolean;
+		subagentRuns?: SubagentRun[];
+	};
+	let {
+		chat,
+		showReasoning = false,
+		showModelChanges = false,
+		showSubagentCards = true,
+		subagentRuns: providedSubagentRuns = []
+	}: Props = $props();
+	let fetchedSubagentRuns = $state<SubagentRun[] | undefined>();
+	let discoveredSubagentRuns = $derived(fetchedSubagentRuns ?? providedSubagentRuns);
+	let inferredSubagentRuns = $derived(
+		inferRunningSubagentRuns([
+			...(chat.snapshot?.items ?? []),
+			{
+				id: `live-subagents-${chat.id}`,
+				kind: 'message',
+				role: 'assistant',
+				text: '',
+				toolCalls: chat.streamTools
+					.filter((tool) => tool.name === 'subagent')
+					.map((tool) => ({
+						id: tool.id,
+						name: tool.name,
+						arguments: tool.arguments ?? '{}'
+					}))
+			}
+		])
+	);
+	let subagentRuns = $derived.by(() => {
+		const discoveredToolIds = new Set(discoveredSubagentRuns.map((run) => run.toolCallId));
+
+		return [
+			...discoveredSubagentRuns,
+			...inferredSubagentRuns.filter((run) => !discoveredToolIds.has(run.toolCallId))
+		];
+	});
 	let copyError = $state<string>();
 	const copiedCodeTimers = new WeakMap<HTMLButtonElement, ReturnType<typeof setTimeout>>();
 	let selectedImage = $state<ImageViewerImage>();
@@ -35,7 +82,12 @@
 			chat.permissionRequests.length === 0
 	);
 	let timeline = $derived.by(() =>
-		buildFinalizedTimeline(chat.snapshot?.items ?? [], chat.pendingUserMessages, showModelChanges)
+		buildFinalizedTimeline(
+			chat.snapshot?.items ?? [],
+			chat.pendingUserMessages,
+			showModelChanges,
+			showSubagentCards ? subagentRuns : []
+		)
 	);
 	let finalizedToolCallIds = $derived(
 		new Set(
@@ -63,6 +115,88 @@
 	});
 	let showLiveActivity = $derived(liveActivityEntries.length > 0 || liveTools.length > 0);
 	let liveActivityId = $derived(liveActivityAnchorId());
+	let lastFinalActivityId = $derived.by(
+		() => timeline.filter((entry) => entry.kind === 'activity').at(-1)?.id
+	);
+	type RenderTimelineEntry =
+		| (typeof timeline)[number]
+		| {
+				id: string;
+				kind: 'live-activity';
+				entries: FinalActivityEntry[];
+				liveTools: ToolGroupTool[];
+		  }
+		| { id: string; kind: 'subagent-card'; run: SubagentRun };
+	let renderedTimeline = $derived.by(() => {
+		const entries: RenderTimelineEntry[] = [...timeline];
+		if (showLiveActivity) {
+			entries.push({
+				id: `live-activity-${chat.id}`,
+				kind: 'live-activity',
+				entries: liveActivityEntries,
+				liveTools: liveToolGroupTools()
+			});
+		}
+
+		for (const run of subagentRuns) {
+			if (showSubagentCards && liveTools.some((tool) => tool.id === run.toolCallId)) {
+				entries.push({
+					id: `subagent-card-${run.toolCallId}:${run.childId}`,
+					kind: 'subagent-card',
+					run
+				});
+			}
+		}
+
+		return entries;
+	});
+
+	function hasSubagentTools(): boolean {
+		return (
+			chat.streamTools.some((tool) => tool.name === 'subagent') ||
+			(chat.snapshot?.items ?? []).some((item) =>
+				item.toolCalls?.some((tool) => tool.name === 'subagent')
+			)
+		);
+	}
+
+	function refreshSubagents(node: HTMLElement): () => void {
+		void node;
+		const controller = new AbortController();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let disposed = false;
+		const refresh = async (): Promise<void> => {
+			try {
+				const response = await listSubagentRuns(chat.projectId, chat.sessionId, controller.signal);
+				fetchedSubagentRuns = response.runs;
+				if (
+					!disposed &&
+					shouldContinueSubagentPolling(response.runs, subagentRuns, inferredSubagentRuns)
+				) {
+					timer = setTimeout(() => void refresh(), Math.max(250, response.freshForMs));
+				}
+			} catch {
+				// Empty/error responses are normal while the live tool result is still being
+				// persisted. Keep retrying while the local projection still has a running launch.
+				if (
+					!disposed &&
+					shouldContinueSubagentPolling(undefined, subagentRuns, inferredSubagentRuns)
+				) {
+					timer = setTimeout(() => void refresh(), 1000);
+				}
+			}
+		};
+
+		void refresh();
+
+		return () => {
+			disposed = true;
+			controller.abort();
+			if (timer !== undefined) {
+				clearTimeout(timer);
+			}
+		};
+	}
 
 	function liveActivityAnchorId(): string {
 		const pendingUserMessage = chat.pendingUserMessages.at(-1);
@@ -77,7 +211,9 @@
 			}
 		}
 
-		return `activity-${chat.streamTools[0]?.id ?? 'live'}`;
+		// Do not derive this from the first live tool: reasoning-only → first-tool and
+		// partial finalization must retain the same disclosure key and expansion state.
+		return `activity-live-${chat.id}`;
 	}
 
 	function liveToolForCallId(callId: string) {
@@ -188,6 +324,12 @@
 	}
 </script>
 
+<div
+	class="subagent-poll-anchor"
+	aria-hidden="true"
+	{@attach showSubagentCards && hasSubagentTools() ? refreshSubagents : undefined}
+></div>
+
 {#if chat.snapshot?.modelFallbackMessage}
 	<p class="fallback-error">{chat.snapshot.modelFallbackMessage}</p>
 {/if}
@@ -196,19 +338,34 @@
 	<p class="copy-error" role="alert">{copyError}</p>
 {/if}
 
-{#each timeline as entry (entry.id)}
+{#each renderedTimeline as entry (entry.id)}
 	{#if entry.kind === 'stopped'}
 		<p class="stopped-row" role="status">Stopped</p>
 	{:else if entry.kind === 'activity'}
 		<ActivityGroup
 			chatId={chat.id}
 			activityId={entry.id}
+			activityAliasIds={!chat.snapshot?.isStreaming && entry.id === lastFinalActivityId
+				? [liveActivityId]
+				: undefined}
 			entries={entry.entries}
 			{liveToolForCallId}
 			{showReasoning}
 			{expandedActivityIds}
 			{expandedToolIds}
 		/>
+	{:else if entry.kind === 'live-activity'}
+		<ActivityGroup
+			chatId={chat.id}
+			activityId={liveActivityId}
+			entries={entry.entries}
+			liveTools={entry.liveTools}
+			{showReasoning}
+			{expandedActivityIds}
+			{expandedToolIds}
+		/>
+	{:else if entry.kind === 'subagent-card'}
+		<SubagentCard run={entry.run} projectId={chat.projectId} parentSessionId={chat.sessionId} />
 	{:else if entry.item.kind === 'notice'}
 		<p class="timeline-notice">{entry.item.text}</p>
 	{:else}
@@ -264,18 +421,6 @@
 		/>
 	{/if}
 {/each}
-
-{#if showLiveActivity}
-	<ActivityGroup
-		chatId={chat.id}
-		activityId={liveActivityId}
-		entries={liveActivityEntries}
-		liveTools={liveToolGroupTools()}
-		{showReasoning}
-		{expandedActivityIds}
-		{expandedToolIds}
-	/>
-{/if}
 
 {#if showTimelineWorkingIndicator}
 	<div class="thinking-indicator" role="status">

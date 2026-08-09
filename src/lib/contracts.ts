@@ -113,6 +113,37 @@ export interface ChatToolCall {
 	arguments: string;
 }
 
+export type SubagentRunStatus = 'running' | 'completed' | 'failed' | 'paused' | 'stopped';
+
+/** Browser-safe identity and lifecycle projection for one delegated child. */
+export interface SubagentRun {
+	/** Stable parent run identity, or a conservative owning-call fallback for legacy data. */
+	runId: string;
+	/** Stable child identity within the run. */
+	childId: string;
+	/** The parent assistant tool call that launched this child. */
+	toolCallId: string;
+	agent: string;
+	task?: string;
+	status: SubagentRunStatus;
+	/** Opaque session ID; never a filesystem path. */
+	childSessionId?: string;
+	/** False when a terminal run has no persisted Pi session (for example external CLI). */
+	timelineAvailable?: boolean;
+}
+
+export interface SubagentRunsResponse {
+	runs: SubagentRun[];
+	freshForMs: number;
+}
+
+export interface SubagentTimelineResponse {
+	status: SubagentRunStatus;
+	available: boolean;
+	initialized: boolean;
+	items: ChatItem[];
+}
+
 export type ToolStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface ChatItem {

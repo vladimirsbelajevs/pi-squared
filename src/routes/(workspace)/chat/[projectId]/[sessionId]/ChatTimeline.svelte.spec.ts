@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { StreamUpdateBatcher } from '$lib/harness/stream-update-batcher';
 import { buildFinalizedTimeline } from '$lib/harness/timeline';
-import type { ChatItem } from '$lib/contracts';
+import type { ChatItem, SubagentRun } from '$lib/contracts';
 import type { ChatTab } from '$lib/harness/types';
 import ChatTimeline from './ChatTimeline.svelte';
 
@@ -74,6 +74,78 @@ describe('ChatTimeline', () => {
 
 		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
 		await expect.element(screen.getByRole('status')).toHaveTextContent('Working');
+	});
+
+	it('places subagent cards after their activity while preserving the raw tool row', async () => {
+		const base = chat();
+		const run: SubagentRun = {
+			runId: 'run-1',
+			childId: 'index-0',
+			toolCallId: 'subagent-call',
+			agent: 'worker',
+			task: 'Inspect the feature',
+			status: 'running'
+		};
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-tools',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							toolCalls: [
+								{ id: 'subagent-call', name: 'subagent', arguments: '{"agent":"worker"}' }
+							]
+						},
+						{
+							id: 'tool-result',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'subagent-call',
+							text: 'running'
+						}
+					]
+				}
+			}),
+			subagentRuns: [run]
+		});
+
+		const activity = screen.container.querySelector('.activity-group');
+		const card = screen.container.querySelector('.subagent-card');
+		expect(activity).not.toBeNull();
+		expect(card).not.toBeNull();
+		expect(activity!.compareDocumentPosition(card!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+		await screen.getByText('Agent activity · 1 tool').click();
+		await vi.waitFor(() =>
+			expect(screen.container.querySelector('.tool-group-summary')).not.toBeNull()
+		);
+		screen.container.querySelector<HTMLElement>('.tool-group-summary')?.click();
+		await expect.element(screen.getByText('subagent')).toBeVisible();
+		await expect.element(screen.getByText('Working')).toBeVisible();
+		await screen.getByRole('button', { name: 'worker: Working' }).click();
+		await expect.element(screen.getByRole('dialog')).toBeVisible();
+		await expect.element(screen.getByText('Initializing child session…')).toBeVisible();
+		expect(screen.container.querySelector('textarea')).toBeNull();
+		await screen.getByRole('button', { name: 'Close child timeline' }).click();
+
+		await screen.rerender({
+			subagentRuns: [{ ...run, status: 'completed', timelineAvailable: false }]
+		});
+		await screen.getByRole('button', { name: 'worker: Completed' }).click();
+		await expect.element(screen.getByText('Timeline unavailable')).toBeVisible();
+		await screen.getByRole('button', { name: 'Close child timeline' }).click();
+
+		await screen.rerender({
+			subagentRuns: [{ ...run, status: 'completed', childSessionId: 'child-1' }]
+		});
+		expect(screen.container.querySelector('.subagent-card .pi-working-spinner')).toBeNull();
+		await expect
+			.element(screen.container.querySelector('.subagent-card-label') as HTMLElement)
+			.toBeVisible();
 	});
 
 	it('contains off-screen finalized timeline rows', () => {
