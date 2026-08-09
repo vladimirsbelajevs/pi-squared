@@ -1,7 +1,22 @@
 <script lang="ts">
+	import { afterNavigate } from '$app/navigation';
 	import Switch from '$lib/components/Switch.svelte';
 	import { THEME_LABELS, workspace } from '$lib/harness/workspace.svelte';
 	import type { Theme } from '$lib/harness/types';
+
+	let notificationStatusText = $derived(
+		workspace.notificationPermission === 'unsupported'
+			? 'This browser does not support system notifications.'
+			: workspace.notificationPermission === 'granted'
+				? 'Browser permission granted.'
+				: workspace.notificationPermission === 'denied'
+					? 'Permission was denied. Change it in your browser site settings.'
+					: 'Permission has not been requested.'
+	);
+	let systemNotificationToggleDisabled = $derived(workspace.notificationPermission !== 'granted');
+	let systemTestDisabled = $derived(
+		workspace.notificationPermission !== 'granted' || !workspace.systemNotificationsEnabled
+	);
 
 	function handleShowReasoningChange(checked: boolean): void {
 		workspace.setShowReasoning(checked);
@@ -10,6 +25,30 @@
 	function handleShowModelChangesChange(checked: boolean): void {
 		workspace.setShowModelChanges(checked);
 	}
+
+	function handleSoundsChange(checked: boolean): void {
+		workspace.setSoundsEnabled(checked);
+	}
+
+	function handleCompletionChange(checked: boolean): void {
+		workspace.setNotifyOnCompletion(checked);
+	}
+
+	function handlePermissionChange(checked: boolean): void {
+		workspace.setNotifyOnPermission(checked);
+	}
+
+	function handleSystemNotificationsChange(checked: boolean): void {
+		workspace.setSystemNotificationsEnabled(checked);
+	}
+
+	async function requestSystemNotificationPermission(): Promise<void> {
+		await workspace.requestSystemNotificationPermission();
+	}
+
+	afterNavigate(() => {
+		workspace.refreshNotificationPermission();
+	});
 </script>
 
 <h1 class="visually-hidden">Settings</h1>
@@ -55,6 +94,84 @@
 				label="Display model changes in chat"
 				onchange={handleShowModelChangesChange}
 			/>
+		</div>
+	</div>
+</section>
+
+<section class="settings-card" aria-labelledby="notifications-heading">
+	<h2 id="notifications-heading">Notifications</h2>
+	<div class="display-preferences">
+		<div class="display-preference">
+			<div class="display-copy">
+				<strong>Enable notification sounds</strong>
+				<small>Play a sound for enabled notification events.</small>
+			</div>
+			<Switch
+				checked={workspace.soundsEnabled}
+				label="Enable notification sounds"
+				onchange={handleSoundsChange}
+			/>
+		</div>
+		<div class="display-preference">
+			<div class="display-copy">
+				<strong>Notify when agents complete</strong>
+				<small>Use the selected sound and system notification channels.</small>
+			</div>
+			<Switch
+				checked={workspace.notifyOnCompletion}
+				label="Notify when agents complete"
+				onchange={handleCompletionChange}
+			/>
+		</div>
+		<div class="display-preference">
+			<div class="display-copy">
+				<strong>Notify when permission is required</strong>
+				<small>Alert you when an agent is waiting for permission.</small>
+			</div>
+			<Switch
+				checked={workspace.notifyOnPermission}
+				label="Notify when permission is required"
+				onchange={handlePermissionChange}
+			/>
+		</div>
+		<div class="notification-actions">
+			<button type="button" onclick={() => workspace.testCompletionSound()}>
+				Test completion sound
+			</button>
+		</div>
+		<div class="system-notification-preference">
+			<div class="display-preference">
+				<div class="display-copy">
+					<strong>Enable system notifications</strong>
+					<small id="notification-permission-status" role="status" aria-live="polite">
+						{notificationStatusText}
+					</small>
+				</div>
+				<Switch
+					checked={workspace.systemNotificationsEnabled}
+					label="Enable system notifications"
+					disabled={systemNotificationToggleDisabled}
+					onchange={handleSystemNotificationsChange}
+				/>
+			</div>
+			{#if workspace.notificationPermission === 'unsupported'}
+				<p class="notification-help">System notifications are unavailable in this browser.</p>
+			{:else if workspace.notificationPermission === 'denied'}
+				<p class="notification-help">
+					Notifications are blocked. Allow them in your browser or site settings, then return here.
+				</p>
+			{:else if workspace.notificationPermission !== 'granted'}
+				<button type="button" onclick={requestSystemNotificationPermission}>
+					Allow system notifications
+				</button>
+			{/if}
+			<button
+				type="button"
+				disabled={systemTestDisabled}
+				onclick={() => workspace.testSystemNotification()}
+			>
+				Test system notification
+			</button>
 		</div>
 	</div>
 </section>
@@ -187,8 +304,44 @@
 		min-width: 0;
 	}
 
-	.display-copy small {
+	.display-copy small,
+	.notification-help {
 		color: var(--text-muted);
 		font-size: 0.82rem;
+	}
+
+	.system-notification-preference {
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.notification-actions {
+		display: flex;
+		gap: 0.75rem;
+	}
+
+	.notification-actions button,
+	.system-notification-preference button {
+		width: fit-content;
+		border: 1px solid var(--border);
+		border-radius: 0.4rem;
+		background: var(--surface-muted);
+		color: var(--text);
+		padding: 0.55rem 0.75rem;
+	}
+
+	.notification-actions button:hover,
+	.system-notification-preference button:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+
+	.notification-actions button:disabled,
+	.system-notification-preference button:disabled {
+		cursor: not-allowed;
+		opacity: 0.55;
+	}
+
+	.notification-help {
+		margin: 0;
 	}
 </style>

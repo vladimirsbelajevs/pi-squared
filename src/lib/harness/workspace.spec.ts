@@ -6,6 +6,7 @@ import type {
 	RuntimeMutation,
 	StreamMessage
 } from '$lib/contracts';
+import type { NotificationService } from '$lib/client-notifications';
 
 const api = vi.hoisted(() => ({
 	abortRuntime: vi.fn(),
@@ -208,7 +209,11 @@ beforeEach(() => {
 	storageValues = new Map<string, string>();
 	setItem = vi.fn((key: string, value: string) => storageValues.set(key, value));
 	removeItem = vi.fn((key: string) => storageValues.delete(key));
-	vi.stubGlobal('document', { documentElement: { dataset: {} } });
+	vi.stubGlobal('document', {
+		documentElement: { dataset: {} },
+		visibilityState: 'visible',
+		hasFocus: () => true
+	});
 	vi.stubGlobal('localStorage', {
 		getItem: (key: string) => storageValues.get(key) ?? null,
 		setItem,
@@ -232,6 +237,22 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
+function notificationService(
+	permission: 'unsupported' | 'default' | 'granted' | 'denied' = 'granted'
+): NotificationService & {
+	permissionStatus: ReturnType<typeof vi.fn>;
+	playSound: ReturnType<typeof vi.fn>;
+	showSystemNotification: ReturnType<typeof vi.fn>;
+	requestPermission: ReturnType<typeof vi.fn>;
+} {
+	return {
+		permissionStatus: vi.fn(() => permission),
+		requestPermission: vi.fn(async () => permission),
+		playSound: vi.fn(async () => undefined),
+		showSystemNotification: vi.fn(() => true)
+	};
+}
+
 describe('HarnessWorkspace theme restoration', () => {
 	it.each(['tokyonight-night', 'tokyonight-storm', 'tokyonight-moon', 'tokyonight-day'] as const)(
 		'restores %s',
@@ -245,6 +266,320 @@ describe('HarnessWorkspace theme restoration', () => {
 			expect(document.documentElement.dataset.theme).toBe(theme);
 		}
 	);
+});
+
+describe('HarnessWorkspace notifications', () => {
+	it('dispatches one permission notification for a newly applied request', async () => {
+		const stream = captureEventStream();
+		const notifications = notificationService();
+		storageValues.set(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0') });
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		workspace.setNotifyOnPermission(true);
+		workspace.setSoundsEnabled(true);
+		workspace.setSystemNotificationsEnabled(true);
+		workspace.setRoutePathname('/history');
+		const request = {
+			id: 'permission-1',
+			method: 'confirm' as const,
+			title: 'Allow file access',
+			message: 'The agent needs access to continue.'
+		};
+
+		sendRevisionedEvent(
+			stream,
+			'opaque:permission',
+			chat.runtimeId!,
+			{ type: 'permission_request', request },
+			1,
+			2
+		);
+		sendRevisionedEvent(
+			stream,
+			'opaque:permission-duplicate',
+			chat.runtimeId!,
+			{ type: 'permission_request', request },
+			2,
+			2
+		);
+		sendRevisionedEvent(
+			stream,
+			'opaque:permission-resolution',
+			chat.runtimeId!,
+			{ type: 'permission_resolved', requestId: request.id },
+			2,
+			3
+		);
+
+		expect(notifications.playSound).toHaveBeenCalledTimes(1);
+		expect(notifications.playSound).toHaveBeenCalledWith('permission-required');
+		expect(notifications.showSystemNotification).toHaveBeenCalledTimes(1);
+		const systemRequest = notifications.showSystemNotification.mock.calls[0][0];
+		expect(systemRequest.body).toBe('New chat: An agent is waiting for your permission.');
+		expect(systemRequest.body).not.toContain(request.message);
+		expect(chat.permissionRequests).toHaveLength(0);
+	});
+
+	it('honors completion and permission event toggles independently', async () => {
+		const stream = captureEventStream();
+		const notifications = notificationService();
+		storageValues.set(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		workspace.setSoundsEnabled(true);
+		workspace.setNotifyOnPermission(true);
+		const request = {
+			id: 'permission-toggle',
+			method: 'confirm' as const,
+			title: 'Approve access',
+			message: 'private command arguments'
+		};
+
+		sendRevisionedEvent(
+			stream,
+			'opaque:permission-toggle',
+			chat.runtimeId!,
+			{ type: 'permission_request', request },
+			1,
+			2
+		);
+		workspace.setNotifyOnPermission(false);
+		workspace.setNotifyOnCompletion(true);
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		await workspace.refreshRuntime(chat);
+		sendRevisionedEvent(
+			stream,
+			'opaque:completion-toggle',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			1,
+			2
+		);
+
+		expect(notifications.playSound.mock.calls.map(([kind]) => kind)).toEqual([
+			'permission-required',
+			'agent-complete'
+		]);
+	});
+
+	it('does not dispatch for hydration checkpoints or recovery events', async () => {
+		const stream = captureEventStream();
+		const notifications = notificationService();
+		storageValues.set(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		workspace.setNotifyOnCompletion(true);
+		workspace.setSoundsEnabled(true);
+		expect(notifications.playSound).not.toHaveBeenCalled();
+
+		workspace.setRoutePathname('/history');
+		sendRevisionedEvent(
+			stream,
+			'opaque:recovery',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			99,
+			100
+		);
+
+		expect(chat.runtime?.metadata.isStreaming).toBe(true);
+		expect(notifications.playSound).not.toHaveBeenCalled();
+		expect(notifications.showSystemNotification).not.toHaveBeenCalled();
+	});
+
+	it('keeps runtime application alive when notification adapters throw', async () => {
+		const stream = captureEventStream();
+		const notifications = notificationService();
+		notifications.playSound.mockImplementation(() => {
+			throw new Error('audio failed');
+		});
+		notifications.showSystemNotification.mockImplementation(() => {
+			throw new Error('notification failed');
+		});
+		storageValues.set(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		workspace.setNotifyOnCompletion(true);
+		workspace.setSoundsEnabled(true);
+		workspace.setSystemNotificationsEnabled(true);
+		workspace.setRoutePathname('/history');
+
+		expect(() =>
+			sendRevisionedEvent(
+				stream,
+				'opaque:adapter-failure',
+				chat.runtimeId!,
+				{ type: 'metadata_updated', patch: { isStreaming: false } },
+				1,
+				2
+			)
+		).not.toThrow();
+		expect(chat.snapshot?.isStreaming).toBe(false);
+		expect(notifications.playSound).toHaveBeenCalledTimes(1);
+		expect(notifications.showSystemNotification).toHaveBeenCalledTimes(1);
+	});
+
+	it('dispatches completion only on an authoritative streaming transition', async () => {
+		const stream = captureEventStream();
+		const notifications = notificationService();
+		storageValues.set(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		workspace.setNotifyOnCompletion(true);
+		workspace.setSoundsEnabled(true);
+		workspace.setSystemNotificationsEnabled(true);
+
+		sendRevisionedEvent(
+			stream,
+			'opaque:completion',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			1,
+			2
+		);
+		sendRevisionedEvent(
+			stream,
+			'opaque:unrelated',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { sessionName: 'Renamed' } },
+			2,
+			3
+		);
+		sendRevisionedEvent(
+			stream,
+			'opaque:duplicate',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			3,
+			3
+		);
+
+		expect(notifications.playSound).toHaveBeenCalledTimes(1);
+		expect(notifications.playSound).toHaveBeenCalledWith('agent-complete');
+		expect(notifications.showSystemNotification).not.toHaveBeenCalled();
+	});
+
+	it('delivers system notifications when the foreground chat is hidden or non-active', async () => {
+		const stream = captureEventStream();
+		const notifications = notificationService();
+		storageValues.set(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		workspace.setNotifyOnCompletion(true);
+		workspace.setSystemNotificationsEnabled(true);
+		const browserDocument = document as unknown as {
+			visibilityState: string;
+			hasFocus: () => boolean;
+		};
+
+		sendRevisionedEvent(
+			stream,
+			'opaque:foreground',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			1,
+			2
+		);
+		expect(notifications.showSystemNotification).not.toHaveBeenCalled();
+
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		await workspace.refreshRuntime(chat);
+		browserDocument.visibilityState = 'hidden';
+		sendRevisionedEvent(
+			stream,
+			'opaque:hidden',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			1,
+			2
+		);
+		expect(notifications.showSystemNotification).toHaveBeenCalledTimes(1);
+
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		await workspace.refreshRuntime(chat);
+		browserDocument.visibilityState = 'visible';
+		browserDocument.hasFocus = () => false;
+		workspace.setRoutePathname(workspace.chatHref(chat.projectId, chat.sessionId));
+		sendRevisionedEvent(
+			stream,
+			'opaque:unfocused',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			1,
+			2
+		);
+		expect(notifications.showSystemNotification).toHaveBeenCalledTimes(2);
+
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0', true) });
+		await workspace.refreshRuntime(chat);
+		browserDocument.hasFocus = () => true;
+		workspace.setRoutePathname('/history');
+		sendRevisionedEvent(
+			stream,
+			'opaque:background',
+			chat.runtimeId!,
+			{ type: 'metadata_updated', patch: { isStreaming: false } },
+			1,
+			2
+		);
+		expect(notifications.showSystemNotification).toHaveBeenCalledTimes(3);
+		const completionRequest = notifications.showSystemNotification.mock.calls[1][0];
+		expect(completionRequest.body).toBe(`${chat.title}: The agent has finished responding.`);
+		expect(completionRequest.body).not.toContain(`${chat.title}: ${chat.title}`);
+	});
+
+	it('refreshes current permission without repeatedly requesting after denial', async () => {
+		let permission: 'unsupported' | 'default' | 'granted' | 'denied' = 'denied';
+		const notifications = notificationService();
+		notifications.permissionStatus.mockImplementation(() => permission);
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+
+		expect(await workspace.requestSystemNotificationPermission()).toBe('denied');
+		expect(notifications.requestPermission).not.toHaveBeenCalled();
+
+		permission = 'granted';
+		expect(workspace.refreshNotificationPermission()).toBe('granted');
+		expect(await workspace.requestSystemNotificationPermission()).toBe('granted');
+		expect(notifications.requestPermission).not.toHaveBeenCalled();
+
+		notifications.permissionStatus.mockImplementation(() => {
+			throw new Error('permission adapter failed');
+		});
+		expect(workspace.refreshNotificationPermission()).toBe('granted');
+	});
+
+	it('restores notification preferences and persists explicit setters', async () => {
+		storageValues.set('pi-squared:sounds-enabled', 'true');
+		storageValues.set('pi-squared:system-notifications-enabled', 'true');
+		storageValues.set('pi-squared:notify-on-completion', 'true');
+		storageValues.set('pi-squared:notify-on-permission', 'false');
+		const notifications = notificationService();
+		const workspace = new HarnessWorkspace({ notificationService: notifications });
+		await workspace.start();
+
+		expect(workspace.soundsEnabled).toBe(true);
+		expect(workspace.systemNotificationsEnabled).toBe(true);
+		expect(workspace.notifyOnCompletion).toBe(true);
+		expect(workspace.notifyOnPermission).toBe(false);
+
+		workspace.setSoundsEnabled(false);
+		workspace.setNotifyOnPermission(true);
+		expect(storageValues.get('pi-squared:sounds-enabled')).toBe('false');
+		expect(storageValues.get('pi-squared:notify-on-permission')).toBe('true');
+	});
 });
 
 describe('HarnessWorkspace cursor and presentation persistence', () => {

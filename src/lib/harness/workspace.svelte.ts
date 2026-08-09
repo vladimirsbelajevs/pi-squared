@@ -10,6 +10,12 @@ import type {
 	ThinkingLevel
 } from '$lib/contracts';
 import {
+	ClientNotificationService,
+	type NotificationKind,
+	type NotificationPermissionStatus,
+	type NotificationService
+} from '$lib/client-notifications';
+import {
 	abortRuntime,
 	addProject as createProject,
 	createRuntime,
@@ -60,7 +66,12 @@ const LAST_THINKING_LEVEL_KEY = 'pi-squared:last-thinking-level';
 const THEME_KEY = 'pi-squared:theme';
 const SHOW_REASONING_KEY = 'pi-squared:show-reasoning';
 const SHOW_MODEL_CHANGES_KEY = 'pi-squared:show-model-changes';
+const SOUNDS_ENABLED_KEY = 'pi-squared:sounds-enabled';
+const SYSTEM_NOTIFICATIONS_ENABLED_KEY = 'pi-squared:system-notifications-enabled';
+const NOTIFY_ON_COMPLETION_KEY = 'pi-squared:notify-on-completion';
+const NOTIFY_ON_PERMISSION_KEY = 'pi-squared:notify-on-permission';
 const MAX_HYDRATION_BUFFERED_EVENTS = 100;
+const MAX_DISPATCHED_NOTIFICATION_IDS = 256;
 /** Release an inactive, settled runtime; persisted session history is resumed on next activation. */
 const INACTIVE_RUNTIME_DISPOSAL_MS = 30 * 60 * 1000;
 
@@ -128,6 +139,11 @@ type RestoredWorkspace = {
 	legacyLastEventId?: string;
 };
 
+export interface HarnessWorkspaceOptions {
+	notificationService?: NotificationService;
+	navigateToChat?: (href: string) => void | Promise<void>;
+}
+
 export class HarnessWorkspace {
 	projects = $state<Project[]>([]);
 	models = $state<ModelOption[]>([]);
@@ -137,6 +153,11 @@ export class HarnessWorkspace {
 	theme = $state<Theme>('graphite');
 	showReasoning = $state(false);
 	showModelChanges = $state(false);
+	soundsEnabled = $state(false);
+	systemNotificationsEnabled = $state(false);
+	notifyOnCompletion = $state(false);
+	notifyOnPermission = $state(false);
+	notificationPermission = $state<NotificationPermissionStatus>('unsupported');
 	initializing = $state(true);
 	error = $state('');
 
@@ -155,6 +176,15 @@ export class HarnessWorkspace {
 	#scrollStates = new SvelteMap<string, ScrollState>();
 	#streamUpdates = new StreamUpdateBatcher((callback) => requestAnimationFrame(callback));
 	#persistTimer: ReturnType<typeof setTimeout> | undefined;
+	#notificationService: NotificationService;
+	#notificationNavigation: ((href: string) => void | Promise<void>) | undefined;
+	#dispatchedNotificationIds = new SvelteSet<string>();
+
+	constructor(options: HarnessWorkspaceOptions = {}) {
+		this.#notificationService = options.notificationService ?? new ClientNotificationService();
+		this.#notificationNavigation = options.navigateToChat;
+		this.refreshNotificationPermission();
+	}
 
 	async start(): Promise<void> {
 		if (this.#started) {
@@ -691,6 +721,100 @@ export class HarnessWorkspace {
 		localStorage.setItem(SHOW_MODEL_CHANGES_KEY, String(show));
 	}
 
+	setNotificationNavigation(navigate: (href: string) => void | Promise<void>): void {
+		this.#notificationNavigation = navigate;
+	}
+
+	setSoundsEnabled(enabled: boolean): void {
+		this.soundsEnabled = enabled;
+		localStorage.setItem(SOUNDS_ENABLED_KEY, String(enabled));
+	}
+
+	setSystemNotificationsEnabled(enabled: boolean): void {
+		this.systemNotificationsEnabled = enabled && this.notificationPermission === 'granted';
+		localStorage.setItem(SYSTEM_NOTIFICATIONS_ENABLED_KEY, String(this.systemNotificationsEnabled));
+	}
+
+	setNotifyOnCompletion(enabled: boolean): void {
+		this.notifyOnCompletion = enabled;
+		localStorage.setItem(NOTIFY_ON_COMPLETION_KEY, String(enabled));
+	}
+
+	setNotifyOnPermission(enabled: boolean): void {
+		this.notifyOnPermission = enabled;
+		localStorage.setItem(NOTIFY_ON_PERMISSION_KEY, String(enabled));
+	}
+
+	refreshNotificationPermission(): NotificationPermissionStatus {
+		try {
+			const permission = this.#notificationService.permissionStatus();
+			this.notificationPermission = permission;
+			if (permission !== 'granted') {
+				this.systemNotificationsEnabled = false;
+			}
+
+			return permission;
+		} catch {
+			// Browser adapter failures must not make route navigation or Settings fail.
+			return this.notificationPermission;
+		}
+	}
+
+	async requestSystemNotificationPermission(): Promise<NotificationPermissionStatus> {
+		const currentPermission = this.refreshNotificationPermission();
+		if (
+			currentPermission === 'denied' ||
+			currentPermission === 'unsupported' ||
+			currentPermission === 'granted'
+		) {
+			return currentPermission;
+		}
+
+		try {
+			this.notificationPermission = await this.#notificationService.requestPermission();
+		} catch {
+			// Browser adapter failures must not break the explicit Settings action.
+			return this.notificationPermission;
+		}
+
+		if (this.notificationPermission === 'granted') {
+			this.systemNotificationsEnabled = true;
+		} else {
+			this.systemNotificationsEnabled = false;
+		}
+
+		localStorage.setItem(SYSTEM_NOTIFICATIONS_ENABLED_KEY, String(this.systemNotificationsEnabled));
+
+		return this.notificationPermission;
+	}
+
+	testCompletionSound(): void {
+		try {
+			void Promise.resolve(this.#notificationService.playSound('agent-complete')).catch(
+				() => undefined
+			);
+		} catch {
+			// A blocked or unavailable audio API must not affect Settings.
+		}
+	}
+
+	testSystemNotification(): void {
+		if (!this.systemNotificationsEnabled || this.notificationPermission !== 'granted') {
+			return;
+		}
+
+		try {
+			this.#notificationService.showSystemNotification({
+				kind: 'agent-complete',
+				title: 'Pi Squared · Test notification',
+				body: 'System notifications are enabled.',
+				tag: 'test:system-notification'
+			});
+		} catch {
+			// Browser adapter failures must not break the Settings page.
+		}
+	}
+
 	async refreshRuntime(chat: ChatTab): Promise<void> {
 		await this.#loadChat(chat, true);
 	}
@@ -722,6 +846,7 @@ export class HarnessWorkspace {
 		this.#restoreTheme();
 		this.#restoreShowReasoning();
 		this.#restoreShowModelChanges();
+		this.#restoreNotificationPreferences();
 		try {
 			const [projects, models, sessions] = await Promise.all([
 				listProjects(),
@@ -822,6 +947,10 @@ export class HarnessWorkspace {
 			return;
 		}
 
+		const previousIsStreaming = chat.runtime.metadata.isStreaming;
+		const previousPermissionIds = new SvelteSet(
+			chat.runtime.metadata.permissionRequests.map((request) => request.id)
+		);
 		const result = applyRuntimeEvent(chat.runtime, event);
 		if (result === 'recovery') {
 			if (chat.hydrationState === 'hydrating') {
@@ -852,6 +981,24 @@ export class HarnessWorkspace {
 			}
 		}
 
+		if (
+			event.type === 'permission_request' &&
+			!previousPermissionIds.has(event.request.id) &&
+			chat.snapshot?.permissionRequests.some((request) => request.id === event.request.id)
+		) {
+			this.#dispatchNotification(chat, 'permission-required', envelope.id, {
+				title: 'Permission required',
+				body: 'An agent is waiting for your permission.'
+			});
+		}
+
+		if (previousIsStreaming && chat.snapshot?.isStreaming === false) {
+			this.#dispatchNotification(chat, 'agent-complete', envelope.id, {
+				title: 'Agent finished responding',
+				body: 'The agent has finished responding.'
+			});
+		}
+
 		if (event.type === 'assistant_delta') {
 			this.#queueAssistantDelta(chat, event.text ?? '', event.thinking ?? '');
 		}
@@ -880,6 +1027,78 @@ export class HarnessWorkspace {
 		}
 
 		this.#scheduleInactiveRuntimeDisposal(chat);
+	}
+
+	#dispatchNotification(
+		chat: ChatTab,
+		kind: NotificationKind,
+		eventId: string,
+		content: { title: string; body?: string }
+	): void {
+		const identity = `${kind}:${chat.runtimeId ?? chat.sessionId}:${eventId}`;
+		if (this.#dispatchedNotificationIds.has(identity)) {
+			return;
+		}
+
+		this.#dispatchedNotificationIds.add(identity);
+		if (this.#dispatchedNotificationIds.size > MAX_DISPATCHED_NOTIFICATION_IDS) {
+			const oldest = this.#dispatchedNotificationIds.values().next().value;
+			if (oldest !== undefined) {
+				this.#dispatchedNotificationIds.delete(oldest);
+			}
+		}
+
+		const enabled = kind === 'agent-complete' ? this.notifyOnCompletion : this.notifyOnPermission;
+		if (!enabled) {
+			return;
+		}
+
+		if (this.soundsEnabled) {
+			try {
+				void Promise.resolve(this.#notificationService.playSound(kind)).catch(() => undefined);
+			} catch {
+				// Notification failures must not interrupt runtime event application.
+			}
+		}
+
+		try {
+			this.notificationPermission = this.#notificationService.permissionStatus();
+		} catch {
+			return;
+		}
+
+		if (
+			!this.systemNotificationsEnabled ||
+			this.notificationPermission !== 'granted' ||
+			!this.#shouldShowSystemNotification(chat)
+		) {
+			return;
+		}
+
+		const body = content.body?.trim() || content.title;
+		try {
+			this.#notificationService.showSystemNotification({
+				kind,
+				title: `Pi Squared · ${content.title}`,
+				body: `${chat.title}: ${body}`.slice(0, 240),
+				tag: `${kind}:${chat.runtimeId ?? chat.sessionId}`,
+				onClick: () => this.#notificationNavigation?.(this.chatHref(chat.projectId, chat.sessionId))
+			});
+		} catch {
+			// Notification failures must not interrupt runtime event application.
+		}
+	}
+
+	#shouldShowSystemNotification(chat: ChatTab): boolean {
+		if (chat.id !== this.#activeChatId) {
+			return true;
+		}
+
+		if (typeof document === 'undefined') {
+			return true;
+		}
+
+		return document.visibilityState !== 'visible' || !document.hasFocus();
 	}
 
 	#chatKey(chat: Pick<ChatTab, 'projectId' | 'sessionId'>): string {
@@ -1264,6 +1483,16 @@ export class HarnessWorkspace {
 
 	#restoreShowModelChanges(): void {
 		this.showModelChanges = localStorage.getItem(SHOW_MODEL_CHANGES_KEY) === 'true';
+	}
+
+	#restoreNotificationPreferences(): void {
+		this.refreshNotificationPermission();
+		this.soundsEnabled = localStorage.getItem(SOUNDS_ENABLED_KEY) === 'true';
+		this.systemNotificationsEnabled =
+			localStorage.getItem(SYSTEM_NOTIFICATIONS_ENABLED_KEY) === 'true' &&
+			this.notificationPermission === 'granted';
+		this.notifyOnCompletion = localStorage.getItem(NOTIFY_ON_COMPLETION_KEY) === 'true';
+		this.notifyOnPermission = localStorage.getItem(NOTIFY_ON_PERMISSION_KEY) === 'true';
 	}
 
 	#restoreTabs(): void {

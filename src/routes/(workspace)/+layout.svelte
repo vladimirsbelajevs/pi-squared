@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { gotoResolvedHref } from '$lib/client-navigation';
 	import { page } from '$app/state';
 	import type { Pathname } from '$app/types';
 	import { onMount } from 'svelte';
@@ -142,6 +143,8 @@
 		event.stopPropagation();
 		closeCurrentTab(tab);
 	}
+
+	workspace.setNotificationNavigation(gotoResolvedHref);
 
 	beforeNavigate(() => {
 		if (activeScrollKey) {
