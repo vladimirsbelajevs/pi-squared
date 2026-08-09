@@ -106,9 +106,11 @@
 	}
 
 	.chat-content {
+		width: min(100%, 54rem);
 		flex: 1;
+		align-self: center;
 		min-width: 0;
-		padding: 1.5rem max(1rem, calc((100vw - 54rem) / 2)) 2rem;
+		padding: 1.5rem 0 2rem;
 	}
 
 	.thread-composer-dock {
@@ -138,6 +140,7 @@
 	}
 
 	@media (max-width: 700px) {
+		.chat-content,
 		.thread-composer-dock {
 			padding-inline: 0.75rem;
 		}
