@@ -5,11 +5,15 @@
 	import { onMount } from 'svelte';
 	import WorkspaceScrollArea from '$lib/components/WorkspaceScrollArea.svelte';
 	import { setWorkspaceScrollController } from '$lib/workspace-scroll';
-	import WorkspaceTabs from './WorkspaceTabs.svelte';
+	import WorkspaceSidebar from './WorkspaceSidebar.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 	import type { WorkspaceTab } from '$lib/harness/types';
 
 	let { children } = $props();
+	let sidebarOpen = $state(true);
+	let sidebarCollapsed = $state(false);
+	let narrowLayout = $state(false);
+	let focusedSidebarControl: 'collapse' | 'close' | null = null;
 	let scrollArea = $state<{
 		captureScrollBeforeContentChange: (key: string) => void;
 		restoreActiveKey: () => void;
@@ -28,6 +32,63 @@
 
 		if (pathname === '/history' || pathname === '/settings') {
 			return `utility:${pathname}`;
+		}
+	}
+
+	function openSidebar(): void {
+		if (narrowLayout) {
+			sidebarOpen = true;
+
+			return;
+		}
+
+		sidebarCollapsed = false;
+		requestAnimationFrame(() =>
+			document.querySelector<HTMLButtonElement>('.sidebar-collapse')?.focus()
+		);
+	}
+
+	function collapseSidebar(): void {
+		if (narrowLayout) {
+			return;
+		}
+
+		sidebarCollapsed = true;
+		requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.menu-button')?.focus());
+	}
+
+	function closeSidebar(restoreFocus = true): void {
+		if (!narrowLayout) {
+			return;
+		}
+
+		sidebarOpen = false;
+		if (restoreFocus) {
+			requestAnimationFrame(() =>
+				document.querySelector<HTMLButtonElement>('.menu-button')?.focus()
+			);
+		}
+	}
+
+	function handleKeydown(event: KeyboardEvent): void {
+		if (narrowLayout && sidebarOpen && event.key === 'Escape') {
+			event.preventDefault();
+			closeSidebar();
+		}
+	}
+
+	function trackSidebarFocus(event: FocusEvent): void {
+		const target = event.target;
+		if (!(target instanceof HTMLElement)) {
+			return;
+		}
+
+		if (target.matches('.sidebar-collapse')) {
+			focusedSidebarControl = 'collapse';
+		} else if (target.matches('.sidebar-close')) {
+			focusedSidebarControl = 'close';
+		} else {
+			focusedSidebarControl = null;
 		}
 	}
 
@@ -81,49 +142,160 @@
 	afterNavigate(() => {
 		workspace.setRoutePathname(page.url.pathname);
 		scrollArea?.restoreActiveKey();
+		// Let SvelteKit perform its normal route focus management after navigation.
+		closeSidebar(false);
 	});
 
 	onMount(() => {
+		const mediaQuery = window.matchMedia('(max-width: 700px)');
+		let layoutInitialized = false;
+		const updateLayout = (): void => {
+			const nextNarrowLayout = mediaQuery.matches;
+			const movingToMobile = layoutInitialized && !narrowLayout && nextNarrowLayout;
+			const movingToDesktop = layoutInitialized && narrowLayout && !nextNarrowLayout;
+			const focusedElement = document.activeElement;
+			const focusMobileMenu =
+				movingToMobile &&
+				(focusedSidebarControl === 'collapse' ||
+					focusedElement === document.querySelector('.sidebar-collapse'));
+			const focusDesktopCollapse =
+				movingToDesktop &&
+				(focusedSidebarControl === 'close' ||
+					focusedElement === document.querySelector('.sidebar-close'));
+
+			narrowLayout = nextNarrowLayout;
+			sidebarCollapsed = false;
+			sidebarOpen = !nextNarrowLayout;
+			layoutInitialized = true;
+
+			if (focusMobileMenu || focusDesktopCollapse) {
+				requestAnimationFrame(() =>
+					document
+						.querySelector<HTMLButtonElement>(
+							focusMobileMenu ? '.menu-button' : '.sidebar-collapse'
+						)
+						?.focus()
+				);
+			}
+		};
+
+		updateLayout();
+		mediaQuery.addEventListener('change', updateLayout);
+
 		void workspace.start().then(() => workspace.setRoutePathname(page.url.pathname));
 
-		return () => workspace.disposeConnection();
+		return () => {
+			mediaQuery.removeEventListener('change', updateLayout);
+			workspace.disposeConnection();
+		};
 	});
 </script>
+
+<svelte:window onfocusin={trackSidebarFocus} onkeydown={handleKeydown} />
 
 <svelte:head>
 	<title>Pi²</title>
 	<meta name="description" content="A local, tab-first coding harness for the Pi SDK." />
 </svelte:head>
 
-<main class="harness-shell">
-	<WorkspaceTabs {workspace} pathname={page.url.pathname} onNew={createNewTab} onClose={closeTab} />
+<main class="harness-shell" class:sidebar-collapsed={sidebarCollapsed}>
+	<WorkspaceSidebar
+		{workspace}
+		pathname={page.url.pathname}
+		open={sidebarOpen}
+		collapsed={sidebarCollapsed}
+		onNew={createNewTab}
+		onClose={closeTab}
+		onCollapse={collapseSidebar}
+		onCloseDrawer={closeSidebar}
+	/>
 
-	{#key activeScrollKey}
-		<WorkspaceScrollArea
-			bind:this={scrollArea}
-			activeKey={activeScrollKey}
-			workspaceState={workspace.initializing || !!workspace.error}
-			rememberScroll={(key, state) => workspace.rememberScroll(key, state)}
-			scrollState={(key) => workspace.scrollState(key)}
+	<section class="workspace-content">
+		<button
+			class="menu-button"
+			type="button"
+			aria-label="Open navigation menu"
+			aria-controls="workspace-sidebar"
+			aria-expanded={narrowLayout ? sidebarOpen : !sidebarCollapsed}
+			onclick={openSidebar}
 		>
-			{#if workspace.initializing}
-				<section class="loading-state"><span class="pulse"></span>Loading harness…</section>
-			{:else if workspace.error}
-				<div class="app-error" role="alert">{workspace.error}</div>
-			{:else}
-				{@render children()}
-			{/if}
-		</WorkspaceScrollArea>
-	{/key}
+			<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+				<path d="M4 6h16M4 12h16M4 18h16" />
+			</svg>
+		</button>
+		{#key activeScrollKey}
+			<WorkspaceScrollArea
+				bind:this={scrollArea}
+				activeKey={activeScrollKey}
+				workspaceState={workspace.initializing || !!workspace.error}
+				rememberScroll={(key, state) => workspace.rememberScroll(key, state)}
+				scrollState={(key) => workspace.scrollState(key)}
+			>
+				{#if workspace.initializing}
+					<section class="loading-state"><span class="pulse"></span>Loading harness…</section>
+				{:else if workspace.error}
+					<div class="app-error" role="alert">{workspace.error}</div>
+				{:else}
+					{@render children()}
+				{/if}
+			</WorkspaceScrollArea>
+		{/key}
+	</section>
 </main>
 
 <style>
 	.harness-shell {
 		display: grid;
-		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-columns: 16rem minmax(0, 1fr);
 		height: 100vh;
 		height: 100dvh;
 		overflow: hidden;
+		transition: grid-template-columns 180ms ease;
+	}
+
+	.harness-shell.sidebar-collapsed {
+		grid-template-columns: 0 minmax(0, 1fr);
+	}
+
+	.workspace-content {
+		position: relative;
+		min-width: 0;
+		min-height: 0;
+	}
+
+	.menu-button {
+		position: absolute;
+		top: 0.75rem;
+		left: 0.75rem;
+		z-index: 2;
+		display: none;
+		width: 2.25rem;
+		height: 2.25rem;
+		place-items: center;
+		border: 1px solid var(--border);
+		border-radius: 7px;
+		background: var(--surface-muted);
+		color: var(--text);
+		box-shadow: 0 0.25rem 1rem var(--shadow);
+	}
+
+	.menu-button svg {
+		width: 1rem;
+		height: 1rem;
+		fill: none;
+		stroke: currentColor;
+		stroke-linecap: round;
+		stroke-width: 1.8;
+	}
+
+	.harness-shell.sidebar-collapsed .menu-button {
+		display: grid;
+	}
+
+	.menu-button:hover,
+	.menu-button:focus-visible {
+		border-color: var(--border-strong);
+		background: var(--surface-strong);
 	}
 
 	.app-error {
@@ -156,6 +328,23 @@
 		50% {
 			opacity: 0.3;
 			transform: scale(0.7);
+		}
+	}
+
+	@media (max-width: 700px) {
+		.harness-shell,
+		.harness-shell.sidebar-collapsed {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.menu-button {
+			display: grid;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.harness-shell {
+			transition: none;
 		}
 	}
 </style>

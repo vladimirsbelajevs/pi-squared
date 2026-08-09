@@ -31,7 +31,7 @@ export const GET: RequestHandler = ({ request, url }) => {
 				clearInterval(heartbeat);
 			}
 		}
-	});
+  });
 
 	return new Response(stream, {
 		headers: {

@@ -57,7 +57,7 @@
 
 {#if tab}
 	{#key tab.id}
-		<section class="new-tab-view" role="tabpanel">
+		<section class="new-tab-view">
 			<div class="new-chat-center">
 				{#if introReady}
 					<header class="new-chat-intro" in:fly={{ y: -24, duration: 800 }}>

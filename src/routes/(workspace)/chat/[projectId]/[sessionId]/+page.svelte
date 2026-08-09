@@ -39,7 +39,7 @@
 		<a href={resolve('/history')}>Back to history</a>
 	</section>
 {:else}
-	<section class="chat-view" role="tabpanel">
+	<section class="chat-view">
 		<div class="chat-content">
 			<ChatTimeline
 				{chat}
