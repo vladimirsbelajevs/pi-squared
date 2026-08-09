@@ -7,6 +7,7 @@
 		SubagentRun,
 		SubagentTimelineResponse
 	} from '$lib/contracts';
+	import PiWorkingSpinner from '$lib/components/PiWorkingSpinner.svelte';
 	import { getSubagentTimeline } from '$lib/harness/api';
 	import type { ChatTab } from '$lib/harness/types';
 	import ChatTimeline from './ChatTimeline.svelte';
@@ -133,13 +134,21 @@
 			<Dialog.Title data-subagent-dialog class="subagent-dialog-title"
 				>{run.agent} timeline</Dialog.Title
 			>
-			<div data-subagent-dialog class="subagent-dialog-body" {@attach refreshWhileOpen()}>
+			<div
+				data-subagent-dialog
+				class="subagent-dialog-body"
+				class:subagent-dialog-body-loading={loadState === 'loading' || loadState === 'idle'}
+				{@attach refreshWhileOpen()}
+			>
 				{#if run.timelineAvailable === false}
 					<p class="subagent-dialog-state" role="status">Timeline unavailable</p>
 				{:else if !run.childSessionId}
 					<p class="subagent-dialog-state" role="status">Initializing child session…</p>
 				{:else if loadState === 'loading' || loadState === 'idle'}
-					<p class="subagent-dialog-state" role="status">Loading child timeline…</p>
+					<p class="subagent-dialog-state subagent-dialog-loading" role="status">
+						<PiWorkingSpinner tone="timeline" />
+						<span>Loading child timeline…</span>
+					</p>
 				{:else if loadState === 'error'}
 					<p class="subagent-dialog-state subagent-dialog-error" role="alert">{errorMessage}</p>
 				{:else if response && !response.initialized}
@@ -192,6 +201,14 @@
 		background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
 	}
 
+	:global([data-subagent-dialog].subagent-dialog-overlay[data-state='open']) {
+		animation: subagent-overlay-in 120ms ease-out both;
+	}
+
+	:global([data-subagent-dialog].subagent-dialog-overlay[data-state='closed']) {
+		animation: subagent-overlay-out 100ms ease-in both;
+	}
+
 	:global([data-subagent-dialog].subagent-dialog-content) {
 		position: fixed;
 		z-index: 21;
@@ -199,7 +216,7 @@
 		left: 50%;
 		display: flex;
 		width: min(58rem, calc(100vw - 2rem));
-		max-height: min(90dvh, 52rem);
+		height: min(90dvh, 52rem);
 		transform: translate(-50%, -50%);
 		flex-direction: column;
 		overflow: hidden;
@@ -210,6 +227,14 @@
 		outline: none;
 	}
 
+	:global([data-subagent-dialog].subagent-dialog-content[data-state='open']) {
+		animation: subagent-dialog-in 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	}
+
+	:global([data-subagent-dialog].subagent-dialog-content[data-state='closed']) {
+		animation: subagent-dialog-out 100ms ease-in both;
+	}
+
 	:global([data-subagent-dialog].subagent-dialog-title) {
 		margin: 0;
 		padding: 0.3rem 3.75rem 0.6rem 1.25rem;
@@ -218,15 +243,29 @@
 	}
 
 	:global([data-subagent-dialog].subagent-dialog-body) {
-		min-height: 8rem;
+		flex: 1;
+		min-height: 0;
 		overflow: auto;
 		padding: 0.35rem 1rem 1rem;
+	}
+
+	:global([data-subagent-dialog].subagent-dialog-body-loading) {
+		display: grid;
+		place-items: center;
 	}
 
 	:global([data-subagent-dialog].subagent-dialog-state) {
 		padding: 2rem 1rem;
 		color: var(--text-muted);
 		text-align: center;
+	}
+
+	:global([data-subagent-dialog].subagent-dialog-loading) {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0;
 	}
 
 	:global([data-subagent-dialog].subagent-dialog-error) {
@@ -265,10 +304,57 @@
 		outline-offset: 2px;
 	}
 
+	@keyframes subagent-dialog-in {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -50%) scale(0.96);
+		}
+		to {
+			opacity: 1;
+			transform: translate(-50%, -50%) scale(1);
+		}
+	}
+
+	@keyframes subagent-dialog-out {
+		from {
+			opacity: 1;
+			transform: translate(-50%, -50%) scale(1);
+		}
+		to {
+			opacity: 0;
+			transform: translate(-50%, -50%) scale(0.96);
+		}
+	}
+
+	@keyframes subagent-overlay-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	@keyframes subagent-overlay-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		:global([data-subagent-dialog].subagent-dialog-overlay),
+		:global([data-subagent-dialog].subagent-dialog-content) {
+			animation: none;
+		}
+	}
+
 	@media (max-width: 700px) {
 		:global([data-subagent-dialog].subagent-dialog-content) {
 			width: calc(100vw - 1rem);
-			max-height: calc(100dvh - 1rem);
+			height: calc(100dvh - 1rem);
 		}
 	}
 </style>
