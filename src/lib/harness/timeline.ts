@@ -12,7 +12,8 @@ export type FinalToolView = {
 export type FinalTimelineEntry =
 	| { id: string; kind: 'item'; item: ChatItem; thinking?: string }
 	| { id: string; kind: 'stopped' }
-	| { id: string; kind: 'tools'; tools: FinalToolView[]; thinking?: string };
+	| { id: string; kind: 'reasoning'; text: string }
+	| { id: string; kind: 'tools'; tools: FinalToolView[] };
 
 /** Builds historical rows only. Live assistant and tool state deliberately stay out of this function. */
 export function buildFinalizedTimeline(
@@ -56,13 +57,6 @@ export function buildFinalizedTimeline(
 		}));
 	}
 
-	function appendThinking(
-		entry: Extract<FinalTimelineEntry, { kind: 'tools' }>,
-		thinking: string
-	): void {
-		entry.thinking = [entry.thinking, thinking].filter(Boolean).join('\n\n');
-	}
-
 	for (const item of items) {
 		if (item.role === 'tool' && item.toolCallId && calledIds.has(item.toolCallId)) {
 			continue;
@@ -85,12 +79,13 @@ export function buildFinalizedTimeline(
 		}
 
 		const toolOnly = item.role === 'assistant' && !item.text && tools.length > 0;
+		if (toolOnly && item.thinking) {
+			timeline.push({ id: `reasoning-${item.id}`, kind: 'reasoning', text: item.thinking });
+			activeTools = undefined;
+		}
+
 		if (toolOnly && activeTools) {
 			activeTools.tools.push(...tools);
-			if (item.thinking) {
-				appendThinking(activeTools, item.thinking);
-			}
-
 			continue;
 		}
 
@@ -98,8 +93,7 @@ export function buildFinalizedTimeline(
 			const entry: Extract<FinalTimelineEntry, { kind: 'tools' }> = {
 				id: `tools-${item.id}`,
 				kind: 'tools',
-				tools,
-				thinking: item.thinking
+				tools
 			};
 			timeline.push(entry);
 			activeTools = entry;

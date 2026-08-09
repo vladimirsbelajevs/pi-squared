@@ -167,10 +167,14 @@
 			chatId={chat.id}
 			finalizedTools={entry.tools}
 			{liveToolForCallId}
-			thinking={entry.thinking}
-			{showReasoning}
 			{expandedToolIds}
 		/>
+	{:else if entry.kind === 'reasoning'}
+		{#if showReasoning}
+			<div class="thinking timeline-thinking">
+				<pre>{entry.text}</pre>
+			</div>
+		{/if}
 	{:else if entry.item.kind === 'notice'}
 		<p class="timeline-notice">{entry.item.text}</p>
 	{:else}
@@ -184,10 +188,9 @@
 					<header>{item.label || role}</header>
 				{/if}
 				{#if showReasoning && entry.thinking}
-					<details class="thinking">
-						<summary>Reasoning</summary>
+					<div class="thinking">
 						<pre>{entry.thinking}</pre>
-					</details>
+					</div>
 				{/if}
 				{#if item.text}
 					{#if item.role === 'assistant'}
@@ -231,7 +234,7 @@
 {/each}
 
 {#if liveTools.length}
-	<ToolGroup chatId={chat.id} tools={liveToolGroupTools()} {showReasoning} {expandedToolIds} />
+	<ToolGroup chatId={chat.id} tools={liveToolGroupTools()} {expandedToolIds} />
 {/if}
 
 {#if showTimelineWorkingIndicator}
@@ -248,10 +251,9 @@
 		aria-label="assistant message, streaming"
 	>
 		{#if showReasoning && chat.streamThinking}
-			<details class="thinking" open>
-				<summary>Reasoning</summary>
+			<div class="thinking">
 				<pre>{chat.streamThinking}</pre>
-			</details>
+			</div>
 		{/if}
 		{#if chat.streamRenderedText}
 			{@const markdown = renderStreamingMarkdown(chat.streamRenderedText)}
@@ -528,7 +530,6 @@
 	.thinking pre {
 		margin: 0;
 		overflow-x: auto;
-		padding: 0.8rem;
 		font:
 			0.85rem/1.55 ui-monospace,
 			SFMono-Regular,
@@ -538,19 +539,17 @@
 		word-break: break-word;
 	}
 
-	.thinking {
-		border-top: 1px solid var(--border);
+	.message-text {
+		padding: 0.8rem;
 	}
 
-	.message-conversational > .thinking:first-child {
-		border-top: 0;
+	.thinking pre {
+		padding: 0;
 	}
 
-	.thinking summary {
-		padding: 0.6rem 0.8rem;
-		color: var(--text-muted);
-		font-size: 0.8rem;
-		cursor: pointer;
+	.timeline-thinking {
+		max-width: 54rem;
+		margin: 0.25rem auto;
 	}
 
 	.thinking pre {

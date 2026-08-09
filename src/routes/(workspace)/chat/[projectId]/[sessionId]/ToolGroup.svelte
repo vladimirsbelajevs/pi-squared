@@ -20,8 +20,6 @@
 		tools?: ToolGroupTool[];
 		finalizedTools?: FinalToolView[];
 		liveToolForCallId?: (callId: string) => StreamingTool | undefined;
-		thinking?: string;
-		showReasoning?: boolean;
 		expandedToolIds: ExpansionState;
 	};
 	let {
@@ -29,8 +27,6 @@
 		tools: liveTools = [],
 		finalizedTools,
 		liveToolForCallId,
-		thinking,
-		showReasoning = false,
 		expandedToolIds
 	}: Props = $props();
 	let tools = $derived(
@@ -124,12 +120,6 @@
 >
 	<summary class="tool-group-summary">{summary()}</summary>
 	{#if groupOpen}
-		{#if showReasoning && thinking}
-			<details class="thinking tool-thinking">
-				<summary>Reasoning</summary>
-				<pre>{thinking}</pre>
-			</details>
-		{/if}
 		<div class="tool-list">
 			{#each tools as tool (tool.id)}
 				<section class:tool-entry-error={tool.status === 'failed'} class="tool-entry">
@@ -165,9 +155,11 @@
 
 <style>
 	.tool-group {
+		box-sizing: border-box;
 		max-width: 54rem;
 		margin: 0.25rem auto;
 		overflow: hidden;
+		padding-left: 1.5rem;
 		content-visibility: auto;
 		contain-intrinsic-size: auto 240px;
 	}
@@ -239,8 +231,7 @@
 		padding: 0.5rem 0.65rem 0;
 	}
 
-	.tool-detail pre,
-	.thinking pre {
+	.tool-detail pre {
 		margin: 0;
 		overflow-x: auto;
 		padding: 0.8rem;
@@ -251,21 +242,6 @@
 			monospace;
 		white-space: pre-wrap;
 		word-break: break-word;
-	}
-
-	.thinking {
-		border-top: 1px solid var(--border);
-	}
-
-	.thinking summary {
-		padding: 0.6rem 0.8rem;
-		color: var(--text-muted);
-		font-size: 0.8rem;
-		cursor: pointer;
-	}
-
-	.thinking pre {
-		color: var(--text-muted);
 	}
 
 	.tool-result summary {

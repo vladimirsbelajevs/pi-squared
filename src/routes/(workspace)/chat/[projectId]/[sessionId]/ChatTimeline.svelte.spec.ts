@@ -907,9 +907,10 @@ describe('ChatTimeline', () => {
 
 		expect(screen.container.querySelectorAll('.thinking')).toHaveLength(0);
 		await screen.rerender({ chat: chatWithReasoning, showReasoning: true });
-		expect(screen.container.querySelector('.thinking')?.textContent).toContain(
-			'Historical reasoning'
-		);
+		const thinking = screen.container.querySelector('.thinking');
+		expect(thinking?.textContent).toContain('Historical reasoning');
+		expect(thinking?.tagName).toBe('DIV');
+		expect(thinking?.querySelector('summary')).toBeNull();
 	});
 
 	it('hides reasoning-only stream deltas until reasoning display is enabled', async () => {
@@ -926,9 +927,10 @@ describe('ChatTimeline', () => {
 			.element(screen.getByRole('group', { name: 'assistant message, streaming' }))
 			.toBeVisible();
 		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
-		expect(screen.container.querySelector('.streaming .thinking')?.textContent).toContain(
-			'Streaming reasoning'
-		);
+		const thinking = screen.container.querySelector('.streaming .thinking');
+		expect(thinking?.textContent).toContain('Streaming reasoning');
+		expect(thinking?.tagName).toBe('DIV');
+		expect(thinking?.querySelector('summary')).toBeNull();
 	});
 
 	it('keeps user message text literal', async () => {
@@ -1090,7 +1092,6 @@ describe('ChatTimeline', () => {
 							kind: 'message',
 							role: 'assistant',
 							text: '',
-							thinking: 'I will inspect the project.',
 							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{"path":"README.md"}' }]
 						},
 						{
@@ -1139,6 +1140,81 @@ describe('ChatTimeline', () => {
 		await expect.element(screen.getByText('3 tools called · 3 completed')).toBeVisible();
 		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
 		await expect.element(screen.getByText('The project is ready to run.')).toBeVisible();
+	});
+
+	it('renders tool reasoning chronologically without a disclosure control', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'assistant-1',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							thinking: 'Reasoning A',
+							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{}' }]
+						},
+						{
+							id: 'result-1',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-1',
+							text: 'Result A'
+						},
+						{
+							id: 'assistant-2',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							thinking: 'Reasoning B',
+							toolCalls: [{ id: 'tool-2', name: 'bash', arguments: '{}' }]
+						},
+						{
+							id: 'result-2',
+							kind: 'message',
+							role: 'tool',
+							toolCallId: 'tool-2',
+							text: 'Result B'
+						}
+					]
+				}
+			}),
+			showReasoning: true
+		});
+
+		const events = [...screen.container.querySelectorAll('.timeline-thinking, details.tool-group')];
+		expect(
+			events.map((event) => (event.matches('.timeline-thinking') ? 'reasoning' : 'tools'))
+		).toEqual(['reasoning', 'tools', 'reasoning', 'tools']);
+		expect(
+			[...screen.container.querySelectorAll('.timeline-thinking')].map((event) =>
+				event.textContent?.trim()
+			)
+		).toEqual(['Reasoning A', 'Reasoning B']);
+		expect(screen.container.querySelectorAll('.thinking details, .thinking summary')).toHaveLength(
+			0
+		);
+
+		const groups = screen.container.querySelectorAll<HTMLDetailsElement>('details.tool-group');
+		const groupSummaries = screen.getByText('1 tool called · 1 completed');
+		await groupSummaries.first().click();
+		await groupSummaries.last().click();
+		await vi.waitFor(() => expect([...groups].every((group) => group.open)).toBe(true));
+		expect(
+			[...groups].map((group) => group.querySelector('.tool-entry-heading strong')?.textContent)
+		).toEqual(['read', 'bash']);
+		const resultSummaries = screen.getByText('Result');
+		await resultSummaries.first().click();
+		await resultSummaries.last().click();
+		await vi.waitFor(() =>
+			expect(
+				[...groups].map((group) => group.querySelector('.tool-result pre')?.textContent)
+			).toEqual(['Result A', 'Result B'])
+		);
 	});
 
 	it('keeps tool batches separate across messages, notices, and stopped rows', async () => {
