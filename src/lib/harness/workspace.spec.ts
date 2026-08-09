@@ -503,6 +503,34 @@ describe('HarnessWorkspace item-1 focused coverage', () => {
 		expect(activeChat.snapshot?.sessionName).toBe('Renamed');
 	});
 
+	it('updates and persists a new chat title when the first user message arrives', async () => {
+		vi.useFakeTimers();
+		const stream = captureEventStream();
+		storageValues.set(STORAGE_KEY, JSON.stringify(storedChats(1)));
+		api.getRuntime.mockResolvedValue({ checkpoint: checkpoint('runtime-0', 'session-0') });
+		const workspace = new HarnessWorkspace();
+		await workspace.start();
+		const chat = (await workspace.ensureChat('project-1', 'session-0'))!;
+		chat.title = 'New chat';
+		workspace.persist();
+		clearStorageSpies();
+
+		sendRevisionedEvent(
+			stream,
+			'opaque:first-message',
+			'runtime-0',
+			{ type: 'items_appended', items: [item('user-1', 'user', 'Name this tab immediately')] },
+			1,
+			2
+		);
+
+		expect(chat.title).toBe('Name this tab immediately');
+		await vi.advanceTimersByTimeAsync(150);
+		expect(workspaceDocument().tabs).toEqual([
+			expect.objectContaining({ id: 'chat-0', title: 'Name this tab immediately' })
+		]);
+	});
+
 	it('replays a same-epoch duplicate once and applies the next revision once', async () => {
 		const stream = captureEventStream();
 		storageValues.set(CURSOR_KEY, 'opaque:resume');
@@ -820,6 +848,7 @@ describe('HarnessWorkspace stored-field persistence', () => {
 	});
 
 	it('persists the replacement before prompt rejection', async () => {
+		const stream = captureEventStream();
 		const model = { provider: 'test', id: 'model', name: 'Test', reasoning: true };
 		api.listProjects.mockResolvedValue({
 			projects: [
@@ -835,14 +864,23 @@ describe('HarnessWorkspace stored-field persistence', () => {
 		const tab = workspace.createNewTab('new-prompt');
 		const starting = workspace.startChat(tab, { text: 'hello', attachments: [] });
 		await vi.waitFor(() => expect(api.promptRuntime).toHaveBeenCalled());
+		sendRevisionedEvent(
+			stream,
+			'opaque:prompt-started',
+			'runtime-new',
+			{ type: 'metadata_updated', patch: { isStreaming: true } },
+			1,
+			2
+		);
 
+		expect(workspace.findChat('project-1', 'session-1')?.title).toBe('hello');
 		expect(workspaceDocument().tabs).toEqual([
-			expect.objectContaining({ kind: 'chat', sessionId: 'session-1' })
+			expect.objectContaining({ kind: 'chat', sessionId: 'session-1', title: 'hello' })
 		]);
 		prompt.reject(new Error('prompt rejected'));
 		await expect(starting).rejects.toThrow('prompt rejected');
 		expect(workspaceDocument().tabs).toEqual([
-			expect.objectContaining({ kind: 'chat', sessionId: 'session-1' })
+			expect.objectContaining({ kind: 'chat', sessionId: 'session-1', title: 'New chat' })
 		]);
 	});
 

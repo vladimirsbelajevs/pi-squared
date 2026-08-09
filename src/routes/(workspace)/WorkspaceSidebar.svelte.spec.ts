@@ -91,7 +91,9 @@ describe('WorkspaceSidebar', () => {
 		const spinner = screen.getByRole('img', { name: 'Working' });
 		await expect.element(spinner).toBeVisible();
 		const row = screen.container.querySelector('.workspace-entry-wrap')!;
-		expect(row.querySelector('.entry-working')).not.toBeNull();
+		const workingIndicator = row.querySelector<HTMLElement>('.entry-working');
+		expect(workingIndicator).not.toBeNull();
+		expect(getComputedStyle(workingIndicator!).alignSelf).toBe('center');
 		expect(row.querySelector('.entry-close')).not.toBeNull();
 		expect(row.querySelector('.entry-working')?.nextElementSibling).toBe(
 			row.querySelector('.entry-close')

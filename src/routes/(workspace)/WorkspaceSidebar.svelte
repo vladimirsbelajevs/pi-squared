@@ -460,6 +460,7 @@
 
 	:global(.entry-working) {
 		display: grid;
+		align-self: center;
 		width: 1.8rem;
 		min-width: 1.8rem;
 		place-items: center;

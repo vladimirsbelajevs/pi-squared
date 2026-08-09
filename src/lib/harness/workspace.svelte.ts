@@ -480,6 +480,16 @@ export class HarnessWorkspace {
 		}
 
 		const knownUserItemIds = this.#userItemIds(chat.snapshot);
+		const previousTitle = chat.title;
+		const optimisticTitle =
+			message && !chat.snapshot?.sessionName && knownUserItemIds.length === 0
+				? message.slice(0, 42)
+				: undefined;
+		if (optimisticTitle) {
+			chat.title = optimisticTitle;
+			this.persist();
+		}
+
 		try {
 			const result = await promptRuntime(chat.runtimeId, {
 				text: message,
@@ -500,6 +510,15 @@ export class HarnessWorkspace {
 
 			return true;
 		} catch (error) {
+			if (
+				optimisticTitle &&
+				!chat.snapshot?.sessionName &&
+				this.#userItemIds(chat.snapshot).length === 0
+			) {
+				chat.title = previousTitle;
+				this.persist();
+			}
+
 			throw normalizeError(error, 'Unable to send the message.');
 		}
 	}
@@ -823,9 +842,14 @@ export class HarnessWorkspace {
 		}
 
 		if (event.type !== 'assistant_delta' && event.type !== 'tool_update') {
+			const previousTitle = chat.title;
 			chat.snapshot = snapshotFromState(chat.runtime);
 			chat.permissionRequests = chat.snapshot.permissionRequests.map((request) => ({ ...request }));
+			chat.title = this.#snapshotTitle(chat.snapshot) ?? chat.title;
 			this.#reconcilePendingUserMessages(chat);
+			if (chat.title !== previousTitle) {
+				this.schedulePersist();
+			}
 		}
 
 		if (event.type === 'assistant_delta') {
@@ -1216,13 +1240,15 @@ export class HarnessWorkspace {
 	}
 
 	#chatTitle(snapshot: RuntimeSnapshot): string {
+		return this.#snapshotTitle(snapshot) ?? 'New chat';
+	}
+
+	#snapshotTitle(snapshot: RuntimeSnapshot): string | undefined {
 		if (snapshot.sessionName) {
 			return snapshot.sessionName;
 		}
 
-		const firstMessage = snapshot.items.find((item) => item.role === 'user')?.text;
-
-		return firstMessage ? firstMessage.slice(0, 42) : 'New chat';
+		return snapshot.items.find((item) => item.role === 'user')?.text.slice(0, 42);
 	}
 
 	#restoreTheme(): void {
