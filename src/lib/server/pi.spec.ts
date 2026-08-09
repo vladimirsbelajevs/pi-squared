@@ -2,12 +2,32 @@ import { describe, expect, it } from 'vitest';
 import type { AgentSession, SessionEntry } from '@earendil-works/pi-coding-agent';
 import {
 	buildSnapshot,
+	isSubagentSession,
 	listSessionSlashCommands,
 	serializeToolArguments,
 	mapSessionEntry,
 	normalizePiEvent
 } from './pi.js';
 import { promptWithAttachments } from '$lib/prompt-attachments';
+
+describe('isSubagentSession', () => {
+	it.each([
+		'subagent-luna-developer-7925e6e7-2215-40f5-9161-213c89434d19-1',
+		'subagent-scout-436062b1-1',
+		'subagent-worker-99468535-60ce-41f8-b93d-251927019df7'
+	])('recognizes generated subagent session name %s', (name) => {
+		expect(isSubagentSession({ name })).toBe(true);
+	});
+
+	it.each([
+		undefined,
+		'Refactor auth module',
+		'subagent research notes',
+		'subagent-luna-developer-not-a-run-id-1'
+	])('keeps ordinary session name %s', (name) => {
+		expect(isSubagentSession({ name })).toBe(false);
+	});
+});
 
 describe('mapSessionEntry', () => {
 	it('keeps assistant text, reasoning, and tool calls browser-safe', () => {

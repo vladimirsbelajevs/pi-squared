@@ -9,7 +9,8 @@ import {
 	type AgentSession,
 	type AgentSessionEvent,
 	type EventBus,
-	type SessionEntry
+	type SessionEntry,
+	type SessionInfo
 } from '@earendil-works/pi-coding-agent';
 import type {
 	ChatAttachment,
@@ -461,8 +462,17 @@ export async function listProjectSlashCommands(project: Project): Promise<SlashC
 	}
 }
 
+const SUBAGENT_SESSION_NAME =
+	/^subagent-.+-(?:[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-\d+)?$/i;
+
+export function isSubagentSession(session: Pick<SessionInfo, 'name'>): boolean {
+	return session.name !== undefined && SUBAGENT_SESSION_NAME.test(session.name);
+}
+
 export async function listHistoricalSessions(project: Project): Promise<HistoricalSession[]> {
-	const sessions = await SessionManager.list(project.cwd);
+	const sessions = (await SessionManager.list(project.cwd)).filter(
+		(session) => !isSubagentSession(session)
+	);
 
 	return sessions.map((session) => ({
 		projectId: project.id,
