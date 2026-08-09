@@ -898,7 +898,7 @@ describe('ChatTimeline', () => {
 						kind: 'message',
 						role: 'assistant',
 						text: 'Answer',
-						thinking: 'Historical reasoning'
+						thinking: '**Historical reasoning**\n\n```ts\nconst answer = 42;\n```'
 					}
 				]
 			}
@@ -909,18 +909,24 @@ describe('ChatTimeline', () => {
 		await screen.rerender({ chat: chatWithReasoning, showReasoning: true });
 		const thinking = screen.container.querySelector('.thinking');
 		expect(thinking?.textContent).toContain('Historical reasoning');
+		expect(thinking?.querySelector('strong')).toHaveTextContent('Historical reasoning');
+		expect(thinking?.querySelector('code.language-ts')).toHaveTextContent('const answer = 42;');
+		expect(thinking?.querySelector('.hljs-keyword')).toBeNull();
+		expect(thinking?.querySelector('.code-copy-action')).toBeNull();
 		expect(thinking?.tagName).toBe('DIV');
 		expect(thinking?.querySelector('summary')).toBeNull();
 	});
 
 	it('hides reasoning-only stream deltas until reasoning display is enabled', async () => {
-		const screen = render(ChatTimeline, { chat: chat({ streamThinking: 'Streaming reasoning' }) });
+		const screen = render(ChatTimeline, {
+			chat: chat({ streamThinking: '*Streaming reasoning*' })
+		});
 
 		expect(screen.container.querySelector('.streaming')).toBeNull();
 		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
 
 		await screen.rerender({
-			chat: chat({ streamThinking: 'Streaming reasoning' }),
+			chat: chat({ streamThinking: '*Streaming reasoning*' }),
 			showReasoning: true
 		});
 		await expect
@@ -929,6 +935,7 @@ describe('ChatTimeline', () => {
 		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
 		const thinking = screen.container.querySelector('.streaming .thinking');
 		expect(thinking?.textContent).toContain('Streaming reasoning');
+		expect(thinking?.querySelector('em')).toHaveTextContent('Streaming reasoning');
 		expect(thinking?.tagName).toBe('DIV');
 		expect(thinking?.querySelector('summary')).toBeNull();
 	});

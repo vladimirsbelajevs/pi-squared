@@ -171,9 +171,9 @@
 		/>
 	{:else if entry.kind === 'reasoning'}
 		{#if showReasoning}
-			<div class="thinking timeline-thinking">
-				<pre>{entry.text}</pre>
-			</div>
+			{@const markdown = renderStreamingMarkdown(entry.text)}
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
+			<div class="message-markdown thinking timeline-thinking">{@html markdown}</div>
 		{/if}
 	{:else if entry.item.kind === 'notice'}
 		<p class="timeline-notice">{entry.item.text}</p>
@@ -188,9 +188,9 @@
 					<header>{item.label || role}</header>
 				{/if}
 				{#if showReasoning && entry.thinking}
-					<div class="thinking">
-						<pre>{entry.thinking}</pre>
-					</div>
+					{@const reasoningMarkdown = renderStreamingMarkdown(entry.thinking)}
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
+					<div class="message-markdown thinking">{@html reasoningMarkdown}</div>
 				{/if}
 				{#if item.text}
 					{#if item.role === 'assistant'}
@@ -251,9 +251,9 @@
 		aria-label="assistant message, streaming"
 	>
 		{#if showReasoning && chat.streamThinking}
-			<div class="thinking">
-				<pre>{chat.streamThinking}</pre>
-			</div>
+			{@const reasoningMarkdown = renderStreamingMarkdown(chat.streamThinking)}
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
+			<div class="message-markdown thinking">{@html reasoningMarkdown}</div>
 		{/if}
 		{#if chat.streamRenderedText}
 			{@const markdown = renderStreamingMarkdown(chat.streamRenderedText)}
@@ -526,10 +526,10 @@
 		margin-bottom: 0;
 	}
 
-	.message-text,
-	.thinking pre {
+	.message-text {
 		margin: 0;
 		overflow-x: auto;
+		padding: 0.8rem;
 		font:
 			0.85rem/1.55 ui-monospace,
 			SFMono-Regular,
@@ -539,21 +539,18 @@
 		word-break: break-word;
 	}
 
-	.message-text {
-		padding: 0.8rem;
-	}
-
-	.thinking pre {
-		padding: 0;
+	.thinking {
+		color: var(--text-muted);
+		font:
+			0.85rem/1.55 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			monospace;
 	}
 
 	.timeline-thinking {
 		max-width: 54rem;
 		margin: 0.25rem auto;
-	}
-
-	.thinking pre {
-		color: var(--text-muted);
 	}
 
 	.timeline-notice {
