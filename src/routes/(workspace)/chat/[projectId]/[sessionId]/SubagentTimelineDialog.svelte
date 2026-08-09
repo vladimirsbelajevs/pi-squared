@@ -204,9 +204,9 @@
 		flex-direction: column;
 		overflow: hidden;
 		border: 1px solid var(--border-strong);
-		border-radius: 0.7rem;
+		border-radius: 0.4rem;
 		background: var(--canvas);
-		box-shadow: 0 1.4rem 4rem var(--shadow);
+		box-shadow: 0 0.35rem 1rem color-mix(in srgb, var(--shadow) 45%, transparent);
 		outline: none;
 	}
 
