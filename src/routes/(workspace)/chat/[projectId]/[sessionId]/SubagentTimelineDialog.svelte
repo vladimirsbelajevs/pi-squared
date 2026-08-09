@@ -133,9 +133,6 @@
 			<Dialog.Title data-subagent-dialog class="subagent-dialog-title"
 				>{run.agent} timeline</Dialog.Title
 			>
-			<Dialog.Description data-subagent-dialog class="subagent-dialog-description">
-				Read-only delegated child transcript{run.task ? `: ${run.task}` : '.'}
-			</Dialog.Description>
 			<div data-subagent-dialog class="subagent-dialog-body" {@attach refreshWhileOpen()}>
 				{#if run.timelineAvailable === false}
 					<p class="subagent-dialog-state" role="status">Timeline unavailable</p>
@@ -215,15 +212,9 @@
 
 	:global([data-subagent-dialog].subagent-dialog-title) {
 		margin: 0;
-		padding: 1rem 3.75rem 0.35rem 1.25rem;
+		padding: 0.3rem 3.75rem 0.6rem 1.25rem;
 		color: var(--text);
 		font-size: 1rem;
-	}
-
-	:global([data-subagent-dialog].subagent-dialog-description) {
-		padding: 0 1.25rem 0.8rem;
-		color: var(--text-muted);
-		font-size: 0.78rem;
 	}
 
 	:global([data-subagent-dialog].subagent-dialog-body) {
@@ -244,8 +235,8 @@
 
 	:global([data-subagent-dialog].subagent-dialog-close) {
 		position: absolute;
-		top: 0.8rem;
-		right: 0.9rem;
+		top: 0.2rem;
+		right: 0.2rem;
 		display: grid;
 		width: 2rem;
 		height: 2rem;
