@@ -12,11 +12,11 @@ inheritSkills: true
 defaultContext: fork
 
 tools:
-    - read
-    - grep
-    - find
-    - ls
-    - mcp:chrome-devtools
+  - read
+  - grep
+  - find
+  - ls
+  - mcp:chrome-devtools
 
 completionGuard: false
 acceptanceRole: read-only

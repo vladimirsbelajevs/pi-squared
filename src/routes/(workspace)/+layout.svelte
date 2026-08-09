@@ -2,9 +2,11 @@
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import type { Pathname } from '$app/types';
 	import { onMount } from 'svelte';
 	import WorkspaceScrollArea from '$lib/components/WorkspaceScrollArea.svelte';
 	import { setWorkspaceScrollController } from '$lib/workspace-scroll';
+	import WorkspaceCommandMenu from './WorkspaceCommandMenu.svelte';
 	import WorkspaceSidebar from './WorkspaceSidebar.svelte';
 	import { workspace } from '$lib/harness/workspace.svelte';
 	import type { WorkspaceTab } from '$lib/harness/types';
@@ -119,9 +121,11 @@
 		);
 	}
 
-	function closeTab(tab: WorkspaceTab, event: MouseEvent): void {
-		event.preventDefault();
-		event.stopPropagation();
+	function navigateWorkspace(pathname: Pathname): Promise<void> {
+		return goto(resolve(pathname));
+	}
+
+	function closeCurrentTab(tab: WorkspaceTab): void {
 		const wasActive = page.url.pathname === workspace.hrefForTab(tab);
 		const fallback = fallbackTab(tab);
 		if (wasActive) {
@@ -131,6 +135,12 @@
 		}
 
 		void workspace.closeTab(tab);
+	}
+
+	function closeTab(tab: WorkspaceTab, event: MouseEvent): void {
+		event.preventDefault();
+		event.stopPropagation();
+		closeCurrentTab(tab);
 	}
 
 	beforeNavigate(() => {
@@ -208,6 +218,15 @@
 		onClose={closeTab}
 		onCollapse={collapseSidebar}
 		onCloseDrawer={closeSidebar}
+	/>
+
+	<WorkspaceCommandMenu
+		{workspace}
+		pathname={page.url.pathname}
+		activeTab={workspace.tabs.find((tab) => workspace.hrefForTab(tab) === page.url.pathname)}
+		onNew={createNewTab}
+		onClose={closeCurrentTab}
+		onNavigate={navigateWorkspace}
 	/>
 
 	<section class="workspace-content">

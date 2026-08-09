@@ -20,6 +20,11 @@ tools:
   - write
   - lsp_diagnostics
   - lsp_fix
+  - svelte_get-documentation
+  - svelte_list-sections
+  - svelte_playground-link
+  - svelte_svelte-autofixer
+  - svelte_read_playground_link_ui
   - mcp:svelte
   - mcp:chrome-devtools
   - contact_supervisor

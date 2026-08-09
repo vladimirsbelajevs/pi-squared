@@ -47,6 +47,34 @@ test('opens a new tab from a fresh workspace', async ({ page }) => {
 		.toBe('tokyonight-day');
 });
 
+test('opens the workspace command menu and navigates with keyboard actions', async ({ page }) => {
+	await page.addInitScript(() => localStorage.clear());
+	await page.goto('/new/command-menu-draft');
+	await expect(page.getByRole('textbox', { name: 'Message Pi' })).toBeVisible();
+
+	await page.keyboard.press('Control+Shift+P');
+	const dialog = page.getByRole('dialog', { name: 'Workspace command menu' });
+	const commandInput = dialog.getByRole('combobox');
+	await expect(dialog).toBeVisible();
+	await expect(commandInput).toBeFocused();
+
+	await commandInput.fill('start new');
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(/\/new\/[^/]+$/);
+
+	await page.keyboard.press('Control+Shift+P');
+	await expect(page.getByRole('dialog', { name: 'Workspace command menu' })).toBeVisible();
+	await page.getByRole('dialog').getByRole('combobox').fill('history');
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(/\/history$/);
+
+	await page.keyboard.press('Control+Shift+P');
+	await expect(page.getByRole('dialog', { name: 'Workspace command menu' })).toBeVisible();
+	await page.getByRole('dialog').getByRole('combobox').fill('settings');
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(/\/settings$/);
+});
+
 test('collapses and reopens the desktop sidebar', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.addInitScript(() => localStorage.clear());
@@ -526,7 +554,12 @@ test('opens a historical session without reselecting its tab', async ({ page }) 
 	});
 
 	await page.goto('/history');
-	await page.getByRole('link', { name: /Historical chat/ }).click();
+	await expect(page.getByRole('textbox', { name: 'Search historical sessions' })).toBeVisible();
+	await page.keyboard.press('Control+Shift+P');
+	const commandMenu = page.getByRole('dialog', { name: 'Workspace command menu' });
+	await expect(commandMenu).toBeVisible();
+	await commandMenu.getByRole('combobox').fill('@inspect');
+	await commandMenu.getByRole('option', { name: /Historical chat/ }).click();
 
 	await expect(page).toHaveURL(/\/chat\/project-1\/session-1$/);
 	await expect(page.getByText('Project summary')).toBeVisible();
@@ -546,6 +579,123 @@ test('opens a historical session without reselecting its tab', async ({ page }) 
 		.getByText('Reasoning', { exact: true })
 		.click();
 	await expect(page.getByText('I inspected the project history.')).toBeVisible();
+});
+
+test('changes an active-chat model and thinking mode through the command menu', async ({
+	page
+}) => {
+	const project = {
+		id: 'command-project',
+		name: 'Command project',
+		cwd: '/tmp/command-project',
+		addedAt: '2026-01-01T00:00:00.000Z',
+		lastOpenedAt: '2026-01-01T00:00:00.000Z'
+	};
+	const initialModel = {
+		provider: 'test',
+		id: 'initial-model',
+		name: 'Initial model',
+		reasoning: true
+	};
+	const alternateModel = {
+		provider: 'test',
+		id: 'alternate-model',
+		name: 'Alternate model',
+		reasoning: true
+	};
+	const snapshot = {
+		runtimeId: 'command-runtime',
+		project,
+		sessionId: 'command-session',
+		model: initialModel,
+		thinkingLevel: 'medium',
+		isStreaming: false,
+		permissionRequests: [],
+		items: []
+	};
+	const checkpoint = (nextSnapshot: typeof snapshot) => ({
+		protocolVersion: 2,
+		cursor: { epoch: 'command-test', sequence: 1 },
+		revision: 1,
+		snapshot: nextSnapshot,
+		live: { text: '', thinking: '', tools: [] }
+	});
+	const modelRequests: unknown[] = [];
+	const thinkingRequests: unknown[] = [];
+
+	await page.addInitScript(() => {
+		localStorage.setItem(
+			'pi-squared:workspace:v1',
+			JSON.stringify({
+				version: 1,
+				activeTabId: 'command-chat',
+				tabs: [
+					{
+						kind: 'chat',
+						id: 'command-chat',
+						title: 'Command chat',
+						projectId: 'command-project',
+						sessionId: 'command-session',
+						runtimeId: 'command-runtime',
+						draft: '',
+						queueMode: 'followUp'
+					}
+				]
+			})
+		);
+	});
+	await page.route('**/api/projects', (route) => route.fulfill({ json: { projects: [project] } }));
+	await page.route('**/api/models', (route) =>
+		route.fulfill({ json: { models: [initialModel, alternateModel] } })
+	);
+	await page.route('**/api/sessions', (route) => route.fulfill({ json: { sessions: [] } }));
+	await page.route('**/api/runtimes/command-runtime/model', async (route) => {
+		modelRequests.push(route.request().postDataJSON());
+		await route.fulfill({
+			json: { checkpoint: checkpoint({ ...snapshot, model: alternateModel }) }
+		});
+	});
+	await page.route('**/api/runtimes/command-runtime/thinking', async (route) => {
+		thinkingRequests.push(route.request().postDataJSON());
+		await route.fulfill({
+			json: {
+				checkpoint: checkpoint({ ...snapshot, model: alternateModel, thinkingLevel: 'high' })
+			}
+		});
+	});
+	await page.route('**/api/runtimes/command-runtime', (route) =>
+		route.fulfill({ json: { checkpoint: checkpoint(snapshot) } })
+	);
+
+	await page.goto('/chat/command-project/command-session');
+	await expect(page.getByRole('button', { name: 'Model' })).toContainText('Initial model');
+	await expect(page.getByRole('button', { name: 'Reasoning' })).toContainText('medium');
+
+	await page.keyboard.press('Control+Shift+P');
+	const dialog = page.getByRole('dialog', { name: 'Workspace command menu' });
+	await dialog.getByRole('option', { name: 'Change model' }).click();
+	await dialog.getByRole('option', { name: /Alternate model/ }).click();
+	await expect.poll(() => modelRequests).toHaveLength(1);
+	expect(modelRequests[0]).toMatchObject({ provider: 'test', id: 'alternate-model' });
+	await expect(page.getByRole('button', { name: 'Model' })).toContainText('Alternate model');
+
+	await page.keyboard.press('Control+Shift+P');
+	await page
+		.getByRole('dialog', { name: 'Workspace command menu' })
+		.getByRole('option', {
+			name: 'Change thinking mode'
+		})
+		.click();
+	await page
+		.getByRole('dialog', { name: 'Workspace command menu' })
+		.getByRole('option', {
+			name: 'high',
+			exact: true
+		})
+		.click();
+	await expect.poll(() => thinkingRequests).toHaveLength(1);
+	expect(thinkingRequests[0]).toMatchObject({ thinkingLevel: 'high' });
+	await expect(page.getByRole('button', { name: 'Reasoning' })).toContainText('high');
 });
 
 test('closes inactive entries and falls back to the next active entry', async ({ page }) => {
@@ -597,6 +747,60 @@ test('closes inactive entries and falls back to the next active entry', async ({
 		'aria-current',
 		'page'
 	);
+});
+
+test('closes an active tab through the command menu and uses its fallback without recreating it', async ({
+	page
+}) => {
+	await page.addInitScript(() => {
+		localStorage.setItem(
+			'pi-squared:workspace:v1',
+			JSON.stringify({
+				version: 1,
+				activeTabId: 'active-tab',
+				tabs: [
+					{
+						kind: 'new',
+						id: 'active-tab',
+						title: 'Active draft',
+						draft: { projectId: '', modelKey: '', thinkingLevel: 'medium', prompt: '' }
+					},
+					{
+						kind: 'new',
+						id: 'fallback-tab',
+						title: 'Fallback draft',
+						draft: { projectId: '', modelKey: '', thinkingLevel: 'medium', prompt: '' }
+					}
+				]
+			})
+		);
+	});
+
+	await page.goto('/new/active-tab');
+	await expect(page.getByRole('textbox', { name: 'Message Pi' })).toBeVisible();
+	await page.keyboard.press('Control+Shift+P');
+	const dialog = page.getByRole('dialog', { name: 'Workspace command menu' });
+	await dialog.getByRole('combobox').fill('close current tab');
+	await page.keyboard.press('Enter');
+
+	await expect(page).toHaveURL(/\/new\/fallback-tab$/);
+	await expect(
+		page.locator('#workspace-sidebar').getByRole('link', { name: 'Active draft' })
+	).toHaveCount(0);
+	await expect(
+		page.locator('#workspace-sidebar').getByRole('link', { name: 'Fallback draft' })
+	).toHaveAttribute('aria-current', 'page');
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const stored = JSON.parse(localStorage.getItem('pi-squared:workspace:v1') ?? '{}') as {
+					tabs?: Array<{ id?: string }>;
+				};
+
+				return stored.tabs?.map((tab) => tab.id) ?? [];
+			})
+		)
+		.toEqual(['fallback-tab']);
 });
 
 test('closes an active tab without reopening it', async ({ page }) => {
