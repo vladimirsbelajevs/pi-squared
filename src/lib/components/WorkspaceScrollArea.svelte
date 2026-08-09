@@ -218,7 +218,7 @@
 		</div>
 	</ScrollArea.Viewport>
 
-	<ScrollArea.Scrollbar class="workspace-scrollbar" orientation="vertical">
+	<ScrollArea.Scrollbar class="workspace-scrollbar" orientation="vertical" forceMount>
 		<ScrollArea.Thumb class="workspace-scroll-thumb" />
 	</ScrollArea.Scrollbar>
 	<ScrollArea.Corner />
@@ -275,6 +275,12 @@
 		[data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar[data-state='hidden']
 	) {
 		opacity: 0;
+	}
+
+	:global(
+		[data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar[data-state='hidden']:hover
+	) {
+		opacity: 1;
 	}
 
 	:global([data-scroll-area-thumb].workspace-scroll-thumb) {
