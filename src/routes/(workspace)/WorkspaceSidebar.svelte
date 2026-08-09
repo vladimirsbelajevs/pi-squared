@@ -343,6 +343,7 @@
 		min-height: 0;
 		--workspace-active-row-background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
 		--workspace-active-flare-size: 1rem;
+		--workspace-active-flare-width: 2.5rem;
 		background: var(--surface-muted);
 		color: var(--text);
 	}
@@ -622,7 +623,7 @@
 		position: absolute;
 		right: -1px;
 		z-index: -1;
-		width: var(--workspace-active-flare-size);
+		width: var(--workspace-active-flare-width);
 		height: var(--workspace-active-flare-size);
 		content: '';
 		pointer-events: none;
@@ -630,19 +631,37 @@
 
 	.sidebar-tab.active::before {
 		top: calc(-1 * var(--workspace-active-flare-size));
-		background: radial-gradient(
-			circle var(--workspace-active-flare-size) at 0 0,
-			transparent calc(var(--workspace-active-flare-size) - 1px),
-			var(--workspace-active-row-background) var(--workspace-active-flare-size)
+		background: var(--workspace-active-row-background);
+		clip-path: polygon(
+			0 100%,
+			20% 99.99%,
+			40% 99.59%,
+			50% 98.44%,
+			60% 95.33%,
+			70% 88.24%,
+			80% 73.79%,
+			90% 46.86%,
+			95% 26.49%,
+			100% 0,
+			100% 100%
 		);
 	}
 
 	.sidebar-tab.active::after {
 		bottom: calc(-1 * var(--workspace-active-flare-size));
-		background: radial-gradient(
-			circle var(--workspace-active-flare-size) at 0 100%,
-			transparent calc(var(--workspace-active-flare-size) - 1px),
-			var(--workspace-active-row-background) var(--workspace-active-flare-size)
+		background: var(--workspace-active-row-background);
+		clip-path: polygon(
+			0 0,
+			100% 0,
+			100% 100%,
+			95% 73.51%,
+			90% 53.14%,
+			80% 26.21%,
+			70% 11.76%,
+			60% 4.67%,
+			50% 1.56%,
+			40% 0.41%,
+			20% 0.01%
 		);
 	}
 
