@@ -30,6 +30,7 @@
 	let loadState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
 	let response = $state<SubagentTimelineResponse>();
 	let errorMessage = $state('');
+	let closeButton = $state<HTMLButtonElement | null>(null);
 
 	function readOnlyChat(items: ChatItem[]): ChatTab {
 		const snapshot: RuntimeSnapshot = {
@@ -69,6 +70,14 @@
 			permissionRequests: [],
 			pendingUserMessages: []
 		};
+	}
+
+	function handleOpenAutoFocus(event: Event): void {
+		event.preventDefault();
+		closeButton?.parentElement
+			?.querySelector<HTMLElement>('.subagent-dialog-body')
+			?.scrollTo({ top: 0, left: 0 });
+		closeButton?.focus({ preventScroll: true });
 	}
 
 	async function loadTimeline(signal?: AbortSignal): Promise<void> {
@@ -140,7 +149,11 @@
 	</Dialog.Trigger>
 	<Dialog.Portal>
 		<Dialog.Overlay data-subagent-dialog class="subagent-dialog-overlay" />
-		<Dialog.Content data-subagent-dialog class="subagent-dialog-content">
+		<Dialog.Content
+			data-subagent-dialog
+			class="subagent-dialog-content"
+			onOpenAutoFocus={handleOpenAutoFocus}
+		>
 			<Dialog.Title data-subagent-dialog class="subagent-dialog-title"
 				>{run.agent} timeline</Dialog.Title
 			>
@@ -174,6 +187,7 @@
 				{/if}
 			</div>
 			<Dialog.Close
+				bind:ref={closeButton}
 				data-subagent-dialog
 				class="subagent-dialog-close"
 				type="button"
