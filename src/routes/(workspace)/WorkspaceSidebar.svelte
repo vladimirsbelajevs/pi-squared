@@ -428,6 +428,7 @@
 	.sidebar-bottom {
 		flex: 1;
 		min-height: 0;
+		overflow-x: hidden;
 		overflow-y: auto;
 		padding: 0.55rem 0 0.8rem 0.7rem;
 		scrollbar-width: thin;

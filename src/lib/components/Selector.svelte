@@ -5,6 +5,10 @@
 		value: string;
 		label: string;
 		disabled?: boolean;
+		swatch?: {
+			background: string;
+			borderColor?: string;
+		};
 	};
 
 	type Props = {
@@ -71,6 +75,14 @@
 						data-align={alignment}
 						data-invalid={invalid || undefined}
 					>
+						{#if selectedOption?.swatch}
+							<span
+								class="selector-swatch"
+								style:background={selectedOption.swatch.background}
+								style:border-color={selectedOption.swatch.borderColor ?? 'transparent'}
+								aria-hidden="true"
+							></span>
+						{/if}
 						<span class="selector-value">{displayLabel}</span>
 						<svg viewBox="0 0 12 12" aria-hidden="true">
 							<path
@@ -113,6 +125,14 @@
 									disabled={option.disabled}
 								>
 									{#snippet children({ selected })}
+										{#if option.swatch}
+											<span
+												class="selector-swatch"
+												style:background={option.swatch.background}
+												style:border-color={option.swatch.borderColor ?? 'transparent'}
+												aria-hidden="true"
+											></span>
+										{/if}
 										<span class="selector-option-label">{option.label}</span>
 										{#if selected}
 											<span class="selector-check" aria-hidden="true">✓</span>
@@ -191,9 +211,18 @@
 		white-space: nowrap;
 	}
 
+	.selector-swatch {
+		flex: 0 0 1rem;
+		width: 1rem;
+		height: 1rem;
+		border: 1px solid transparent;
+		border-radius: 50%;
+	}
+
 	:global([data-selector].selector-trigger svg) {
 		width: 0.8rem;
 		height: 0.8rem;
+		margin-left: auto;
 	}
 
 	:global([data-selector].selector-trigger[data-state='open'] svg) {

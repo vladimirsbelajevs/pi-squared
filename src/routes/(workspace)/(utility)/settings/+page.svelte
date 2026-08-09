@@ -1,8 +1,32 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
+	import Selector from '$lib/components/Selector.svelte';
 	import Switch from '$lib/components/Switch.svelte';
 	import { THEME_LABELS, workspace } from '$lib/harness/workspace.svelte';
 	import type { Theme } from '$lib/harness/types';
+
+	const THEME_SWATCHES: Record<Theme, { background: string; borderColor?: string }> = {
+		graphite: { background: 'var(--accent-strong)' },
+		paper: { background: '#f0ebe0', borderColor: '#aaa08e' },
+		nord: { background: '#88c0d0' },
+		solarized: { background: '#2aa198' },
+		'tokyonight-night': { background: '#7aa2f7' },
+		'tokyonight-storm': { background: '#7aa2f7' },
+		'tokyonight-moon': { background: '#82aaff' },
+		'tokyonight-day': { background: '#2e7de9', borderColor: '#4094a3' },
+		'everforest-dark-hard': { background: '#7fbbb3' },
+		'everforest-dark-medium': { background: '#83c092' },
+		'everforest-dark-soft': { background: '#a7c080' },
+		'everforest-light-hard': { background: '#3a94c5', borderColor: '#829181' },
+		'everforest-light-medium': { background: '#3a94c5', borderColor: '#829181' },
+		'everforest-light-soft': { background: '#3a94c5', borderColor: '#829181' },
+		system: { background: 'linear-gradient(135deg, #111 50%, #f6f3ec 50%)' }
+	};
+	const themeOptions = (Object.keys(THEME_LABELS) as Theme[]).map((value) => ({
+		value,
+		label: THEME_LABELS[value],
+		swatch: THEME_SWATCHES[value]
+	}));
 
 	let notificationStatusText = $derived(
 		workspace.notificationPermission === 'unsupported'
@@ -55,19 +79,12 @@
 
 <section class="settings-card" aria-labelledby="theme-heading">
 	<h2 id="theme-heading">Theme</h2>
-	<div class="theme-grid">
-		{#each Object.entries(THEME_LABELS) as [value, label] (value)}
-			<button
-				class:chosen={workspace.theme === value}
-				class={`theme-choice theme-${value}`}
-				type="button"
-				aria-pressed={workspace.theme === value}
-				onclick={() => workspace.applyTheme(value as Theme)}
-			>
-				<span></span>{label}
-			</button>
-		{/each}
-	</div>
+	<Selector
+		label="Select theme"
+		value={workspace.theme}
+		options={themeOptions}
+		onChange={(value) => workspace.applyTheme(value as Theme)}
+	/>
 </section>
 
 <section class="settings-card" aria-labelledby="chat-display-heading">
@@ -203,86 +220,6 @@
 	.settings-card h2 {
 		margin: 0;
 		font-size: 1.2rem;
-	}
-
-	.theme-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-		gap: 0.6rem;
-	}
-
-	.theme-choice {
-		display: flex;
-		align-items: center;
-		gap: 0.55rem;
-		border: 1px solid var(--border);
-		border-radius: 0.4rem;
-		background: var(--surface-muted);
-		color: var(--text);
-		padding: 0.65rem;
-	}
-
-	.theme-choice:hover,
-	.theme-choice.chosen {
-		border-color: var(--accent);
-	}
-
-	.theme-choice span {
-		flex: 0 0 1rem;
-		width: 1rem;
-		height: 1rem;
-		border-radius: 50%;
-		background: var(--accent-strong);
-	}
-
-	.theme-paper span {
-		border: 1px solid #aaa08e;
-		background: #f0ebe0;
-	}
-
-	.theme-nord span {
-		background: #88c0d0;
-	}
-
-	.theme-solarized span {
-		background: #2aa198;
-	}
-
-	.theme-tokyonight-night span,
-	.theme-tokyonight-storm span {
-		background: #7aa2f7;
-	}
-
-	.theme-tokyonight-moon span {
-		background: #82aaff;
-	}
-
-	.theme-tokyonight-day span {
-		border: 1px solid #4094a3;
-		background: #2e7de9;
-	}
-
-	.theme-everforest-dark-hard span {
-		background: #7fbbb3;
-	}
-
-	.theme-everforest-dark-medium span {
-		background: #83c092;
-	}
-
-	.theme-everforest-dark-soft span {
-		background: #a7c080;
-	}
-
-	.theme-everforest-light-hard span,
-	.theme-everforest-light-medium span,
-	.theme-everforest-light-soft span {
-		border: 1px solid #829181;
-		background: #3a94c5;
-	}
-
-	.theme-system span {
-		background: linear-gradient(135deg, #111 50%, #f6f3ec 50%);
 	}
 
 	.display-preferences {
