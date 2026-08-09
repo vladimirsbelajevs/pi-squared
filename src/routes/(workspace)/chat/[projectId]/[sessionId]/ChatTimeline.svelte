@@ -6,6 +6,7 @@
 	import { renderAssistantMarkdown, renderStreamingMarkdown } from '$lib/markdown';
 	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
 	import ImageViewer, { type ImageViewerImage } from '$lib/components/ImageViewer.svelte';
+	import PiWorkingSpinner from '$lib/components/PiWorkingSpinner.svelte';
 	import ToolGroup, { type ToolGroupTool } from './ToolGroup.svelte';
 	import MessageRow from './MessageRow.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -24,11 +25,10 @@
 		timeStyle: 'short'
 	});
 	const expandedToolIds = new SvelteSet<string>();
-	let waitingForResponse = $derived(
+	let showTimelineWorkingIndicator = $derived(
 		chat.snapshot?.isStreaming === true &&
-			(!showReasoning || !chat.streamThinking) &&
 			!chat.streamText &&
-			chat.streamTools.length === 0 &&
+			(!showReasoning || !chat.streamThinking) &&
 			chat.permissionRequests.length === 0
 	);
 	let timeline = $derived.by(() =>
@@ -234,10 +234,10 @@
 	<ToolGroup chatId={chat.id} tools={liveToolGroupTools()} {showReasoning} {expandedToolIds} />
 {/if}
 
-{#if waitingForResponse}
+{#if showTimelineWorkingIndicator}
 	<div class="thinking-indicator" role="status">
-		<span>Pi is thinking</span>
-		<span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+		<PiWorkingSpinner tone="timeline" />
+		<span class="visually-hidden">Working</span>
 	</div>
 {/if}
 
@@ -579,49 +579,23 @@
 		align-items: center;
 		box-sizing: border-box;
 		width: min(54rem, 100%);
-		gap: 0.5rem;
 		margin: 1rem auto;
 		color: var(--text-muted);
 		padding: 0.45rem 0.8rem;
 		font-size: 0.78rem;
 	}
 
-	.thinking-dots {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.2rem;
-	}
-
-	.thinking-dots i {
-		width: 0.3rem;
-		height: 0.3rem;
-		border-radius: 50%;
-		background: var(--accent);
-		animation: thinking-dot 1.1s ease-in-out infinite;
-	}
-
-	.thinking-dots i:nth-child(2) {
-		animation-delay: 140ms;
-	}
-
-	.thinking-dots i:nth-child(3) {
-		animation-delay: 280ms;
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
 	}
 
 	.streaming {
 		border-color: var(--accent);
-	}
-
-	@keyframes thinking-dot {
-		50% {
-			opacity: 0.35;
-			transform: translateY(-0.16rem);
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.thinking-dots i {
-			animation: none;
-		}
 	}
 </style>

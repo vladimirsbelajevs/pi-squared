@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import PiWorkingSpinner from '$lib/components/PiWorkingSpinner.svelte';
 	import type { HarnessWorkspace } from '$lib/harness/workspace.svelte';
 	import type { WorkspaceTab } from '$lib/harness/types';
 
@@ -158,7 +159,6 @@
 						href={resolve(`/new/${encodeURIComponent(tab.id)}`)}
 						aria-current={isActive(tab) ? 'page' : undefined}
 					>
-						<span class="tab-plus" aria-hidden="true">+</span>
 						<span class="entry-title">{tab.title}</span>
 					</a>
 					<button
@@ -189,17 +189,11 @@
 								)}
 								aria-current={isActive(tab) ? 'page' : undefined}
 							>
-								{#if tab.kind === 'chat'}
-									{#if tab.snapshot?.isStreaming}
-										<span class="tab-status live" role="img" aria-label="Streaming"></span>
-									{:else}
-										<span class="tab-status" aria-hidden="true"></span>
-									{/if}
-								{:else}
-									<span class="tab-plus" aria-hidden="true">+</span>
-								{/if}
 								<span class="entry-title">{tab.title}</span>
 							</a>
+							{#if tab.kind === 'chat' && tab.snapshot?.isStreaming}
+								<PiWorkingSpinner class="entry-working" tone="sidebar" />
+							{/if}
 							<button
 								class="entry-close"
 								type="button"
@@ -335,13 +329,14 @@
 		align-items: center;
 		gap: 0.55rem;
 		width: 100%;
+		min-height: 2.35rem;
 		margin-bottom: 0.45rem;
 		border: 1px solid transparent;
 		border-radius: 6px;
 		background: transparent;
 		color: var(--text);
-		padding: 0.48rem 0.55rem;
-		font-size: 0.86rem;
+		padding: 0.3rem 0.55rem;
+		font-size: 0.82rem;
 		font-weight: 600;
 		text-align: left;
 		transition:
@@ -368,10 +363,11 @@
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
+		min-height: 2.35rem;
 		border: 1px solid transparent;
 		border-radius: 6px;
 		color: var(--text-muted);
-		padding: 0.4rem 0.55rem;
+		padding: 0.3rem 0.55rem;
 		font-size: 0.82rem;
 		font-weight: 500;
 		text-decoration: none;
@@ -413,7 +409,9 @@
 
 	.workspace-entry-wrap {
 		display: flex;
+		align-items: stretch;
 		min-width: 0;
+		min-height: 2.35rem;
 		margin: 0.08rem 0;
 		border: 1px solid transparent;
 		border-radius: 6px;
@@ -436,10 +434,9 @@
 		gap: 0.5rem;
 		min-width: 0;
 		flex: 1;
-		min-height: 1.9rem;
 		color: var(--text-muted);
 		padding: 0.3rem 0.25rem 0.3rem 0.55rem;
-		font-size: 0.8rem;
+		font-size: 0.82rem;
 		text-align: left;
 		text-decoration: none;
 	}
@@ -450,6 +447,10 @@
 		color: var(--text);
 	}
 
+	.project-group .workspace-entry {
+		padding-left: 1.47rem;
+	}
+
 	.entry-title {
 		min-width: 0;
 		overflow: hidden;
@@ -457,28 +458,12 @@
 		white-space: nowrap;
 	}
 
-	.tab-status {
-		width: 0.42rem;
-		height: 0.42rem;
-		flex: 0 0 0.42rem;
-		border: 1px solid color-mix(in srgb, var(--text-muted) 70%, transparent);
-		border-radius: 50%;
-		opacity: 0.7;
-	}
-
-	.tab-status.live {
-		border-color: var(--success);
-		background: var(--success);
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 12%, transparent);
-		opacity: 0.9;
-	}
-
-	.tab-plus {
-		flex: 0 0 0.42rem;
-		color: color-mix(in srgb, var(--accent) 75%, var(--text-muted));
+	:global(.entry-working) {
+		display: grid;
+		width: 1.8rem;
+		min-width: 1.8rem;
+		place-items: center;
 		font-size: 0.82rem;
-		font-weight: 600;
-		line-height: 1;
 	}
 
 	.entry-close {

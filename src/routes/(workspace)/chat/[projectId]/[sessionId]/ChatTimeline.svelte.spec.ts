@@ -68,10 +68,11 @@ function mockClipboard(writeText: ReturnType<typeof vi.fn>): () => void {
 }
 
 describe('ChatTimeline', () => {
-	it('shows an animated thinking status before the first response delta', async () => {
+	it('shows the Pi working spinner before the first response delta', async () => {
 		const screen = render(ChatTimeline, { chat: chat() });
 
-		await expect.element(screen.getByRole('status')).toHaveTextContent('Pi is thinking');
+		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
+		await expect.element(screen.getByRole('status')).toHaveTextContent('Working');
 	});
 
 	it('contains off-screen finalized timeline rows', () => {
@@ -275,11 +276,10 @@ describe('ChatTimeline', () => {
 		await vi.waitFor(() => expect(screen.container.querySelector('[role="dialog"]')).toBeNull());
 	});
 
-	it('hides the thinking status once text, tools, or approval is visible', async () => {
+	it('hides the timeline spinner while visible response text or approval is present', async () => {
 		const screen = render(ChatTimeline, { chat: chat() });
 		for (const override of [
 			{ streamText: 'Working on it.' },
-			{ streamTools: [{ id: 'tool-1', name: 'read', text: 'Reading file' }] },
 			{
 				permissionRequests: [
 					{
@@ -291,8 +291,47 @@ describe('ChatTimeline', () => {
 			}
 		]) {
 			await screen.rerender({ chat: chat(override) });
-			await expect.element(screen.locator).not.toHaveTextContent('Pi is thinking');
+			expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
 		}
+	});
+
+	it('keeps the timeline spinner visible alongside live tool calls', async () => {
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				streamTools: [{ id: 'tool-1', name: 'read', status: 'running', text: 'Reading file' }]
+			})
+		});
+
+		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
+		await expect.element(screen.getByText('1 tool called')).toBeVisible();
+
+		await screen.rerender({
+			chat: chat({
+				streamTools: [{ id: 'tool-1', name: 'read', status: 'running', text: 'Reading file' }],
+				permissionRequests: [
+					{ id: 'permission-1', method: 'confirm', title: 'Permission required' }
+				]
+			})
+		});
+		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
+
+		await screen.rerender({
+			chat: chat({
+				streamTools: [{ id: 'tool-1', name: 'read', status: 'running', text: 'Reading file' }],
+				streamText: 'The answer is ready.'
+			})
+		});
+		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
+	});
+
+	it('remains hidden after the runtime turn finishes', async () => {
+		const screen = render(ChatTimeline, { chat: chat() });
+		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
+
+		await screen.rerender({
+			chat: chat({ snapshot: { ...chat().snapshot!, isStreaming: false } })
+		});
+		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
 	});
 
 	it('hides persisted model-change notices by default while keeping other notices visible', async () => {
@@ -877,7 +916,7 @@ describe('ChatTimeline', () => {
 		const screen = render(ChatTimeline, { chat: chat({ streamThinking: 'Streaming reasoning' }) });
 
 		expect(screen.container.querySelector('.streaming')).toBeNull();
-		await expect.element(screen.getByRole('status')).toHaveTextContent('Pi is thinking');
+		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
 
 		await screen.rerender({
 			chat: chat({ streamThinking: 'Streaming reasoning' }),
@@ -886,6 +925,7 @@ describe('ChatTimeline', () => {
 		await expect
 			.element(screen.getByRole('group', { name: 'assistant message, streaming' }))
 			.toBeVisible();
+		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
 		expect(screen.container.querySelector('.streaming .thinking')?.textContent).toContain(
 			'Streaming reasoning'
 		);
