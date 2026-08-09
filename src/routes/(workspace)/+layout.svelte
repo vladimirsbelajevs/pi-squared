@@ -276,7 +276,6 @@
 		border-radius: 7px;
 		background: var(--surface-muted);
 		color: var(--text);
-		box-shadow: 0 0.25rem 1rem var(--shadow);
 	}
 
 	.menu-button svg {
