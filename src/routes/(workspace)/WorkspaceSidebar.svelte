@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Attachment } from 'svelte/attachments';
 	import { resolve } from '$app/paths';
 	import PiWorkingSpinner from '$lib/components/PiWorkingSpinner.svelte';
 	import type { HarnessWorkspace } from '$lib/harness/workspace.svelte';
@@ -27,6 +28,13 @@
 	let unassignedDrafts = $derived(
 		workspace.tabs.filter((tab) => tab.kind === 'new' && !tab.draft.projectId)
 	);
+	let activeWorkspaceHref = $derived.by(() => {
+		const activeTab = workspace.tabs.find((tab) => isActive(tab));
+
+		return activeTab ? workspace.hrefForTab(activeTab) : '';
+	});
+
+	const activeRowAttachmentTokens = new WeakMap<HTMLElement, symbol>();
 	let projectGroups = $derived.by(() => {
 		const groups: ProjectGroup[] = [];
 
@@ -66,6 +74,69 @@
 				element.focus();
 			}
 		});
+	}
+
+	function positionActiveRow(element: HTMLElement): ReturnType<Attachment> {
+		const sidebar = element.closest<HTMLElement>('.workspace-sidebar');
+		const list = element.closest<HTMLElement>('.sidebar-bottom');
+		if (!sidebar || !list) {
+			return;
+		}
+
+		const sidebarElement = sidebar;
+		const listElement = list;
+		let frame: number | undefined;
+		const attachmentToken = Symbol('active-row-position');
+		activeRowAttachmentTokens.set(sidebarElement, attachmentToken);
+
+		function updateGeometry(): void {
+			frame = undefined;
+			if (!element.isConnected || !sidebarElement.isConnected) {
+				return;
+			}
+
+			const sidebarRect = sidebarElement.getBoundingClientRect();
+			const rowRect = element.getBoundingClientRect();
+			const sidebarHeight = sidebarRect.height;
+			const sidebarFontSize = Number.parseFloat(getComputedStyle(sidebarElement).fontSize) || 16;
+			const flareSize = sidebarFontSize * 0.7;
+			const rowTop = rowRect.top - sidebarRect.top;
+			const rowBottom = rowRect.bottom - sidebarRect.top;
+			const gapTop = Math.max(0, Math.min(sidebarHeight, rowTop - flareSize));
+			const gapBottom = Math.max(gapTop, Math.min(sidebarHeight, rowBottom + flareSize));
+
+			sidebarElement.style.setProperty('--sidebar-active-gap-top', `${gapTop}px`);
+			sidebarElement.style.setProperty('--sidebar-active-gap-bottom', `${gapBottom}px`);
+		}
+
+		function scheduleGeometry(): void {
+			if (frame === undefined) {
+				frame = requestAnimationFrame(updateGeometry);
+			}
+		}
+
+		const resizeObserver = new ResizeObserver(scheduleGeometry);
+		resizeObserver.observe(sidebarElement);
+		resizeObserver.observe(listElement);
+		resizeObserver.observe(element);
+		listElement.addEventListener('scroll', scheduleGeometry, { passive: true });
+		window.addEventListener('resize', scheduleGeometry);
+		updateGeometry();
+
+		return () => {
+			listElement.removeEventListener('scroll', scheduleGeometry);
+			window.removeEventListener('resize', scheduleGeometry);
+			resizeObserver.disconnect();
+			if (frame !== undefined) {
+				cancelAnimationFrame(frame);
+			}
+
+			if (activeRowAttachmentTokens.get(sidebarElement) === attachmentToken) {
+				activeRowAttachmentTokens.delete(sidebarElement);
+				sidebarElement.style.removeProperty('--sidebar-active-gap-top');
+				sidebarElement.style.removeProperty('--sidebar-active-gap-bottom');
+			}
+		};
 	}
 </script>
 
@@ -148,11 +219,26 @@
 			</nav>
 		</div>
 
+		<div
+			class:has-active-workspace={activeWorkspaceHref !== ''}
+			class="sidebar-divider"
+			aria-hidden="true"
+		>
+			{#key activeWorkspaceHref}
+				<span class="sidebar-divider-segment sidebar-divider-upper"></span>
+				<span class="sidebar-divider-segment sidebar-divider-lower"></span>
+			{/key}
+		</div>
+
 		<div class="sidebar-separator" aria-hidden="true"></div>
 
 		<nav class="sidebar-bottom" aria-label="Open workspace entries">
 			{#each unassignedDrafts as tab (tab.id)}
-				<div class:active={isActive(tab)} class="workspace-entry-wrap">
+				<div
+					class:active={isActive(tab)}
+					class="workspace-entry-wrap"
+					{@attach isActive(tab) ? positionActiveRow : undefined}
+				>
 					<a
 						class="workspace-entry"
 						class:active={isActive(tab)}
@@ -178,7 +264,11 @@
 				<section class="project-group" aria-labelledby={`project-${group.projectId}`}>
 					<h2 id={`project-${group.projectId}`}>{group.name}</h2>
 					{#each group.tabs as tab (tab.id)}
-						<div class:active={isActive(tab)} class="workspace-entry-wrap">
+						<div
+							class:active={isActive(tab)}
+							class="workspace-entry-wrap"
+							{@attach isActive(tab) ? positionActiveRow : undefined}
+						>
 							<a
 								class="workspace-entry"
 								class:active={isActive(tab)}
@@ -231,14 +321,75 @@
 	}
 
 	.workspace-sidebar {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		width: 16rem;
 		height: 100%;
 		min-height: 0;
-		border-right: 1px solid var(--border);
+		--workspace-active-row-background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
+		--workspace-active-flare-size: 0.7rem;
 		background: var(--surface-muted);
 		color: var(--text);
+	}
+
+	.sidebar-divider {
+		position: absolute;
+		inset: 0 0 0 auto;
+		z-index: 1;
+		width: 1px;
+		pointer-events: none;
+	}
+
+	.sidebar-divider-segment {
+		position: absolute;
+		right: 0;
+		width: 1px;
+		background: var(--border);
+	}
+
+	.sidebar-divider-upper {
+		top: 0;
+		bottom: 0;
+	}
+
+	.sidebar-divider-lower {
+		top: 0;
+		bottom: 0;
+	}
+
+	.sidebar-divider.has-active-workspace .sidebar-divider-upper {
+		bottom: calc(100% - var(--sidebar-active-gap-top, 100%));
+		animation: sidebar-divider-grow-up 1080ms cubic-bezier(0.22, 1, 0.36, 1) both;
+		transform-origin: bottom;
+	}
+
+	.sidebar-divider.has-active-workspace .sidebar-divider-lower {
+		top: var(--sidebar-active-gap-bottom, 0px);
+		animation: sidebar-divider-grow-down 1080ms cubic-bezier(0.22, 1, 0.36, 1) both;
+		transform-origin: top;
+	}
+
+	.sidebar-divider:not(.has-active-workspace) .sidebar-divider-lower {
+		display: none;
+	}
+
+	@keyframes sidebar-divider-grow-up {
+		from {
+			transform: scaleY(0);
+		}
+		to {
+			transform: scaleY(1);
+		}
+	}
+
+	@keyframes sidebar-divider-grow-down {
+		from {
+			transform: scaleY(0);
+		}
+		to {
+			transform: scaleY(1);
+		}
 	}
 
 	.sidebar-top {
@@ -249,7 +400,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 0.55rem 0.7rem 0.8rem;
+		padding: 0.55rem 0 0.8rem 0.7rem;
 		scrollbar-width: thin;
 	}
 
@@ -408,6 +559,7 @@
 	}
 
 	.workspace-entry-wrap {
+		position: relative;
 		display: flex;
 		align-items: stretch;
 		min-width: 0;
@@ -425,7 +577,39 @@
 	}
 
 	.workspace-entry-wrap.active {
-		background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
+		z-index: 2;
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+		background: var(--workspace-active-row-background);
+	}
+
+	.workspace-entry-wrap.active::before,
+	.workspace-entry-wrap.active::after {
+		position: absolute;
+		right: -1px;
+		z-index: -1;
+		width: var(--workspace-active-flare-size);
+		height: var(--workspace-active-flare-size);
+		content: '';
+		pointer-events: none;
+	}
+
+	.workspace-entry-wrap.active::before {
+		top: calc(-1 * var(--workspace-active-flare-size));
+		background: radial-gradient(
+			circle var(--workspace-active-flare-size) at 0 0,
+			transparent calc(var(--workspace-active-flare-size) - 1px),
+			var(--workspace-active-row-background) var(--workspace-active-flare-size)
+		);
+	}
+
+	.workspace-entry-wrap.active::after {
+		bottom: calc(-1 * var(--workspace-active-flare-size));
+		background: radial-gradient(
+			circle var(--workspace-active-flare-size) at 0 100%,
+			transparent calc(var(--workspace-active-flare-size) - 1px),
+			var(--workspace-active-row-background) var(--workspace-active-flare-size)
+		);
 	}
 
 	.workspace-entry {
@@ -557,6 +741,10 @@
 		.sidebar-collapse,
 		.sidebar-close {
 			transition: none;
+		}
+
+		.sidebar-divider.has-active-workspace .sidebar-divider-segment {
+			animation: none;
 		}
 	}
 </style>

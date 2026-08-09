@@ -54,10 +54,10 @@ function workspace(tabs: WorkspaceTab[]): HarnessWorkspace {
 	} as unknown as HarnessWorkspace;
 }
 
-function renderSidebar(tabs: WorkspaceTab[]) {
+function renderSidebar(tabs: WorkspaceTab[], pathname = '/history') {
 	return render(WorkspaceSidebar, {
 		workspace: workspace(tabs),
-		pathname: '/history',
+		pathname,
 		open: true,
 		collapsed: false,
 		onNew: vi.fn(),
@@ -68,6 +68,59 @@ function renderSidebar(tabs: WorkspaceTab[]) {
 }
 
 describe('WorkspaceSidebar', () => {
+	it('connects the active workspace row, anchor, and split divider to the pathname', async () => {
+		const screen = renderSidebar([chatTab(false)], '/chat/project-1/session-1');
+
+		const row = screen.container.querySelector<HTMLElement>('.workspace-entry-wrap.active');
+		const anchor = row?.querySelector<HTMLAnchorElement>('.workspace-entry.active');
+		const divider = screen.container.querySelector('.sidebar-divider');
+
+		expect(row).not.toBeNull();
+		expect(anchor?.getAttribute('aria-current')).toBe('page');
+		expect(anchor?.getAttribute('href')).toBe('/chat/project-1/session-1');
+		expect(divider).not.toBeNull();
+		expect(divider).toHaveClass('has-active-workspace');
+		expect(divider?.querySelectorAll('.sidebar-divider-segment')).toHaveLength(2);
+		expect(
+			screen.container
+				.querySelector<HTMLElement>('.workspace-sidebar')
+				?.style.getPropertyValue('--sidebar-active-gap-top')
+		).not.toBe('');
+	});
+
+	it('moves the active treatment when the pathname changes', async () => {
+		const screen = renderSidebar([chatTab(false), newTab('draft')], '/chat/project-1/session-1');
+
+		expect(screen.container.querySelectorAll('.workspace-entry-wrap.active')).toHaveLength(1);
+		expect(
+			screen.container
+				.querySelector('.workspace-entry-wrap.active .workspace-entry')
+				?.getAttribute('href')
+		).toBe('/chat/project-1/session-1');
+
+		await screen.rerender({ pathname: '/new/draft' });
+		await expect.element(screen.getByRole('link', { name: 'New chat', exact: true })).toBeVisible();
+
+		expect(screen.container.querySelectorAll('.workspace-entry-wrap.active')).toHaveLength(1);
+		expect(
+			screen.container
+				.querySelector('.workspace-entry-wrap.active .workspace-entry')
+				?.getAttribute('href')
+		).toBe('/new/draft');
+		expect(screen.container.querySelector('.sidebar-divider')).toHaveClass('has-active-workspace');
+	});
+
+	it('keeps an uninterrupted divider on utility routes', async () => {
+		const screen = renderSidebar([chatTab(false)], '/history');
+		const divider = screen.container.querySelector('.sidebar-divider');
+
+		expect(screen.container.querySelector('.workspace-entry-wrap.active')).toBeNull();
+		expect(divider).not.toHaveClass('has-active-workspace');
+		const lowerSegment = divider?.querySelector<HTMLElement>('.sidebar-divider-lower');
+		expect(lowerSegment).not.toBeNull();
+		expect(getComputedStyle(lowerSegment!).display).toBe('none');
+	});
+
 	it('keeps the primary New chat plus while open New chat rows have no leading plus', async () => {
 		const screen = renderSidebar([newTab('unassigned'), newTab('project-new', 'project-1')]);
 
@@ -83,6 +136,18 @@ describe('WorkspaceSidebar', () => {
 
 		await expect.element(screen.getByRole('link', { name: /A chat with/ })).toBeVisible();
 		expect(screen.container.querySelector('.tab-status')).toBeNull();
+	});
+
+	it('keeps long chat titles truncated', async () => {
+		const screen = renderSidebar([chatTab(false)]);
+
+		await expect.element(screen.getByRole('link', { name: /A chat with/ })).toBeVisible();
+		const title = screen.container.querySelector<HTMLElement>('.entry-title');
+		expect(title).not.toBeNull();
+		const styles = getComputedStyle(title!);
+		expect(styles.overflow).toBe('hidden');
+		expect(styles.textOverflow).toBe('ellipsis');
+		expect(styles.whiteSpace).toBe('nowrap');
 	});
 
 	it('keeps the working spinner and close control in the trailing area while streaming', async () => {
