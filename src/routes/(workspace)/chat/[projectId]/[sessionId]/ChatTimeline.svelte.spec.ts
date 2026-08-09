@@ -125,9 +125,11 @@ describe('ChatTimeline', () => {
 		);
 		screen.container.querySelector<HTMLElement>('.tool-group-summary')?.click();
 		await expect.element(screen.getByText('subagent')).toBeVisible();
-		await expect.element(screen.getByText('Working')).toBeVisible();
+		expect(screen.getByRole('button', { name: 'worker: Working' })).toBeVisible();
 		await screen.getByRole('button', { name: 'worker: Working' }).click();
 		await expect.element(screen.getByRole('dialog')).toBeVisible();
+		expect(document.querySelector('.subagent-dialog-close svg')).not.toBeNull();
+		expect(document.querySelector('.subagent-dialog-close')?.textContent).toBe('');
 		await expect.element(screen.getByText('Initializing child session…')).toBeVisible();
 		expect(screen.container.querySelector('textarea')).toBeNull();
 		await screen.getByRole('button', { name: 'Close child timeline' }).click();
@@ -143,9 +145,8 @@ describe('ChatTimeline', () => {
 			subagentRuns: [{ ...run, status: 'completed', childSessionId: 'child-1' }]
 		});
 		expect(screen.container.querySelector('.subagent-card .pi-working-spinner')).toBeNull();
-		await expect
-			.element(screen.container.querySelector('.subagent-card-label') as HTMLElement)
-			.toBeVisible();
+		expect(screen.container.querySelector('.subagent-card-label')).toBeNull();
+		expect(screen.getByRole('button', { name: 'worker: Completed' })).toBeVisible();
 	});
 
 	it('contains off-screen finalized timeline rows', () => {

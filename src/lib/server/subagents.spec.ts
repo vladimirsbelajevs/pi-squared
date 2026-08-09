@@ -610,6 +610,68 @@ describe('subagent parser', () => {
 		}
 	});
 
+	it('resolves a reviewer child session reported by an async status file', () => {
+		const { project, parent: projectParent, asyncRoot } = temporaryProject();
+		const runId = '452e2c9a-6267-4085-b1e0-1973103769db';
+		const childPath = join(project.cwd, 'parent-run', 'reviewer', 'session.jsonl');
+		mkdirSync(join(project.cwd, 'parent-run', 'reviewer'), { recursive: true });
+		writeFileSync(
+			childPath,
+			[
+				JSON.stringify({
+					type: 'session',
+					version: 3,
+					id: 'reviewer-session-id',
+					timestamp: '2026-01-01T00:00:00.000Z',
+					cwd: project.cwd
+				}),
+				JSON.stringify({
+					type: 'session_info',
+					id: 'reviewer-info',
+					parentId: null,
+					timestamp: '2026-01-01T00:00:00.000Z',
+					name: `subagent-reviewer-${runId}-1`
+				})
+			].join('\n') + '\n'
+		);
+		const asyncDir = writeAsyncStatus(asyncRoot, runId, {
+			runId,
+			sessionId: projectParent.path,
+			cwd: project.cwd,
+			state: 'complete',
+			mode: 'single',
+			steps: [
+				{
+					index: 0,
+					agent: 'reviewer',
+					description: 'Review the current uncommitted diff',
+					status: 'complete',
+					sessionFile: childPath
+				}
+			]
+		});
+
+		const runs = deriveSubagentRunsFromEntries(
+			call(
+				'tool-reviewer',
+				{ agent: 'reviewer', task: 'Review the current uncommitted diff', async: true },
+				{ details: { mode: 'single', asyncId: runId, asyncDir, results: [] } }
+			),
+			projectParent,
+			[],
+			project,
+			{ asyncRoot }
+		);
+
+		expect(runs[0]).toMatchObject({
+			runId,
+			agent: 'reviewer',
+			status: 'completed',
+			childSessionId: 'reviewer-session-id',
+			timelineAvailable: true
+		});
+	});
+
 	it('projects workflow status steps when the tool result has no children or trace', () => {
 		const { project, parent: projectParent, asyncRoot } = temporaryProject();
 		const runId = 'workflow-status-1';

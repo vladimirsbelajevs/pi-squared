@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, sep, resolve as resolvePath } from 'node:path';
+import { dirname, join, relative, sep, resolve as resolvePath } from 'node:path';
 import {
 	SessionManager,
 	type SessionEntry,
@@ -125,6 +125,64 @@ function canonicalPath(path: string): string | undefined {
 
 function normalizedPath(value: string): string {
 	return canonicalPath(resolvePath(value)) ?? resolvePath(value);
+}
+
+/**
+ * Build metadata for a child session reported by an async status file. SessionManager.list only
+ * indexes top-level session files, while async foreground/parallel children may live under a
+ * run-specific directory below the parent session. The status file is trusted only after its
+ * run ID, parent session, cwd, and in-root path have been validated by readAsyncStatus.
+ */
+function sessionInfoFromPath(
+	candidatePath: string,
+	parent: SessionInfo,
+	project: Project
+): SessionInfo | undefined {
+	const root = canonicalPath(dirname(parent.path));
+	const path = canonicalPath(candidatePath);
+	if (!root || !path || path === normalizedPath(parent.path) || !containedPath(root, path)) {
+		return undefined;
+	}
+
+	try {
+		const manager = SessionManager.open(path, undefined, project.cwd);
+		const header = manager.getHeader();
+		if (!header || (header.cwd && resolvePath(header.cwd) !== resolvePath(project.cwd))) {
+			return undefined;
+		}
+
+		const entries = manager.getEntries();
+		let name: string | undefined;
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			const entry = entries[index];
+			if (entry?.type === 'session_info' && stringValue(entry.name)) {
+				name = stringValue(entry.name);
+				break;
+			}
+		}
+
+		if (!isSubagentSession({ name })) {
+			return undefined;
+		}
+
+		const timestamp = new Date(header.timestamp);
+		const created = Number.isNaN(timestamp.getTime()) ? new Date(0) : timestamp;
+
+		return {
+			path,
+			id: header.id,
+			cwd: header.cwd || project.cwd,
+			name,
+			parentSessionPath: parent.path,
+			created,
+			modified: created,
+			messageCount: entries.filter((entry) => entry.type === 'message').length,
+			firstMessage: '',
+			allMessagesText: ''
+		};
+	} catch {
+		return undefined;
+	}
 }
 
 function matchesParentSessionIdentity(value: string | undefined, parent: SessionInfo): boolean {
@@ -969,6 +1027,8 @@ function correlatedWorkflowDetail(
 type ProjectedSubagentRun = SubagentRun & {
 	/** Internal correlation ID used for child session authorization; never sent to the browser. */
 	correlationRunId?: string;
+	/** Internal discovered path used to open nested async sessions; never sent to the browser. */
+	childSessionPath?: string;
 };
 
 type LaunchProjection = {
@@ -1040,6 +1100,42 @@ function deriveSubagentRunRecords(
 				: {})
 		};
 	});
+	const dynamicSessionPaths = new Set<string>();
+	for (const projection of projections) {
+		for (const row of projection.rows) {
+			const path = sessionPathFromValue(row.detail);
+			if (path) {
+				dynamicSessionPaths.add(path);
+			}
+		}
+
+		const detailPath = sessionPathFromValue(projection.details);
+		if (detailPath) {
+			dynamicSessionPaths.add(detailPath);
+		}
+
+		for (const step of projection.asyncStatus?.steps ?? []) {
+			const path = sessionPathFromValue(step);
+			if (path) {
+				dynamicSessionPaths.add(path);
+			}
+		}
+	}
+
+	for (const notification of notifyEntries) {
+		if (notification.sessionPath) {
+			dynamicSessionPaths.add(notification.sessionPath);
+		}
+	}
+
+	const availableSessions = [...sessions];
+	for (const path of dynamicSessionPaths) {
+		const discovered = sessionInfoFromPath(path, parent, project);
+		if (discovered && !availableSessions.some((session) => session.id === discovered.id)) {
+			availableSessions.push(discovered);
+		}
+	}
+
 	const allCandidateChildren = projections.flatMap((projection) =>
 		projection.rows.map(({ child }) => child)
 	);
@@ -1051,7 +1147,7 @@ function deriveSubagentRunRecords(
 			const correlationRunId = child.correlationRunId ?? rootRunId;
 			const notification = notificationForChild(
 				notifyEntries,
-				sessions,
+				availableSessions,
 				parent,
 				correlationRunId,
 				child,
@@ -1074,7 +1170,7 @@ function deriveSubagentRunRecords(
 				agent: stringValue(detail?.agent) ?? child.agent
 			};
 			const resolvedSession = resolveChildSession(
-				sessions,
+				availableSessions,
 				parent,
 				resolvedCorrelationRunId,
 				effectiveChild,
@@ -1101,6 +1197,7 @@ function deriveSubagentRunRecords(
 			runs.push({
 				runId: rootRunId,
 				...(internalCorrelationRunId ? { correlationRunId: internalCorrelationRunId } : {}),
+				...(resolvedSession ? { childSessionPath: resolvedSession.path } : {}),
 				childId: childId(child.index),
 				toolCallId: launch.toolCallId,
 				agent: effectiveChild.agent,
@@ -1133,6 +1230,7 @@ export function deriveSubagentRunsFromEntries(
 	return deriveSubagentRunRecords(entries, parent, sessions, project, options).map((run) => {
 		const publicRun = { ...run };
 		delete publicRun.correlationRunId;
+		delete publicRun.childSessionPath;
 
 		return publicRun;
 	});
@@ -1225,7 +1323,11 @@ export async function readSubagentTimeline(
 		throw new Error('Child session is not available for this parent session.');
 	}
 
-	const child = catalog.sessions.find((session) => session.id === childSessionId);
+	const child =
+		catalog.sessions.find((session) => session.id === childSessionId) ??
+		(run.childSessionPath
+			? sessionInfoFromPath(run.childSessionPath, catalog.parent, project)
+			: undefined);
 	if (
 		!child ||
 		!run.childSessionId ||

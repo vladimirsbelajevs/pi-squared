@@ -160,8 +160,19 @@
 			<Dialog.Close
 				data-subagent-dialog
 				class="subagent-dialog-close"
-				aria-label="Close child timeline">Close</Dialog.Close
+				type="button"
+				aria-label="Close child timeline"
+				title="Close child timeline"
 			>
+				<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+					<path
+						d="M5 5L15 15M15 5L5 15"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+					/>
+				</svg>
+			</Dialog.Close>
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>
@@ -204,7 +215,7 @@
 
 	:global([data-subagent-dialog].subagent-dialog-title) {
 		margin: 0;
-		padding: 1rem 1.25rem 0.35rem;
+		padding: 1rem 3.75rem 0.35rem 1.25rem;
 		color: var(--text);
 		font-size: 1rem;
 	}
@@ -232,13 +243,29 @@
 	}
 
 	:global([data-subagent-dialog].subagent-dialog-close) {
-		align-self: flex-end;
-		margin: 0 1rem 1rem;
-		padding: 0.45rem 0.8rem;
-		border: 1px solid var(--border-strong);
+		position: absolute;
+		top: 0.8rem;
+		right: 0.9rem;
+		display: grid;
+		width: 2rem;
+		height: 2rem;
+		place-items: center;
+		padding: 0;
+		border: 1px solid transparent;
 		border-radius: 0.4rem;
+		background: transparent;
+		color: var(--text-muted);
+	}
+
+	:global([data-subagent-dialog].subagent-dialog-close:hover) {
+		border-color: var(--border-strong);
 		background: var(--surface-muted);
 		color: var(--text);
+	}
+
+	:global([data-subagent-dialog].subagent-dialog-close svg) {
+		width: 1.2rem;
+		height: 1.2rem;
 	}
 
 	:global([data-subagent-dialog].subagent-dialog-close):focus-visible,

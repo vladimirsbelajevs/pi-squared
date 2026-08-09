@@ -10,14 +10,6 @@
 	};
 	let { run, projectId, parentSessionId }: Props = $props();
 
-	const statusLabel: Record<SubagentRun['status'], string> = {
-		running: 'Working',
-		completed: 'Completed',
-		failed: 'Failed',
-		paused: 'Paused',
-		stopped: 'Stopped'
-	};
-
 	function icon(status: SubagentRun['status']): string {
 		if (status === 'completed') {
 			return '✓';
@@ -52,7 +44,6 @@
 			<strong>{run.agent}</strong>
 			{#if run.task}<span>{run.task}</span>{/if}
 		</div>
-		<span class="subagent-card-label" aria-live="polite">{statusLabel[run.status]}</span>
 	</div>
 </SubagentTimelineDialog>
 
@@ -130,15 +121,6 @@
 		font-size: 0.72rem;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.subagent-card-label {
-		margin-left: auto;
-		color: var(--text-muted);
-		font-size: 0.68rem;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
