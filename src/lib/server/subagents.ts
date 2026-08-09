@@ -72,6 +72,7 @@ type ToolLaunch = {
 	children: LaunchChild[];
 	mode: 'single' | 'parallel' | 'chain' | 'workflow';
 	args: UnknownRecord;
+	entryIndex?: number;
 };
 
 type SessionCatalog = {
@@ -96,6 +97,7 @@ type NotifyRecord = {
 	sessionPath?: string;
 	sessionId?: string;
 	runId?: string;
+	entryIndex?: number;
 };
 
 const catalogs = new Map<string, { expiresAt: number; value: SessionCatalog }>();
@@ -530,6 +532,65 @@ function sessionIndexMatches(sessionIndex: number | undefined, childIndex: numbe
 	);
 }
 
+function subagentSessionNames(session: SessionInfo): string[] {
+	const names = new Set<string>();
+	if (session.name) {
+		names.add(session.name);
+	}
+
+	try {
+		const manager = SessionManager.open(session.path, undefined, session.cwd);
+		if (manager.getHeader()?.id !== session.id) {
+			return [...names];
+		}
+
+		for (const entry of manager.getEntries()) {
+			if (entry.type === 'session_info' && stringValue(entry.name)) {
+				names.add(stringValue(entry.name)!);
+			}
+		}
+	} catch {
+		// Synthetic test sessions and deleted historical files have only catalog metadata.
+	}
+
+	return [...names];
+}
+
+function authorizedSessionName(
+	session: SessionInfo,
+	runId: string,
+	agent: string,
+	childIndex: number,
+	allowUnresolvedRunId = false
+): string | undefined {
+	for (const name of subagentSessionNames(session)) {
+		const parsed = parseSubagentSessionName(name);
+		if (
+			!parsed ||
+			parsed.agent.toLowerCase() !== agent.toLowerCase() ||
+			!sessionIndexMatches(parsed.index, childIndex)
+		) {
+			continue;
+		}
+
+		// A tool-* value is only a local fallback for old parent records. It must never
+		// select an arbitrary same-agent/index session without an explicit trusted hint.
+		if (runId.startsWith('tool-')) {
+			if (allowUnresolvedRunId) {
+				return name;
+			}
+
+			continue;
+		}
+
+		if (parsed.runId.toLowerCase() === runId.toLowerCase()) {
+			return name;
+		}
+	}
+
+	return undefined;
+}
+
 function authorizedSession(
 	session: SessionInfo,
 	parent: SessionInfo,
@@ -538,27 +599,10 @@ function authorizedSession(
 	childIndex: number,
 	allowUnresolvedRunId = false
 ): boolean {
-	if (
-		!isSubagentSession(session) ||
-		normalizedPath(session.parentSessionPath ?? '') !== normalizedPath(parent.path)
-	) {
-		return false;
-	}
-
-	const parsed = parseSubagentSessionName(session.name);
-	if (!parsed || parsed.agent.toLowerCase() !== agent.toLowerCase()) {
-		return false;
-	}
-
-	// A tool-* value is only a local fallback for old parent records. It must never
-	// select an arbitrary same-agent/index session without an explicit trusted hint.
-	if (runId.startsWith('tool-')) {
-		return allowUnresolvedRunId && sessionIndexMatches(parsed.index, childIndex);
-	}
-
 	return (
-		parsed.runId.toLowerCase() === runId.toLowerCase() &&
-		sessionIndexMatches(parsed.index, childIndex)
+		isSubagentSession(session) &&
+		normalizedPath(session.parentSessionPath ?? '') === normalizedPath(parent.path) &&
+		authorizedSessionName(session, runId, agent, childIndex, allowUnresolvedRunId) !== undefined
 	);
 }
 
@@ -618,12 +662,25 @@ function notifyFromText(text: string): NotifyRecord[] {
 		/^(?:Background task|Detached foreground task) (completed|failed|paused|stopped): \*\*(.+?)\*\*(?:\s+(\([^)]*\)))?$/i
 	);
 	if (single) {
+		const status = single[1]!.toLowerCase() as SubagentRunStatus;
+		const parallel = single[2]!.match(/^parallel:(.+)$/i);
+		if (parallel) {
+			const agents = parallel[1]!.split('+').filter(Boolean);
+
+			return agents.map((agent, taskIndex) => ({
+				status,
+				agent,
+				taskIndex,
+				totalTasks: agents.length
+			}));
+		}
+
 		const task = parseTaskInfo(single[3]);
 		const sessionLine = lines.slice(1).find((line) => /^(?:Session|Session file):\s+/i.test(line));
 
 		return [
 			{
-				status: single[1]!.toLowerCase() as SubagentRunStatus,
+				status,
 				agent: single[2]!,
 				...task,
 				...(sessionLine ? { sessionPath: sessionLine.replace(/^[^:]+:\s+/i, '').trim() } : {})
@@ -658,7 +715,7 @@ function notifyFromText(text: string): NotifyRecord[] {
 
 function notifications(entries: SessionEntry[]): NotifyRecord[] {
 	const result: NotifyRecord[] = [];
-	for (const entry of entries) {
+	for (const [entryIndex, entry] of entries.entries()) {
 		if (entry.type !== 'custom_message' || entry.customType !== 'subagent-notify') {
 			continue;
 		}
@@ -670,6 +727,7 @@ function notifications(entries: SessionEntry[]): NotifyRecord[] {
 			result.push({
 				status,
 				agent,
+				entryIndex,
 				...(integerValue(details.index) !== undefined
 					? { taskIndex: integerValue(details.index) }
 					: {}),
@@ -683,7 +741,12 @@ function notifications(entries: SessionEntry[]): NotifyRecord[] {
 			continue;
 		}
 
-		result.push(...notifyFromText(contentText(entry.content)));
+		result.push(
+			...notifyFromText(contentText(entry.content)).map((notification) => ({
+				...notification,
+				entryIndex
+			}))
+		);
 	}
 
 	return result;
@@ -695,10 +758,15 @@ function notificationForChild(
 	parent: SessionInfo,
 	runId: string,
 	child: LaunchChild,
-	allCandidateChildren: LaunchChild[]
+	launchEntryIndex: number | undefined,
+	allCandidateChildren: Array<{ child: LaunchChild; entryIndex?: number }>
 ): NotifyRecord | undefined {
 	const candidates = notifyEntries.filter(
-		(notification) => notification.agent.toLowerCase() === child.agent.toLowerCase()
+		(notification) =>
+			notification.agent.toLowerCase() === child.agent.toLowerCase() &&
+			(notification.entryIndex === undefined ||
+				launchEntryIndex === undefined ||
+				notification.entryIndex > launchEntryIndex)
 	);
 	for (const notification of candidates) {
 		if (
@@ -752,10 +820,14 @@ function notificationForChild(
 		// when that agent/index tuple is unique across every launch in this parent session.
 		const matchingChildren = allCandidateChildren.filter(
 			(candidate) =>
-				candidate.agent.toLowerCase() === child.agent.toLowerCase() &&
-				(notification.taskIndex === undefined || candidate.index === notification.taskIndex)
+				candidate.child.agent.toLowerCase() === child.agent.toLowerCase() &&
+				(notification.taskIndex === undefined ||
+					candidate.child.index === notification.taskIndex) &&
+				(notification.entryIndex === undefined ||
+					candidate.entryIndex === undefined ||
+					candidate.entryIndex < notification.entryIndex)
 		);
-		if (matchingChildren.length === 1 && matchingChildren[0]?.index === child.index) {
+		if (matchingChildren.length === 1 && matchingChildren[0]?.child.index === child.index) {
 			return notification;
 		}
 	}
@@ -1054,7 +1126,7 @@ function deriveSubagentRunRecords(
 	options: SubagentDiscoveryOptions = {}
 ): ProjectedSubagentRun[] {
 	const launches: ToolLaunch[] = [];
-	for (const entry of entries) {
+	for (const [entryIndex, entry] of entries.entries()) {
 		if (entry.type !== 'message') {
 			continue;
 		}
@@ -1072,7 +1144,7 @@ function deriveSubagentRunRecords(
 
 			const launch = parseSubagentToolLaunch(item.id, item.arguments);
 			if (launch) {
-				launches.push(launch);
+				launches.push({ ...launch, entryIndex });
 			}
 		}
 	}
@@ -1137,7 +1209,7 @@ function deriveSubagentRunRecords(
 	}
 
 	const allCandidateChildren = projections.flatMap((projection) =>
-		projection.rows.map(({ child }) => child)
+		projection.rows.map(({ child }) => ({ child, entryIndex: projection.launch.entryIndex }))
 	);
 	for (const projection of projections) {
 		const { launch, resultMessage, details, rootRunId, asyncLaunch, rows, rootStatus } = projection;
@@ -1151,6 +1223,7 @@ function deriveSubagentRunRecords(
 				parent,
 				correlationRunId,
 				child,
+				launch.entryIndex,
 				allCandidateChildren
 			);
 			const resolvedCorrelationRunId = child.correlationRunId ?? notification?.runId ?? rootRunId;
@@ -1338,14 +1411,15 @@ export async function readSubagentTimeline(
 		throw new Error('Child session is not available for this parent session.');
 	}
 
-	const parsed = parseSubagentSessionName(child.name);
 	const expectedRunId = run.correlationRunId ?? run.runId;
-	if (!parsed || parsed.runId.toLowerCase() !== expectedRunId.toLowerCase()) {
+	const childIndex = Number(run.childId.replace(/^index-/, ''));
+	const childSessionName = authorizedSessionName(child, expectedRunId, run.agent, childIndex);
+	if (!Number.isInteger(childIndex) || !childSessionName) {
 		throw new Error('Child session is not authorized for this parent run.');
 	}
 
 	const manager = SessionManager.open(child.path, undefined, project.cwd);
-	const timeline = sliceSubagentTimeline(manager.getBranch(), child.name);
+	const timeline = sliceSubagentTimeline(manager.getBranch(), childSessionName);
 
 	return { status: run.status, available: true, ...timeline };
 }

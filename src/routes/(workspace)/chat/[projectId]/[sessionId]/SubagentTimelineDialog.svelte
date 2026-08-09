@@ -79,7 +79,11 @@
 			return;
 		}
 
-		loadState = 'loading';
+		const hasTimeline = loadState === 'ready' && response !== undefined;
+		if (!hasTimeline) {
+			loadState = 'loading';
+		}
+
 		errorMessage = '';
 		try {
 			response = await getSubagentTimeline(projectId, parentSessionId, run.childSessionId, signal);
@@ -89,33 +93,39 @@
 				return;
 			}
 
+			if (hasTimeline) {
+				return;
+			}
+
 			loadState = 'error';
 			errorMessage = error instanceof Error ? error.message : 'Unable to load the child timeline.';
 		}
 	}
 
-	function refreshWhileOpen(): (node: HTMLElement) => () => void {
-		return (node) => {
-			void node;
-			const controller = new AbortController();
-			let timer: ReturnType<typeof setTimeout> | undefined;
-			let disposed = false;
-			const refresh = async (): Promise<void> => {
-				await loadTimeline(controller.signal);
-				if (!disposed && run.status === 'running' && !controller.signal.aborted) {
-					timer = setTimeout(() => void refresh(), 1000);
-				}
-			};
+	function refreshWhileOpen(node: HTMLElement): () => void {
+		void node;
+		const controller = new AbortController();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let disposed = false;
+		const refresh = async (): Promise<void> => {
+			await loadTimeline(controller.signal);
+			if (!disposed && run.status === 'running' && !controller.signal.aborted) {
+				timer = setTimeout(() => void refresh(), 1000);
+			}
+		};
 
-			void refresh();
+		queueMicrotask(() => {
+			if (!disposed) {
+				void refresh();
+			}
+		});
 
-			return () => {
-				disposed = true;
-				controller.abort();
-				if (timer !== undefined) {
-					clearTimeout(timer);
-				}
-			};
+		return () => {
+			disposed = true;
+			controller.abort();
+			if (timer !== undefined) {
+				clearTimeout(timer);
+			}
 		};
 	}
 </script>
@@ -138,7 +148,7 @@
 				data-subagent-dialog
 				class="subagent-dialog-body"
 				class:subagent-dialog-body-loading={loadState === 'loading' || loadState === 'idle'}
-				{@attach refreshWhileOpen()}
+				{@attach refreshWhileOpen}
 			>
 				{#if run.timelineAvailable === false}
 					<p class="subagent-dialog-state" role="status">Timeline unavailable</p>

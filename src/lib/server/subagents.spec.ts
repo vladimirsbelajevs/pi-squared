@@ -507,6 +507,34 @@ describe('subagent parser', () => {
 		expect(runs.map((run) => run.status)).toEqual(['running', 'running']);
 	});
 
+	it('terminalizes every child from parallel completion notifications', () => {
+		const entries = [
+			...call(
+				'tool-parallel-notify',
+				{ tasks: [{ agent: 'reviewer' }, { agent: 'reviewer' }], async: true },
+				{
+					details: { mode: 'parallel', asyncId: 'abcdef12', results: [] }
+				}
+			),
+			{
+				type: 'custom_message',
+				id: 'notify-parallel',
+				parentId: null,
+				timestamp: '',
+				customType: 'subagent-notify',
+				display: false,
+				content: 'Background task completed: **parallel:reviewer+reviewer**\n\nDone'
+			} as never,
+			...call('tool-later-reviewer', { agent: 'reviewer', async: true })
+		] as SessionEntry[];
+
+		expect(deriveSubagentRunsFromEntries(entries, parent).map((run) => run.status)).toEqual([
+			'completed',
+			'completed',
+			'running'
+		]);
+	});
+
 	it('correlates notifications by child session identity and keeps repeated agents independent', () => {
 		const first = session('subagent-worker-abcdef12-1', 'child-notify-1');
 		const second = session('subagent-worker-abcdef12-2', 'child-notify-2');
@@ -530,6 +558,76 @@ describe('subagent parser', () => {
 		] as SessionEntry[];
 		const runs = deriveSubagentRunsFromEntries(entries, parent, [first, second]);
 		expect(runs.map((run) => run.status)).toEqual(['running', 'stopped']);
+	});
+
+	it('retains authorization for a child session renamed by a resumed run', () => {
+		const { project, parent: projectParent } = temporaryProject();
+		const originalRunId = '73dddfc6-f86e-4536-a3f1-3b7984621dcc';
+		const resumedRunId = 'bc087416-1234-4234-8234-123456789abc';
+		const childPath = join(project.cwd, 'resumed-child.jsonl');
+		const childId = 'child-resumed';
+		writeFileSync(
+			childPath,
+			[
+				{
+					type: 'session',
+					version: 3,
+					id: childId,
+					timestamp: '2026-01-01T00:00:00.000Z',
+					cwd: project.cwd,
+					parentSession: projectParent.path
+				},
+				{
+					type: 'session_info',
+					id: 'original-name',
+					parentId: null,
+					timestamp: '',
+					name: `subagent-luna-developer-${originalRunId}-1`
+				},
+				{
+					type: 'session_info',
+					id: 'resumed-name',
+					parentId: 'original-name',
+					timestamp: '',
+					name: `subagent-luna-developer-${resumedRunId}-1`
+				}
+			]
+				.map((entry) => JSON.stringify(entry))
+				.join('\n')
+		);
+		const child: SessionInfo = {
+			...projectParent,
+			id: childId,
+			path: childPath,
+			name: `subagent-luna-developer-${resumedRunId}-1`,
+			parentSessionPath: projectParent.path
+		};
+		const entries = [
+			...call(
+				'tool-resumed',
+				{ agent: 'luna-developer', async: true },
+				{
+					details: { mode: 'single', runId: originalRunId, asyncId: originalRunId, results: [] }
+				}
+			),
+			{
+				type: 'custom_message',
+				id: 'notify-resumed',
+				parentId: null,
+				timestamp: '',
+				customType: 'subagent-notify',
+				display: false,
+				content: `Background task completed: **luna-developer**\n\nDone\n\nSession file: ${childPath}`
+			} as never
+		] as SessionEntry[];
+
+		expect(
+			deriveSubagentRunsFromEntries(entries, projectParent, [child], project)[0]
+		).toMatchObject({
+			status: 'completed',
+			childSessionId: childId,
+			timelineAvailable: true
+		});
 	});
 
 	it('rejects child sessions owned by a different parent even when the name and path look valid', () => {
