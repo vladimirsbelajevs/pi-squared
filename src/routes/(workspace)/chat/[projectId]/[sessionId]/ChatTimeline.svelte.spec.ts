@@ -4,6 +4,7 @@ import { userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { StreamUpdateBatcher } from '$lib/harness/stream-update-batcher';
+import { buildFinalizedTimeline } from '$lib/harness/timeline';
 import type { ChatItem } from '$lib/contracts';
 import type { ChatTab } from '$lib/harness/types';
 import ChatTimeline from './ChatTimeline.svelte';
@@ -111,7 +112,12 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		for (const selector of ['.message-entry', '.timeline-notice', '.stopped-row', '.tool-group']) {
+		for (const selector of [
+			'.message-entry',
+			'.timeline-notice',
+			'.stopped-row',
+			'.activity-group'
+		]) {
 			const element = screen.container.querySelector<HTMLElement>(selector)!;
 			const style = getComputedStyle(element);
 			expect(style.contentVisibility).toBe('auto');
@@ -303,7 +309,7 @@ describe('ChatTimeline', () => {
 		});
 
 		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
-		await expect.element(screen.getByText('1 tool called')).toBeVisible();
+		await expect.element(screen.getByText('Agent activity · 1 tool')).toBeVisible();
 
 		await screen.rerender({
 			chat: chat({
@@ -700,13 +706,17 @@ describe('ChatTimeline', () => {
 		});
 
 		await expect.element(screen.getByText('Partial response.')).toBeVisible();
-		expect(screen.container.querySelector('.thinking')).toHaveTextContent('Partial reasoning.');
-		await expect.element(screen.getByText('1 tool called')).toBeVisible();
-		expect(screen.container.querySelectorAll('.message-entry-assistant')).toHaveLength(2);
+		await expect.element(screen.getByText('Agent activity · 1 tool')).toBeVisible();
+		expect(screen.container.querySelector('.thinking')).toBeNull();
+		expect(screen.container.querySelectorAll('.message-entry-assistant')).toHaveLength(1);
 		expect(screen.container.querySelector('.stopped-row')).toBeNull();
-		expect((screen.container.querySelector('details.tool-group') as HTMLDetailsElement).open).toBe(
-			false
-		);
+		const activity = [
+			...screen.container.querySelectorAll<HTMLDetailsElement>('details.activity-group')
+		].find((group) => group.textContent?.includes('1 tool')) as HTMLDetailsElement;
+		expect(activity.open).toBe(false);
+		await screen.getByText('Agent activity · 1 tool').click();
+		await vi.waitFor(() => expect(activity.open).toBe(true));
+		expect(screen.container.querySelector('.thinking')).toHaveTextContent('Partial reasoning.');
 	});
 
 	it('renders the throttled streaming snapshot as Markdown', async () => {
@@ -780,11 +790,11 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		const liveTools = screen.container.querySelector('details.tool-group');
+		const liveActivity = screen.container.querySelector('details.activity-group');
 		const streamingMessage = screen.container.querySelector('article.streaming');
-		expect([...screen.container.querySelectorAll('details.tool-group, article.streaming')]).toEqual(
-			[liveTools, streamingMessage]
-		);
+		expect([
+			...screen.container.querySelectorAll('details.activity-group, article.streaming')
+		]).toEqual([liveActivity, streamingMessage]);
 
 		await screen.rerender({
 			chat: chat({
@@ -817,7 +827,7 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		const persistedTools = screen.container.querySelector('details.tool-group');
+		const persistedTools = screen.container.querySelector('details.activity-group');
 		expect(persistedTools?.nextElementSibling?.textContent).toContain('Streaming response.');
 	});
 
@@ -906,8 +916,14 @@ describe('ChatTimeline', () => {
 		const screen = render(ChatTimeline, { chat: chatWithReasoning });
 
 		expect(screen.container.querySelectorAll('.thinking')).toHaveLength(0);
+		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(0);
 		await screen.rerender({ chat: chatWithReasoning, showReasoning: true });
-		const thinking = screen.container.querySelector('.thinking');
+		const activity = screen.container.querySelector('details.activity-group') as HTMLDetailsElement;
+		expect(activity.open).toBe(false);
+		expect(screen.container.querySelector('.thinking')).toBeNull();
+		await screen.getByText('Agent activity').click();
+		await vi.waitFor(() => expect(activity.open).toBe(true));
+		const thinking = activity.querySelector('.thinking');
 		expect(thinking?.textContent).toContain('Historical reasoning');
 		expect(thinking?.querySelector('strong')).toHaveTextContent('Historical reasoning');
 		expect(thinking?.querySelector('code.language-ts')).toHaveTextContent('const answer = 42;');
@@ -915,6 +931,51 @@ describe('ChatTimeline', () => {
 		expect(thinking?.querySelector('.code-copy-action')).toBeNull();
 		expect(thinking?.tagName).toBe('DIV');
 		expect(thinking?.querySelector('summary')).toBeNull();
+		await expect.element(screen.getByText('Answer', { exact: true })).toBeVisible();
+	});
+
+	it('does not render a disclosure for hidden reasoning-only historical activity', async () => {
+		const base = chat();
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'reasoning-only',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							thinking: 'Hidden reasoning'
+						}
+					]
+				}
+			})
+		});
+
+		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(0);
+
+		await screen.rerender({
+			chat: chat({
+				snapshot: {
+					...base.snapshot!,
+					isStreaming: false,
+					items: [
+						{
+							id: 'reasoning-only',
+							kind: 'message',
+							role: 'assistant',
+							text: '',
+							thinking: 'Hidden reasoning'
+						}
+					]
+				}
+			}),
+			showReasoning: true
+		});
+
+		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(1);
 	});
 
 	it('hides reasoning-only stream deltas until reasoning display is enabled', async () => {
@@ -929,15 +990,82 @@ describe('ChatTimeline', () => {
 			chat: chat({ streamThinking: '*Streaming reasoning*' }),
 			showReasoning: true
 		});
-		await expect
-			.element(screen.getByRole('group', { name: 'assistant message, streaming' }))
-			.toBeVisible();
+		await expect.element(screen.getByText('Agent activity')).toBeVisible();
 		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
-		const thinking = screen.container.querySelector('.streaming .thinking');
+		expect(screen.container.querySelector('article.streaming')).toBeNull();
+		const activity = screen.container.querySelector('details.activity-group') as HTMLDetailsElement;
+		expect(activity.open).toBe(false);
+		await screen.getByText('Agent activity').click();
+		await vi.waitFor(() => expect(activity.open).toBe(true));
+		const thinking = activity.querySelector('.thinking');
 		expect(thinking?.textContent).toContain('Streaming reasoning');
 		expect(thinking?.querySelector('em')).toHaveTextContent('Streaming reasoning');
 		expect(thinking?.tagName).toBe('DIV');
 		expect(thinking?.querySelector('summary')).toBeNull();
+	});
+
+	it('keeps a live reasoning activity open when its first tool arrives', async () => {
+		const reactiveChat = $state(
+			chat({
+				pendingUserMessages: [
+					{
+						id: 'pending-user-1',
+						text: 'Inspect the project.',
+						attachments: [],
+						timestamp: '2026-08-09T12:00:00.000Z',
+						knownUserItemIds: []
+					}
+				],
+				streamThinking: 'First, I will inspect the project.'
+			})
+		);
+		const screen = render(ChatTimeline, { chat: reactiveChat, showReasoning: true });
+		const activity = screen.container.querySelector('details.activity-group') as HTMLDetailsElement;
+
+		expect(activity.open).toBe(false);
+		await screen.getByText('Agent activity').click();
+		await vi.waitFor(() => expect(activity.open).toBe(true));
+
+		reactiveChat.streamTools.push({ id: 'tool-1', name: 'read', status: 'running' });
+		flushSync();
+
+		await vi.waitFor(() => {
+			const updatedActivity = screen.container.querySelector(
+				'details.activity-group'
+			) as HTMLDetailsElement;
+			expect(updatedActivity.open).toBe(true);
+			expect(updatedActivity).toBe(activity);
+		});
+	});
+
+	it('groups live reasoning and tools once while keeping the response outside', async () => {
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				streamThinking: '**Live reasoning**',
+				streamTools: [{ id: 'live-tool', name: 'read', text: 'Live result' }],
+				streamText: 'Live response.',
+				streamRenderedText: 'Live response.'
+			}),
+			showReasoning: true
+		});
+
+		const activity = screen.container.querySelector('details.activity-group') as HTMLDetailsElement;
+		expect(activity.open).toBe(false);
+		expect(screen.container.querySelectorAll('.thinking')).toHaveLength(0);
+		await expect.element(screen.getByText('Live response.', { exact: true })).toBeVisible();
+		expect(screen.container.querySelector('article.streaming .thinking')).toBeNull();
+
+		await screen.getByText('Agent activity · 1 tool').click();
+		await vi.waitFor(() => expect(activity.open).toBe(true));
+		const events = [
+			...activity.querySelectorAll('.activity-events > .thinking, details.tool-group')
+		];
+		expect(events).toHaveLength(2);
+		expect(events[0]).toHaveClass('thinking');
+		expect(events[1]).toHaveClass('tool-group');
+		expect(activity.querySelectorAll('.thinking')).toHaveLength(1);
+		expect(activity.querySelector('.thinking strong')).toHaveTextContent('Live reasoning');
+		expect(screen.container.querySelector('article.streaming .thinking')).toBeNull();
 	});
 
 	it('keeps user message text literal', async () => {
@@ -1006,31 +1134,38 @@ describe('ChatTimeline', () => {
 				}
 			})
 		});
-		const group = screen.container.querySelector('details.tool-group') as HTMLDetailsElement;
+		const activity = screen.container.querySelector('details.activity-group') as HTMLDetailsElement;
 
-		await expect.element(screen.getByText('2 tools called · 1 completed · 1 failed')).toBeVisible();
-		expect(group.open).toBe(false);
+		await expect.element(screen.getByText('Agent activity · 2 tools')).toBeVisible();
+		expect(activity.open).toBe(false);
+		expect(screen.container.querySelector('details.tool-group')).toBeNull();
 		expect(screen.container.querySelector('.tool-list')).toBeNull();
 		expect(screen.container.querySelector('.tool-detail pre')).toBeNull();
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(0);
-		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
 
+		await screen.getByText('Agent activity · 2 tools').click();
+		await vi.waitFor(() => expect(activity.open).toBe(true));
+		expect(activity.open).toBe(true);
+		await expect.element(screen.getByText('2 tools called · 1 completed · 1 failed')).toBeVisible();
+		const group = screen.container.querySelector('details.tool-group') as HTMLDetailsElement;
+		expect(group.open).toBe(false);
+		const resultsBeforeOpen = screen.container.querySelectorAll('.tool-result');
+		expect(resultsBeforeOpen).toHaveLength(0);
 		await screen.getByText('2 tools called · 1 completed · 1 failed').click();
 		await vi.waitFor(() => expect(group.open).toBe(true));
-		expect(group.open).toBe(true);
-		const result = screen.container.querySelector('.tool-result') as HTMLDetailsElement;
 		const results = screen.container.querySelectorAll('.tool-result');
-		expect(result.open).toBe(false);
+		expect(results).toHaveLength(2);
+		expect((results[0] as HTMLDetailsElement).open).toBe(false);
 		expect((results[1] as HTMLDetailsElement).open).toBe(false);
 		await screen.getByText('Result').first().click();
-		await vi.waitFor(() => expect(result.open).toBe(true));
-		expect(result.open).toBe(true);
-		expect((results[1] as HTMLDetailsElement).open).toBe(false);
+		await vi.waitFor(() =>
+			expect(screen.container.querySelector('.tool-result')?.hasAttribute('open')).toBe(true)
+		);
 		await expect.element(screen.getByText('README contents')).toBeVisible();
-		await screen.getByText('2 tools called · 1 completed · 1 failed').click();
-		await vi.waitFor(() => expect(group.open).toBe(false));
+		await screen.getByText('Agent activity · 2 tools').click();
+		await vi.waitFor(() => expect(activity.open).toBe(false));
 		expect(screen.container.querySelector('.tool-list')).toBeNull();
-		await screen.getByText('2 tools called · 1 completed · 1 failed').click();
+		await screen.getByText('Agent activity · 2 tools').click();
 		await expect.element(screen.getByText('README contents')).toBeVisible();
 		expect(screen.container.querySelectorAll('.copy-action')).toHaveLength(0);
 	});
@@ -1051,6 +1186,7 @@ describe('ChatTimeline', () => {
 			})
 		});
 
+		await screen.getByText('Agent activity · 1 tool').click();
 		await screen.getByText('1 tool called · 1 completed').click();
 		await screen.getByText('Result').click();
 		await expect.element(screen.getByText('README contents')).toBeVisible();
@@ -1080,9 +1216,10 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		expect((screen.container.querySelector('details.tool-group') as HTMLDetailsElement).open).toBe(
-			true
-		);
+		const activity = screen.container.querySelector('details.activity-group') as HTMLDetailsElement;
+		expect(activity.open).toBe(true);
+		const group = activity.querySelector('details.tool-group') as HTMLDetailsElement;
+		expect(group.open).toBe(true);
 		await expect.element(screen.getByText('README contents')).toBeVisible();
 	});
 
@@ -1136,17 +1273,68 @@ describe('ChatTimeline', () => {
 							id: 'assistant-3',
 							kind: 'message',
 							role: 'assistant',
-							text: 'The project is ready to run.'
+							text: 'The project is ready to run.',
+							thinking: 'Final reasoning'
 						}
 					]
 				}
-			})
+			}),
+			showReasoning: true
 		});
 
-		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(1);
+		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(1);
+		await expect.element(screen.getByText('Agent activity · 3 tools')).toBeVisible();
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(0);
+		expect(screen.container.querySelector('.thinking')).toBeNull();
+		await expect.element(screen.getByText('The project is ready to run.')).toBeVisible();
+		await screen.getByText('Agent activity · 3 tools').click();
 		await expect.element(screen.getByText('3 tools called · 3 completed')).toBeVisible();
 		expect(screen.container.querySelector('.tool-group-status')).toBeNull();
-		await expect.element(screen.getByText('The project is ready to run.')).toBeVisible();
+		await expect.element(screen.getByText('Final reasoning')).toBeVisible();
+	});
+
+	it('keeps text, reasoning, and tool calls in one unique activity group', async () => {
+		const items: ChatItem[] = [
+			{
+				id: 'assistant-with-tools',
+				kind: 'message',
+				role: 'assistant',
+				text: 'Visible response',
+				thinking: 'Reasoning before tools',
+				toolCalls: [{ id: 'tool-with-response', name: 'read', arguments: '{}' }]
+			},
+			{
+				id: 'result-with-tools',
+				kind: 'message',
+				role: 'tool',
+				toolCallId: 'tool-with-response',
+				text: 'Tool result'
+			}
+		];
+		const timeline = buildFinalizedTimeline(items, [], false);
+		const activities = timeline.filter((entry) => entry.kind === 'activity');
+
+		expect(activities).toHaveLength(1);
+		expect(new Set(activities.map((entry) => entry.id)).size).toBe(activities.length);
+		expect(timeline.map((entry) => entry.kind)).toEqual(['activity', 'item']);
+		if (activities[0]?.kind === 'activity') {
+			expect(activities[0].entries.map((entry) => entry.kind)).toEqual(['reasoning', 'tools']);
+		}
+
+		const screen = render(ChatTimeline, {
+			chat: chat({
+				snapshot: {
+					...chat().snapshot!,
+					isStreaming: false,
+					items
+				}
+			})
+		});
+		await expect.element(screen.getByText('Visible response')).toBeVisible();
+		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(1);
+		expect(
+			(screen.container.querySelector('details.activity-group') as HTMLDetailsElement).open
+		).toBe(false);
 	});
 
 	it('renders tool reasoning chronologically without a disclosure control', async () => {
@@ -1162,7 +1350,7 @@ describe('ChatTimeline', () => {
 							kind: 'message',
 							role: 'assistant',
 							text: '',
-							thinking: 'Reasoning A',
+							thinking: '**Reasoning A**',
 							toolCalls: [{ id: 'tool-1', name: 'read', arguments: '{}' }]
 						},
 						{
@@ -1193,20 +1381,35 @@ describe('ChatTimeline', () => {
 			showReasoning: true
 		});
 
-		const events = [...screen.container.querySelectorAll('.timeline-thinking, details.tool-group')];
+		const activity = screen.container.querySelector('details.activity-group') as HTMLDetailsElement;
+		expect(activity.open).toBe(false);
+		expect(screen.container.querySelector('.activity-events')).toBeNull();
+		expect(screen.container.querySelectorAll('.thinking')).toHaveLength(0);
+		await screen.getByText('Agent activity · 2 tools').click();
+		await vi.waitFor(() => expect(activity.open).toBe(true));
+
+		const events = [
+			...activity.querySelectorAll(
+				'.activity-events > .thinking, .activity-events > details.tool-group'
+			)
+		];
+		expect(events.map((event) => (event.matches('.thinking') ? 'reasoning' : 'tools'))).toEqual([
+			'reasoning',
+			'tools',
+			'reasoning',
+			'tools'
+		]);
 		expect(
-			events.map((event) => (event.matches('.timeline-thinking') ? 'reasoning' : 'tools'))
-		).toEqual(['reasoning', 'tools', 'reasoning', 'tools']);
-		expect(
-			[...screen.container.querySelectorAll('.timeline-thinking')].map((event) =>
+			[...activity.querySelectorAll('.activity-events > .thinking')].map((event) =>
 				event.textContent?.trim()
 			)
 		).toEqual(['Reasoning A', 'Reasoning B']);
-		expect(screen.container.querySelectorAll('.thinking details, .thinking summary')).toHaveLength(
-			0
+		expect(activity.querySelector('.activity-events > .thinking strong')).toHaveTextContent(
+			'Reasoning A'
 		);
+		expect(activity.querySelectorAll('.thinking details, .thinking summary')).toHaveLength(0);
 
-		const groups = screen.container.querySelectorAll<HTMLDetailsElement>('details.tool-group');
+		const groups = activity.querySelectorAll<HTMLDetailsElement>('details.tool-group');
 		const groupSummaries = screen.getByText('1 tool called · 1 completed');
 		await groupSummaries.first().click();
 		await groupSummaries.last().click();
@@ -1265,7 +1468,8 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(4);
+		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(4);
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(0);
 		await expect.element(screen.getByText('Persisted notice')).toBeVisible();
 		await expect.element(screen.getByText('Stopped')).toBeVisible();
 	});
@@ -1300,20 +1504,24 @@ describe('ChatTimeline', () => {
 				}
 			})
 		});
-		const groups = screen.container.querySelectorAll('details.tool-group');
+		const groups = screen.container.querySelectorAll('details.activity-group');
 		const finalizedGroup = groups[0] as HTMLDetailsElement;
 		const liveGroup = groups[1] as HTMLDetailsElement;
 
 		expect(groups).toHaveLength(2);
 		expect(finalizedGroup.closest('.message-assistant')).toBeNull();
+		expect(finalizedGroup.open).toBe(false);
+		expect(liveGroup.open).toBe(false);
 		await expect.element(screen.getByText('I will inspect the project.')).toBeVisible();
 		expect(liveGroup.nextElementSibling).toBe(screen.container.querySelector('article.streaming'));
-		await screen.getByText('1 tool called · 1 running').click();
+		await screen.getByText('Agent activity · 1 tool').last().click();
 		await vi.waitFor(() => expect(liveGroup.open).toBe(true));
+		const innerLiveGroup = liveGroup.querySelector('details.tool-group') as HTMLDetailsElement;
+		expect(innerLiveGroup).not.toBeNull();
+		await screen.getByText('1 tool called · 1 running').click();
+		await vi.waitFor(() => expect(innerLiveGroup.open).toBe(true));
 		expect(screen.container.querySelectorAll('.tool-detail > span')).toHaveLength(0);
-		const statuses = [
-			...screen.container.querySelectorAll<HTMLElement>('.tool-entry-heading span')
-		];
+		const statuses = [...liveGroup.querySelectorAll<HTMLElement>('.tool-entry-heading span')];
 		expect(statuses.map((status) => status.textContent?.trim())).toEqual(['running']);
 		await screen.getByText('Result').click();
 		await expect.element(screen.getByText('Running tests')).toBeVisible();
@@ -1352,8 +1560,9 @@ describe('ChatTimeline', () => {
 		);
 		const screen = render(ChatTimeline, { chat: reactiveChat });
 
-		await expect.element(screen.getByText('1 tool called · 1 running').first()).toBeVisible();
-		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(2);
+		await expect.element(screen.getByText('Agent activity · 1 tool').first()).toBeVisible();
+		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(2);
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(0);
 
 		const batcher = new StreamUpdateBatcher();
 		batcher.queueToolUpdate(reactiveChat, {
@@ -1365,8 +1574,64 @@ describe('ChatTimeline', () => {
 		batcher.flush(reactiveChat.id);
 		flushSync();
 
-		await expect.element(screen.getByText('1 tool called · 1 completed')).toBeVisible();
-		await expect.element(screen.getByText('1 tool called · 1 running')).toBeVisible();
+		await expect.element(screen.getByText('Agent activity · 1 tool').first()).toBeVisible();
+		await expect.element(screen.getByText('Agent activity · 1 tool').last()).toBeVisible();
+		await screen.getByText('Agent activity · 1 tool').first().click();
+		await screen.getByText('Agent activity · 1 tool').last().click();
+		await screen.getByText('1 tool called · 1 completed').click();
+		await screen.getByText('1 tool called · 1 running').click();
+		await vi.waitFor(() =>
+			expect(
+				[...screen.container.querySelectorAll<HTMLElement>('.tool-entry-heading span')].map(
+					(status) => status.textContent?.trim()
+				)
+			).toEqual(['completed', 'running'])
+		);
+	});
+
+	it('keeps the live activity open when its first tool finalizes before another', async () => {
+		const base = chat();
+		const reactiveChat = $state(
+			chat({
+				streamTools: [
+					{ id: 'tool-first', name: 'read', status: 'running' },
+					{ id: 'tool-second', name: 'bash', status: 'running' }
+				]
+			})
+		);
+		const screen = render(ChatTimeline, { chat: reactiveChat });
+
+		const initialActivity = screen.container.querySelector(
+			'details.activity-group'
+		) as HTMLDetailsElement;
+		await screen.getByText('Agent activity · 2 tools').click();
+		await vi.waitFor(() => expect(initialActivity.open).toBe(true));
+
+		reactiveChat.snapshot = {
+			...base.snapshot!,
+			isStreaming: false,
+			items: [
+				{
+					id: 'assistant-finalized-first',
+					kind: 'message',
+					role: 'assistant',
+					text: '',
+					toolCalls: [{ id: 'tool-first', name: 'read', arguments: '{}' }]
+				},
+				{
+					id: 'result-finalized-first',
+					kind: 'message',
+					role: 'tool',
+					toolCallId: 'tool-first',
+					text: 'First result'
+				}
+			]
+		};
+		flushSync();
+
+		const groups = screen.container.querySelectorAll<HTMLDetailsElement>('details.activity-group');
+		expect(groups).toHaveLength(2);
+		expect(groups[1]?.open).toBe(true);
 	});
 
 	it('renders live-only tools as a standalone row and leaves unmatched historical results visible', async () => {
@@ -1393,8 +1658,13 @@ describe('ChatTimeline', () => {
 			})
 		});
 
-		await expect.element(screen.getByText('2 tools called · 2 running')).toBeVisible();
+		await expect.element(screen.getByText('Agent activity · 2 tools')).toBeVisible();
 		await expect.element(screen.getByText('Legacy result')).toBeVisible();
 		expect(screen.container.querySelectorAll('.message-tool')).toHaveLength(1);
+		expect(screen.container.querySelectorAll('details.tool-group')).toHaveLength(0);
+		await screen.getByText('Agent activity · 2 tools').click();
+		await screen.getByText('2 tools called · 2 running').click();
+		await screen.getByText('Result').last().click();
+		await expect.element(screen.getByText('Running tests')).toBeVisible();
 	});
 });

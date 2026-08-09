@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { on } from 'svelte/events';
 	import type { ChatItem } from '$lib/contracts';
-	import { buildFinalizedTimeline } from '$lib/harness/timeline';
+	import { buildFinalizedTimeline, type FinalActivityEntry } from '$lib/harness/timeline';
 	import type { ChatTab } from '$lib/harness/types';
 	import { renderAssistantMarkdown, renderStreamingMarkdown } from '$lib/markdown';
 	import AttachmentPreview from '$lib/components/AttachmentPreview.svelte';
 	import ImageViewer, { type ImageViewerImage } from '$lib/components/ImageViewer.svelte';
 	import PiWorkingSpinner from '$lib/components/PiWorkingSpinner.svelte';
-	import ToolGroup, { type ToolGroupTool } from './ToolGroup.svelte';
+	import ActivityGroup from './ActivityGroup.svelte';
+	import type { ToolGroupTool } from './ToolGroup.svelte';
 	import MessageRow from './MessageRow.svelte';
+	import ReasoningMarkdown from './ReasoningMarkdown.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 
 	type Props = { chat: ChatTab; showReasoning?: boolean; showModelChanges?: boolean };
@@ -25,6 +27,7 @@
 		timeStyle: 'short'
 	});
 	const expandedToolIds = new SvelteSet<string>();
+	const expandedActivityIds = new SvelteSet<string>();
 	let showTimelineWorkingIndicator = $derived(
 		chat.snapshot?.isStreaming === true &&
 			!chat.streamText &&
@@ -37,11 +40,45 @@
 	let finalizedToolCallIds = $derived(
 		new Set(
 			timeline.flatMap((entry) =>
-				entry.kind === 'tools' ? entry.tools.map((tool) => tool.id) : []
+				entry.kind === 'activity'
+					? entry.entries.flatMap((activity) =>
+							activity.kind === 'tools' ? activity.tools.map((tool) => tool.id) : []
+						)
+					: []
 			)
 		)
 	);
 	let liveTools = $derived(chat.streamTools.filter((tool) => !finalizedToolCallIds.has(tool.id)));
+	let liveActivityEntries = $derived.by(() => {
+		const entries: FinalActivityEntry[] = [];
+		if (showReasoning && chat.streamThinking) {
+			entries.push({
+				id: `live-reasoning-${chat.id}`,
+				kind: 'reasoning',
+				text: chat.streamThinking
+			});
+		}
+
+		return entries;
+	});
+	let showLiveActivity = $derived(liveActivityEntries.length > 0 || liveTools.length > 0);
+	let liveActivityId = $derived(liveActivityAnchorId());
+
+	function liveActivityAnchorId(): string {
+		const pendingUserMessage = chat.pendingUserMessages.at(-1);
+		if (pendingUserMessage) {
+			return `activity-${pendingUserMessage.id}`;
+		}
+
+		const items = chat.snapshot?.items ?? [];
+		for (let index = items.length - 1; index >= 0; index -= 1) {
+			if (items[index]?.role === 'user') {
+				return `activity-${items[index].id}`;
+			}
+		}
+
+		return `activity-${chat.streamTools[0]?.id ?? 'live'}`;
+	}
 
 	function liveToolForCallId(callId: string) {
 		return chat.streamToolsByCallId?.get(callId);
@@ -162,19 +199,16 @@
 {#each timeline as entry (entry.id)}
 	{#if entry.kind === 'stopped'}
 		<p class="stopped-row" role="status">Stopped</p>
-	{:else if entry.kind === 'tools'}
-		<ToolGroup
+	{:else if entry.kind === 'activity'}
+		<ActivityGroup
 			chatId={chat.id}
-			finalizedTools={entry.tools}
+			activityId={entry.id}
+			entries={entry.entries}
 			{liveToolForCallId}
+			{showReasoning}
+			{expandedActivityIds}
 			{expandedToolIds}
 		/>
-	{:else if entry.kind === 'reasoning'}
-		{#if showReasoning}
-			{@const markdown = renderStreamingMarkdown(entry.text)}
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
-			<div class="message-markdown thinking timeline-thinking">{@html markdown}</div>
-		{/if}
 	{:else if entry.item.kind === 'notice'}
 		<p class="timeline-notice">{entry.item.text}</p>
 	{:else}
@@ -188,9 +222,7 @@
 					<header>{item.label || role}</header>
 				{/if}
 				{#if showReasoning && entry.thinking}
-					{@const reasoningMarkdown = renderStreamingMarkdown(entry.thinking)}
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
-					<div class="message-markdown thinking">{@html reasoningMarkdown}</div>
+					<ReasoningMarkdown text={entry.thinking} />
 				{/if}
 				{#if item.text}
 					{#if item.role === 'assistant'}
@@ -233,8 +265,16 @@
 	{/if}
 {/each}
 
-{#if liveTools.length}
-	<ToolGroup chatId={chat.id} tools={liveToolGroupTools()} {expandedToolIds} />
+{#if showLiveActivity}
+	<ActivityGroup
+		chatId={chat.id}
+		activityId={liveActivityId}
+		entries={liveActivityEntries}
+		liveTools={liveToolGroupTools()}
+		{showReasoning}
+		{expandedActivityIds}
+		{expandedToolIds}
+	/>
 {/if}
 
 {#if showTimelineWorkingIndicator}
@@ -244,17 +284,12 @@
 	</div>
 {/if}
 
-{#if (showReasoning && chat.streamThinking) || chat.streamText}
+{#if chat.streamText}
 	<article
 		class="message message-assistant streaming"
 		role="group"
 		aria-label="assistant message, streaming"
 	>
-		{#if showReasoning && chat.streamThinking}
-			{@const reasoningMarkdown = renderStreamingMarkdown(chat.streamThinking)}
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
-			<div class="message-markdown thinking">{@html reasoningMarkdown}</div>
-		{/if}
 		{#if chat.streamRenderedText}
 			{@const markdown = renderStreamingMarkdown(chat.streamRenderedText)}
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it output is constrained in $lib/markdown -->
@@ -537,20 +572,6 @@
 			monospace;
 		white-space: pre-wrap;
 		word-break: break-word;
-	}
-
-	.thinking {
-		color: var(--text-muted);
-		font:
-			0.85rem/1.55 ui-monospace,
-			SFMono-Regular,
-			Menlo,
-			monospace;
-	}
-
-	.timeline-thinking {
-		max-width: 54rem;
-		margin: 0.25rem auto;
 	}
 
 	.timeline-notice {

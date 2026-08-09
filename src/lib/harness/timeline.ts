@@ -9,11 +9,14 @@ export type FinalToolView = {
 	owner?: ChatItem;
 };
 
+export type FinalActivityEntry =
+	| { id: string; kind: 'reasoning'; text: string }
+	| { id: string; kind: 'tools'; tools: FinalToolView[] };
+
 export type FinalTimelineEntry =
 	| { id: string; kind: 'item'; item: ChatItem; thinking?: string }
 	| { id: string; kind: 'stopped' }
-	| { id: string; kind: 'reasoning'; text: string }
-	| { id: string; kind: 'tools'; tools: FinalToolView[] };
+	| { id: string; kind: 'activity'; entries: FinalActivityEntry[] };
 
 /** Builds historical rows only. Live assistant and tool state deliberately stay out of this function. */
 export function buildFinalizedTimeline(
@@ -45,7 +48,8 @@ export function buildFinalizedTimeline(
 			.map((item) => [item.toolCallId!, item])
 	);
 	const timeline: FinalTimelineEntry[] = [];
-	let activeTools: Extract<FinalTimelineEntry, { kind: 'tools' }> | undefined;
+	let activeActivity: Extract<FinalTimelineEntry, { kind: 'activity' }> | undefined;
+	let activityAnchorId: string | undefined;
 
 	function calls(item: ChatItem): FinalToolView[] {
 		return (item.toolCalls ?? []).map((tool: ChatToolCall) => ({
@@ -57,12 +61,55 @@ export function buildFinalizedTimeline(
 		}));
 	}
 
+	function ensureActivity(id: string): Extract<FinalTimelineEntry, { kind: 'activity' }> {
+		if (activeActivity) {
+			return activeActivity;
+		}
+
+		const activityId = activityAnchorId ?? id;
+		const activity: Extract<FinalTimelineEntry, { kind: 'activity' }> = {
+			id: `activity-${activityId}`,
+			kind: 'activity',
+			entries: []
+		};
+		timeline.push(activity);
+		activeActivity = activity;
+
+		return activity;
+	}
+
+	function appendReasoning(id: string, text: string): void {
+		ensureActivity(id).entries.push({ id: `reasoning-${id}`, kind: 'reasoning', text });
+	}
+
+	function appendTools(id: string, tools: FinalToolView[]): void {
+		const activity = ensureActivity(id);
+		const previous = activity.entries.at(-1);
+		if (previous?.kind === 'tools') {
+			previous.tools.push(...tools);
+
+			return;
+		}
+
+		activity.entries.push({ id: `tools-${id}`, kind: 'tools', tools });
+	}
+
+	function endActivity(): void {
+		activeActivity = undefined;
+		activityAnchorId = undefined;
+	}
+
 	for (const item of items) {
 		if (item.role === 'tool' && item.toolCallId && calledIds.has(item.toolCallId)) {
 			continue;
 		}
 
 		const tools = calls(item);
+		if (item.role === 'user') {
+			endActivity();
+			activityAnchorId = item.id;
+		}
+
 		const emptyAssistant =
 			item.role === 'assistant' &&
 			!item.text &&
@@ -74,36 +121,50 @@ export function buildFinalizedTimeline(
 				timeline.push({ id: `stopped-${item.id}`, kind: 'stopped' });
 			}
 
-			activeTools = undefined;
+			endActivity();
 			continue;
 		}
 
 		const toolOnly = item.role === 'assistant' && !item.text && tools.length > 0;
-		if (toolOnly && item.thinking) {
-			timeline.push({ id: `reasoning-${item.id}`, kind: 'reasoning', text: item.thinking });
-			activeTools = undefined;
-		}
-
-		if (toolOnly && activeTools) {
-			activeTools.tools.push(...tools);
+		const reasoningOnly =
+			item.role === 'assistant' &&
+			!item.text &&
+			!tools.length &&
+			!item.attachments?.length &&
+			Boolean(item.thinking);
+		if (reasoningOnly) {
+			appendReasoning(item.id, item.thinking!);
 			continue;
 		}
 
 		if (toolOnly) {
-			const entry: Extract<FinalTimelineEntry, { kind: 'tools' }> = {
-				id: `tools-${item.id}`,
-				kind: 'tools',
-				tools
-			};
-			timeline.push(entry);
-			activeTools = entry;
+			const activityId = tools[0]?.id ?? item.id;
+			if (item.thinking) {
+				appendReasoning(activityId, item.thinking);
+			}
+
+			appendTools(activityId, tools);
 			continue;
 		}
 
-		timeline.push({ id: item.id, kind: 'item', item, thinking: item.thinking });
-		activeTools = undefined;
+		const assistantReasoning = item.role === 'assistant' ? item.thinking : undefined;
+		if (assistantReasoning) {
+			appendReasoning(item.id, assistantReasoning);
+		}
+
+		timeline.push({
+			id: item.id,
+			kind: 'item',
+			item,
+			thinking: assistantReasoning ? undefined : item.thinking
+		});
+
 		if (tools.length) {
-			timeline.push({ id: `tools-${item.id}`, kind: 'tools', tools });
+			appendTools(item.id, tools);
+		}
+
+		if (item.role !== 'user') {
+			endActivity();
 		}
 	}
 
