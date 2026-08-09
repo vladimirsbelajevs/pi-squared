@@ -343,7 +343,7 @@
 		min-height: 0;
 		--workspace-active-row-background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
 		--workspace-active-flare-size: 1rem;
-		--workspace-active-flare-width: 2.5rem;
+		--workspace-active-flare-width: 1.7rem;
 		background: var(--surface-muted);
 		color: var(--text);
 	}
@@ -531,7 +531,13 @@
 	.new-chat-button:hover,
 	.new-chat-button:focus-visible {
 		border-color: transparent;
-		background: var(--surface-strong);
+		background: var(--accent-strong);
+		color: var(--accent-ink);
+	}
+
+	.new-chat-button:hover svg,
+	.new-chat-button:focus-visible svg {
+		color: var(--accent-ink);
 	}
 
 	.utility-nav {
@@ -608,6 +614,11 @@
 	.workspace-entry-wrap:hover,
 	.workspace-entry-wrap:focus-within {
 		background: var(--surface-strong);
+	}
+
+	.sidebar-tab:hover {
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
 	}
 
 	.sidebar-tab.active {
