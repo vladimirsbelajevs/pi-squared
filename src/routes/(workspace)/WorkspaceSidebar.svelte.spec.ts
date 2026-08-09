@@ -110,8 +110,25 @@ describe('WorkspaceSidebar', () => {
 		expect(screen.container.querySelector('.sidebar-divider')).toHaveClass('has-active-workspace');
 	});
 
-	it('keeps an uninterrupted divider on utility routes', async () => {
+	it('applies the active treatment to History and Settings', async () => {
 		const screen = renderSidebar([chatTab(false)], '/history');
+		const divider = screen.container.querySelector('.sidebar-divider');
+		const history = screen.getByRole('link', { name: 'History' });
+
+		await expect.element(history).toHaveAttribute('aria-current', 'page');
+		expect(history.element()).toHaveClass('active');
+		expect(divider).toHaveClass('has-active-workspace');
+
+		await screen.rerender({ pathname: '/settings' });
+		const settings = screen.getByRole('link', { name: 'Settings' });
+		await expect.element(settings).toHaveAttribute('aria-current', 'page');
+		expect(settings.element()).toHaveClass('active');
+		expect(history.element()).not.toHaveClass('active');
+		expect(divider).toHaveClass('has-active-workspace');
+	});
+
+	it('keeps an uninterrupted divider when no sidebar tab is active', () => {
+		const screen = renderSidebar([chatTab(false)], '/');
 		const divider = screen.container.querySelector('.sidebar-divider');
 
 		expect(screen.container.querySelector('.workspace-entry-wrap.active')).toBeNull();

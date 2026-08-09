@@ -28,10 +28,13 @@
 	let unassignedDrafts = $derived(
 		workspace.tabs.filter((tab) => tab.kind === 'new' && !tab.draft.projectId)
 	);
-	let activeWorkspaceHref = $derived.by(() => {
+	let activeSidebarHref = $derived.by(() => {
 		const activeTab = workspace.tabs.find((tab) => isActive(tab));
+		if (activeTab) {
+			return workspace.hrefForTab(activeTab);
+		}
 
-		return activeTab ? workspace.hrefForTab(activeTab) : '';
+		return pathname === '/history' || pathname === '/settings' ? pathname : '';
 	});
 
 	const activeRowAttachmentTokens = new WeakMap<HTMLElement, symbol>();
@@ -78,13 +81,13 @@
 
 	function positionActiveRow(element: HTMLElement): ReturnType<Attachment> {
 		const sidebar = element.closest<HTMLElement>('.workspace-sidebar');
-		const list = element.closest<HTMLElement>('.sidebar-bottom');
-		if (!sidebar || !list) {
+		const geometryContainer = element.closest<HTMLElement>('.sidebar-bottom, .sidebar-top');
+		if (!sidebar || !geometryContainer) {
 			return;
 		}
 
 		const sidebarElement = sidebar;
-		const listElement = list;
+		const geometryContainerElement = geometryContainer;
 		let frame: number | undefined;
 		const attachmentToken = Symbol('active-row-position');
 		activeRowAttachmentTokens.set(sidebarElement, attachmentToken);
@@ -99,11 +102,18 @@
 			const rowRect = element.getBoundingClientRect();
 			const sidebarHeight = sidebarRect.height;
 			const sidebarFontSize = Number.parseFloat(getComputedStyle(sidebarElement).fontSize) || 16;
-			const flareSize = sidebarFontSize * 0.7;
+			const flareSize = sidebarFontSize;
 			const rowTop = rowRect.top - sidebarRect.top;
 			const rowBottom = rowRect.bottom - sidebarRect.top;
-			const gapTop = Math.max(0, Math.min(sidebarHeight, rowTop - flareSize));
-			const gapBottom = Math.max(gapTop, Math.min(sidebarHeight, rowBottom + flareSize));
+			const dividerOverlap = 10;
+			const gapTop = Math.max(
+				0,
+				Math.min(sidebarHeight, Math.ceil(rowTop - flareSize + dividerOverlap))
+			);
+			const gapBottom = Math.max(
+				gapTop,
+				Math.min(sidebarHeight, Math.floor(rowBottom + flareSize - dividerOverlap))
+			);
 
 			sidebarElement.style.setProperty('--sidebar-active-gap-top', `${gapTop}px`);
 			sidebarElement.style.setProperty('--sidebar-active-gap-bottom', `${gapBottom}px`);
@@ -117,14 +127,14 @@
 
 		const resizeObserver = new ResizeObserver(scheduleGeometry);
 		resizeObserver.observe(sidebarElement);
-		resizeObserver.observe(listElement);
+		resizeObserver.observe(geometryContainerElement);
 		resizeObserver.observe(element);
-		listElement.addEventListener('scroll', scheduleGeometry, { passive: true });
+		geometryContainerElement.addEventListener('scroll', scheduleGeometry, { passive: true });
 		window.addEventListener('resize', scheduleGeometry);
 		updateGeometry();
 
 		return () => {
-			listElement.removeEventListener('scroll', scheduleGeometry);
+			geometryContainerElement.removeEventListener('scroll', scheduleGeometry);
 			window.removeEventListener('resize', scheduleGeometry);
 			resizeObserver.disconnect();
 			if (frame !== undefined) {
@@ -194,9 +204,11 @@
 
 			<nav class="utility-nav" aria-label="Harness utility">
 				<a
+					class="sidebar-tab"
 					class:active={pathname === '/history'}
 					aria-current={pathname === '/history' ? 'page' : undefined}
 					href={resolve('/history')}
+					{@attach pathname === '/history' ? positionActiveRow : undefined}
 				>
 					<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
 						<circle cx="12" cy="12" r="8" />
@@ -205,9 +217,11 @@
 					<span>History</span>
 				</a>
 				<a
+					class="sidebar-tab"
 					class:active={pathname === '/settings'}
 					aria-current={pathname === '/settings' ? 'page' : undefined}
 					href={resolve('/settings')}
+					{@attach pathname === '/settings' ? positionActiveRow : undefined}
 				>
 					<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
 						<path
@@ -220,11 +234,11 @@
 		</div>
 
 		<div
-			class:has-active-workspace={activeWorkspaceHref !== ''}
+			class:has-active-workspace={activeSidebarHref !== ''}
 			class="sidebar-divider"
 			aria-hidden="true"
 		>
-			{#key activeWorkspaceHref}
+			{#key activeSidebarHref}
 				<span class="sidebar-divider-segment sidebar-divider-upper"></span>
 				<span class="sidebar-divider-segment sidebar-divider-lower"></span>
 			{/key}
@@ -236,7 +250,7 @@
 			{#each unassignedDrafts as tab (tab.id)}
 				<div
 					class:active={isActive(tab)}
-					class="workspace-entry-wrap"
+					class="sidebar-tab workspace-entry-wrap"
 					{@attach isActive(tab) ? positionActiveRow : undefined}
 				>
 					<a
@@ -266,7 +280,7 @@
 					{#each group.tabs as tab (tab.id)}
 						<div
 							class:active={isActive(tab)}
-							class="workspace-entry-wrap"
+							class="sidebar-tab workspace-entry-wrap"
 							{@attach isActive(tab) ? positionActiveRow : undefined}
 						>
 							<a
@@ -328,7 +342,7 @@
 		height: 100%;
 		min-height: 0;
 		--workspace-active-row-background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong));
-		--workspace-active-flare-size: 0.7rem;
+		--workspace-active-flare-size: 1rem;
 		background: var(--surface-muted);
 		color: var(--text);
 	}
@@ -360,12 +374,26 @@
 
 	.sidebar-divider.has-active-workspace .sidebar-divider-upper {
 		bottom: calc(100% - var(--sidebar-active-gap-top, 100%));
+		background: linear-gradient(
+			to bottom,
+			var(--border) 0 calc(100% - 4px),
+			var(--workspace-active-row-background) 100%
+		);
+		-webkit-mask-image: linear-gradient(to top, transparent 0, black 3px);
+		mask-image: linear-gradient(to top, transparent 0, black 3px);
 		animation: sidebar-divider-grow-up 1080ms cubic-bezier(0.22, 1, 0.36, 1) both;
 		transform-origin: bottom;
 	}
 
 	.sidebar-divider.has-active-workspace .sidebar-divider-lower {
 		top: var(--sidebar-active-gap-bottom, 0px);
+		background: linear-gradient(
+			to bottom,
+			var(--workspace-active-row-background) 0,
+			var(--border) 4px
+		);
+		-webkit-mask-image: linear-gradient(to bottom, transparent 0, black 3px);
+		mask-image: linear-gradient(to bottom, transparent 0, black 3px);
 		animation: sidebar-divider-grow-down 1080ms cubic-bezier(0.22, 1, 0.36, 1) both;
 		transform-origin: top;
 	}
@@ -508,6 +536,7 @@
 	.utility-nav {
 		display: grid;
 		gap: 0.1rem;
+		margin-right: -0.7rem;
 	}
 
 	.utility-nav a {
@@ -527,11 +556,15 @@
 			color 160ms ease;
 	}
 
-	.utility-nav a:hover,
-	.utility-nav a.active,
-	.utility-nav a:focus-visible {
+	.utility-nav a:not(.active):hover,
+	.utility-nav a:not(.active):focus-visible {
 		border-color: transparent;
 		background: var(--surface-strong);
+		color: var(--text);
+	}
+
+	.utility-nav a.active {
+		border-color: transparent;
 		color: var(--text);
 	}
 
@@ -576,15 +609,16 @@
 		background: var(--surface-strong);
 	}
 
-	.workspace-entry-wrap.active {
+	.sidebar-tab.active {
+		position: relative;
 		z-index: 2;
 		border-top-right-radius: 0;
 		border-bottom-right-radius: 0;
 		background: var(--workspace-active-row-background);
 	}
 
-	.workspace-entry-wrap.active::before,
-	.workspace-entry-wrap.active::after {
+	.sidebar-tab.active::before,
+	.sidebar-tab.active::after {
 		position: absolute;
 		right: -1px;
 		z-index: -1;
@@ -594,7 +628,7 @@
 		pointer-events: none;
 	}
 
-	.workspace-entry-wrap.active::before {
+	.sidebar-tab.active::before {
 		top: calc(-1 * var(--workspace-active-flare-size));
 		background: radial-gradient(
 			circle var(--workspace-active-flare-size) at 0 0,
@@ -603,7 +637,7 @@
 		);
 	}
 
-	.workspace-entry-wrap.active::after {
+	.sidebar-tab.active::after {
 		bottom: calc(-1 * var(--workspace-active-flare-size));
 		background: radial-gradient(
 			circle var(--workspace-active-flare-size) at 0 100%,
