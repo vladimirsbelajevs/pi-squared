@@ -88,6 +88,26 @@ describe('WorkspaceSidebar', () => {
 		).not.toBe('');
 	});
 
+	it('repositions the divider gap when a tab above the active tab closes', async () => {
+		const firstTab = newTab('first');
+		const activeTab = newTab('active');
+		const screen = renderSidebar([firstTab, activeTab], '/new/active');
+		const sidebar = screen.container.querySelector<HTMLElement>('.workspace-sidebar');
+		const initialGapTop = Number.parseFloat(
+			sidebar?.style.getPropertyValue('--sidebar-active-gap-top') ?? ''
+		);
+
+		expect(initialGapTop).toBeGreaterThan(0);
+
+		await screen.rerender({ workspace: workspace([activeTab]) });
+		await vi.waitFor(() => {
+			const updatedGapTop = Number.parseFloat(
+				sidebar?.style.getPropertyValue('--sidebar-active-gap-top') ?? ''
+			);
+			expect(updatedGapTop).toBeLessThan(initialGapTop);
+		});
+	});
+
 	it('moves the active treatment when the pathname changes', async () => {
 		const screen = renderSidebar([chatTab(false), newTab('draft')], '/chat/project-1/session-1');
 

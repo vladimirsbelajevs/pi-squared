@@ -129,6 +129,8 @@
 		resizeObserver.observe(sidebarElement);
 		resizeObserver.observe(geometryContainerElement);
 		resizeObserver.observe(element);
+		const mutationObserver = new MutationObserver(scheduleGeometry);
+		mutationObserver.observe(geometryContainerElement, { childList: true, subtree: true });
 		geometryContainerElement.addEventListener('scroll', scheduleGeometry, { passive: true });
 		window.addEventListener('resize', scheduleGeometry);
 		updateGeometry();
@@ -137,6 +139,7 @@
 			geometryContainerElement.removeEventListener('scroll', scheduleGeometry);
 			window.removeEventListener('resize', scheduleGeometry);
 			resizeObserver.disconnect();
+			mutationObserver.disconnect();
 			if (frame !== undefined) {
 				cancelAnimationFrame(frame);
 			}
