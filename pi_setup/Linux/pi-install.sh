@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 #Install PI
 curl -fsSL https://pi.dev/install.sh | sh
 
