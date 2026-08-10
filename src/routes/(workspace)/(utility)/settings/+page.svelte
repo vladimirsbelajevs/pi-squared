@@ -188,6 +188,9 @@
 			<button type="button" onclick={() => workspace.testCompletionSound()}>
 				Test completion sound
 			</button>
+			<button type="button" onclick={() => workspace.testPermissionSound()}>
+				Test permission sound
+			</button>
 		</div>
 		<div class="system-notification-preference">
 			<div class="display-preference">

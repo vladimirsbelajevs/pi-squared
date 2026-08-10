@@ -584,6 +584,13 @@ describe('HarnessWorkspace notifications', () => {
 		expect(workspace.notificationVolume).toBe(73);
 		expect(storageValues.get('pi-squared:notification-volume')).toBe('73');
 		expect(storageValues.get('pi-squared:notify-on-permission')).toBe('true');
+
+		workspace.testCompletionSound();
+		workspace.testPermissionSound();
+		expect(notifications.playSound.mock.calls.slice(-2)).toEqual([
+			['agent-complete', 0.73],
+			['permission-required', 0.73]
+		]);
 	});
 });
 

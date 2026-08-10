@@ -796,13 +796,11 @@ export class HarnessWorkspace {
 	}
 
 	testCompletionSound(): void {
-		try {
-			void Promise.resolve(
-				this.#notificationService.playSound('agent-complete', this.notificationVolume / 100)
-			).catch(() => undefined);
-		} catch {
-			// A blocked or unavailable audio API must not affect Settings.
-		}
+		this.#testSound('agent-complete');
+	}
+
+	testPermissionSound(): void {
+		this.#testSound('permission-required');
 	}
 
 	testSystemNotification(): void {
@@ -1034,6 +1032,16 @@ export class HarnessWorkspace {
 		}
 
 		this.#scheduleInactiveRuntimeDisposal(chat);
+	}
+
+	#testSound(kind: NotificationKind): void {
+		try {
+			void Promise.resolve(
+				this.#notificationService.playSound(kind, this.notificationVolume / 100)
+			).catch(() => undefined);
+		} catch {
+			// A blocked or unavailable audio API must not affect Settings.
+		}
 	}
 
 	#dispatchNotification(

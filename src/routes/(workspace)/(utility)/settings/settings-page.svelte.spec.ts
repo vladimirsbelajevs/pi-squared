@@ -23,6 +23,8 @@ describe('Settings notifications', () => {
 		await expect
 			.element(page.getByRole('switch', { name: 'Enable system notifications' }))
 			.toBeDisabled();
+		await expect.element(page.getByRole('button', { name: 'Test completion sound' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Test permission sound' })).toBeVisible();
 		await expect
 			.element(page.getByRole('button', { name: 'Test system notification' }))
 			.toBeDisabled();
