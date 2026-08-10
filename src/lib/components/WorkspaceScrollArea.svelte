@@ -202,7 +202,7 @@
 	}
 </script>
 
-<ScrollArea.Root class="workspace-scroll-root" type="scroll">
+<ScrollArea.Root class="workspace-scroll-root" type="hover">
 	<ScrollArea.Viewport
 		bind:ref={viewport}
 		id="workspace-content"
@@ -218,7 +218,7 @@
 		</div>
 	</ScrollArea.Viewport>
 
-	<ScrollArea.Scrollbar class="workspace-scrollbar" orientation="vertical" forceMount>
+	<ScrollArea.Scrollbar class="workspace-scrollbar" orientation="vertical">
 		<ScrollArea.Thumb class="workspace-scroll-thumb" />
 	</ScrollArea.Scrollbar>
 	<ScrollArea.Corner />
@@ -266,7 +266,9 @@
 			opacity 200ms ease;
 	}
 
-	:global([data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar:hover) {
+	:global(
+		[data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar[data-state='visible']:hover
+	) {
 		width: 0.75rem;
 		background: var(--surface-strong);
 	}
@@ -275,12 +277,7 @@
 		[data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar[data-state='hidden']
 	) {
 		opacity: 0;
-	}
-
-	:global(
-		[data-scroll-area-scrollbar][data-orientation='vertical'].workspace-scrollbar[data-state='hidden']:hover
-	) {
-		opacity: 1;
+		pointer-events: none;
 	}
 
 	:global([data-scroll-area-thumb].workspace-scroll-thumb) {
