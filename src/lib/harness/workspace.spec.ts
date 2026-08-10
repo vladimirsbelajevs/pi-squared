@@ -314,7 +314,7 @@ describe('HarnessWorkspace notifications', () => {
 		);
 
 		expect(notifications.playSound).toHaveBeenCalledTimes(1);
-		expect(notifications.playSound).toHaveBeenCalledWith('permission-required');
+		expect(notifications.playSound).toHaveBeenCalledWith('permission-required', 1);
 		expect(notifications.showSystemNotification).toHaveBeenCalledTimes(1);
 		const systemRequest = notifications.showSystemNotification.mock.calls[0][0];
 		expect(systemRequest.body).toBe('New chat: An agent is waiting for your permission.');
@@ -465,7 +465,7 @@ describe('HarnessWorkspace notifications', () => {
 		);
 
 		expect(notifications.playSound).toHaveBeenCalledTimes(1);
-		expect(notifications.playSound).toHaveBeenCalledWith('agent-complete');
+		expect(notifications.playSound).toHaveBeenCalledWith('agent-complete', 1);
 		expect(notifications.showSystemNotification).not.toHaveBeenCalled();
 	});
 
@@ -563,6 +563,7 @@ describe('HarnessWorkspace notifications', () => {
 
 	it('restores notification preferences and persists explicit setters', async () => {
 		storageValues.set('pi-squared:sounds-enabled', 'true');
+		storageValues.set('pi-squared:notification-volume', '35');
 		storageValues.set('pi-squared:system-notifications-enabled', 'true');
 		storageValues.set('pi-squared:notify-on-completion', 'true');
 		storageValues.set('pi-squared:notify-on-permission', 'false');
@@ -571,13 +572,17 @@ describe('HarnessWorkspace notifications', () => {
 		await workspace.start();
 
 		expect(workspace.soundsEnabled).toBe(true);
+		expect(workspace.notificationVolume).toBe(35);
 		expect(workspace.systemNotificationsEnabled).toBe(true);
 		expect(workspace.notifyOnCompletion).toBe(true);
 		expect(workspace.notifyOnPermission).toBe(false);
 
 		workspace.setSoundsEnabled(false);
+		workspace.setNotificationVolume(72.6);
 		workspace.setNotifyOnPermission(true);
 		expect(storageValues.get('pi-squared:sounds-enabled')).toBe('false');
+		expect(workspace.notificationVolume).toBe(73);
+		expect(storageValues.get('pi-squared:notification-volume')).toBe('73');
 		expect(storageValues.get('pi-squared:notify-on-permission')).toBe('true');
 	});
 });

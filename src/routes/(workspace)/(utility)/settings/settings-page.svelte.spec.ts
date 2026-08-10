@@ -11,6 +11,9 @@ describe('Settings notifications', () => {
 		await expect.element(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
 		const sounds = page.getByRole('switch', { name: 'Enable notification sounds' });
 		await expect.element(sounds).toBeVisible();
+		const volume = page.getByRole('slider', { name: 'Notification sound volume' });
+		await expect.element(volume).toBeVisible();
+		await expect.element(volume).toHaveAttribute('aria-valuetext', '100%');
 		await expect
 			.element(page.getByRole('switch', { name: 'Notify when agents complete' }))
 			.toBeVisible();
@@ -26,5 +29,10 @@ describe('Settings notifications', () => {
 
 		await sounds.click();
 		await expect.poll(() => localStorage.getItem('pi-squared:sounds-enabled')).toBe('true');
+
+		volume.element().focus();
+		volume.element().dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+		await expect.poll(() => localStorage.getItem('pi-squared:notification-volume')).toBe('0');
+		await expect.element(volume).toHaveAttribute('aria-valuetext', '0%');
 	});
 });

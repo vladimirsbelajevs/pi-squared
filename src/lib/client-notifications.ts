@@ -6,6 +6,7 @@ export type NotificationPermissionStatus = 'unsupported' | 'default' | 'granted'
 
 export interface AudioElementAdapter {
 	currentTime: number;
+	volume: number;
 	play: () => void | Promise<void>;
 }
 
@@ -39,7 +40,7 @@ export interface SystemNotificationRequest {
 export interface NotificationService {
 	permissionStatus(): NotificationPermissionStatus;
 	requestPermission(): Promise<NotificationPermissionStatus>;
-	playSound(kind: NotificationKind): Promise<void>;
+	playSound(kind: NotificationKind, volume?: number): Promise<void>;
 	showSystemNotification(request: SystemNotificationRequest): boolean;
 }
 
@@ -125,7 +126,7 @@ export class ClientNotificationService implements NotificationService {
 		}
 	}
 
-	playSound(kind: NotificationKind): Promise<void> {
+	playSound(kind: NotificationKind, volume = 1): Promise<void> {
 		const factory = this.#adapters.createAudio ?? currentAudioFactory();
 		if (!factory) {
 			return Promise.resolve();
@@ -136,6 +137,7 @@ export class ClientNotificationService implements NotificationService {
 			audio = this.#audio.get(kind) ?? factory(asset(SOUND_PATHS[kind]));
 			this.#audio.set(kind, audio);
 			audio.currentTime = 0;
+			audio.volume = Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 1;
 		} catch (error) {
 			this.#report(error);
 

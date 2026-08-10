@@ -67,6 +67,7 @@ const THEME_KEY = 'pi-squared:theme';
 const SHOW_REASONING_KEY = 'pi-squared:show-reasoning';
 const SHOW_MODEL_CHANGES_KEY = 'pi-squared:show-model-changes';
 const SOUNDS_ENABLED_KEY = 'pi-squared:sounds-enabled';
+const NOTIFICATION_VOLUME_KEY = 'pi-squared:notification-volume';
 const SYSTEM_NOTIFICATIONS_ENABLED_KEY = 'pi-squared:system-notifications-enabled';
 const NOTIFY_ON_COMPLETION_KEY = 'pi-squared:notify-on-completion';
 const NOTIFY_ON_PERMISSION_KEY = 'pi-squared:notify-on-permission';
@@ -154,6 +155,7 @@ export class HarnessWorkspace {
 	showReasoning = $state(false);
 	showModelChanges = $state(false);
 	soundsEnabled = $state(false);
+	notificationVolume = $state(100);
 	systemNotificationsEnabled = $state(false);
 	notifyOnCompletion = $state(false);
 	notifyOnPermission = $state(false);
@@ -730,6 +732,11 @@ export class HarnessWorkspace {
 		localStorage.setItem(SOUNDS_ENABLED_KEY, String(enabled));
 	}
 
+	setNotificationVolume(volume: number): void {
+		this.notificationVolume = Math.max(0, Math.min(100, Math.round(volume)));
+		localStorage.setItem(NOTIFICATION_VOLUME_KEY, String(this.notificationVolume));
+	}
+
 	setSystemNotificationsEnabled(enabled: boolean): void {
 		this.systemNotificationsEnabled = enabled && this.notificationPermission === 'granted';
 		localStorage.setItem(SYSTEM_NOTIFICATIONS_ENABLED_KEY, String(this.systemNotificationsEnabled));
@@ -790,9 +797,9 @@ export class HarnessWorkspace {
 
 	testCompletionSound(): void {
 		try {
-			void Promise.resolve(this.#notificationService.playSound('agent-complete')).catch(
-				() => undefined
-			);
+			void Promise.resolve(
+				this.#notificationService.playSound('agent-complete', this.notificationVolume / 100)
+			).catch(() => undefined);
 		} catch {
 			// A blocked or unavailable audio API must not affect Settings.
 		}
@@ -1055,7 +1062,9 @@ export class HarnessWorkspace {
 
 		if (this.soundsEnabled) {
 			try {
-				void Promise.resolve(this.#notificationService.playSound(kind)).catch(() => undefined);
+				void Promise.resolve(
+					this.#notificationService.playSound(kind, this.notificationVolume / 100)
+				).catch(() => undefined);
 			} catch {
 				// Notification failures must not interrupt runtime event application.
 			}
@@ -1488,6 +1497,11 @@ export class HarnessWorkspace {
 	#restoreNotificationPreferences(): void {
 		this.refreshNotificationPermission();
 		this.soundsEnabled = localStorage.getItem(SOUNDS_ENABLED_KEY) === 'true';
+		const storedVolume = localStorage.getItem(NOTIFICATION_VOLUME_KEY);
+		const parsedVolume = storedVolume === null ? Number.NaN : Number(storedVolume);
+		this.notificationVolume = Number.isFinite(parsedVolume)
+			? Math.max(0, Math.min(100, Math.round(parsedVolume)))
+			: 100;
 		this.systemNotificationsEnabled =
 			localStorage.getItem(SYSTEM_NOTIFICATIONS_ENABLED_KEY) === 'true' &&
 			this.notificationPermission === 'granted';

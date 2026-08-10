@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
+	import { Slider } from 'bits-ui';
 	import Selector from '$lib/components/Selector.svelte';
 	import Switch from '$lib/components/Switch.svelte';
 	import { THEME_LABELS, workspace } from '$lib/harness/workspace.svelte';
@@ -52,6 +53,10 @@
 
 	function handleSoundsChange(checked: boolean): void {
 		workspace.setSoundsEnabled(checked);
+	}
+
+	function handleNotificationVolumeChange(volume: number): void {
+		workspace.setNotificationVolume(volume);
 	}
 
 	function handleCompletionChange(checked: boolean): void {
@@ -128,6 +133,34 @@
 				label="Enable notification sounds"
 				onchange={handleSoundsChange}
 			/>
+		</div>
+		<div class="display-preference volume-preference">
+			<div class="display-copy">
+				<strong>Notification sound volume</strong>
+				<small>Adjust the loudness of all notification sounds.</small>
+			</div>
+			<div class="notification-volume-control">
+				<output aria-live="polite">{workspace.notificationVolume}%</output>
+				<Slider.Root
+					type="single"
+					min={0}
+					max={100}
+					step={5}
+					value={workspace.notificationVolume}
+					onValueChange={handleNotificationVolumeChange}
+					class="notification-volume-slider"
+				>
+					<span class="notification-volume-track">
+						<Slider.Range class="notification-volume-range" />
+					</span>
+					<Slider.Thumb
+						index={0}
+						class="notification-volume-thumb"
+						aria-label="Notification sound volume"
+						aria-valuetext={`${workspace.notificationVolume}%`}
+					/>
+				</Slider.Root>
+			</div>
 		</div>
 		<div class="display-preference">
 			<div class="display-copy">
@@ -252,6 +285,64 @@
 		gap: 0.75rem;
 	}
 
+	.notification-volume-control {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.notification-volume-control output {
+		width: 2.8rem;
+		color: var(--text-muted);
+		font-size: 0.82rem;
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
+	.notification-volume-control :global(.notification-volume-slider) {
+		position: relative;
+		display: flex;
+		align-items: center;
+		width: 10rem;
+		height: 1.5rem;
+		touch-action: none;
+		user-select: none;
+	}
+
+	.notification-volume-track {
+		position: relative;
+		width: 100%;
+		height: 0.35rem;
+		overflow: hidden;
+		border-radius: 999px;
+		background: var(--surface-strong);
+	}
+
+	.notification-volume-track :global(.notification-volume-range) {
+		position: absolute;
+		height: 100%;
+		background: var(--accent);
+	}
+
+	.notification-volume-control :global(.notification-volume-thumb) {
+		display: block;
+		width: 1rem;
+		height: 1rem;
+		border: 2px solid var(--accent);
+		border-radius: 50%;
+		background: var(--surface);
+		box-shadow: 0 1px 3px var(--shadow);
+		cursor: pointer;
+	}
+
+	.notification-volume-control :global(.notification-volume-thumb:hover),
+	.notification-volume-control :global(.notification-volume-thumb:focus-visible),
+	.notification-volume-control :global(.notification-volume-thumb[data-active]) {
+		border-color: var(--accent-strong);
+		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+	}
+
 	.notification-actions {
 		display: flex;
 		gap: 0.75rem;
@@ -280,5 +371,20 @@
 
 	.notification-help {
 		margin: 0;
+	}
+
+	@media (max-width: 520px) {
+		.volume-preference {
+			align-items: stretch;
+			flex-direction: column;
+		}
+
+		.notification-volume-control {
+			width: 100%;
+		}
+
+		.notification-volume-control :global(.notification-volume-slider) {
+			flex: 1;
+		}
 	}
 </style>

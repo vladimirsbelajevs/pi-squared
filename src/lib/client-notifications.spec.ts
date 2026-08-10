@@ -59,6 +59,7 @@ describe('ClientNotificationService', () => {
 			createAudio: (url) => {
 				const audio: AudioElementAdapter = {
 					currentTime: 12,
+					volume: 1,
 					play: vi.fn()
 				};
 				(audios as Array<AudioElementAdapter & { url?: string }>).push(
@@ -69,14 +70,15 @@ describe('ClientNotificationService', () => {
 			}
 		});
 
-		await service.playSound('permission-required');
-		await service.playSound('permission-required');
+		await service.playSound('permission-required', 0.25);
+		await service.playSound('permission-required', 0.8);
 
 		expect(audios).toHaveLength(1);
 		expect((audios[0] as AudioElementAdapter & { url: string }).url).toContain(
 			'/sounds/permission-required.mp3'
 		);
 		expect(audios[0].currentTime).toBe(0);
+		expect(audios[0].volume).toBe(0.8);
 		expect(audios[0].play).toHaveBeenCalledTimes(2);
 	});
 
@@ -85,6 +87,7 @@ describe('ClientNotificationService', () => {
 		const service = new ClientNotificationService({
 			createAudio: () => ({
 				currentTime: 0,
+				volume: 1,
 				play: () => Promise.reject(new Error('autoplay blocked'))
 			}),
 			onError
