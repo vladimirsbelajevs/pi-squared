@@ -425,6 +425,11 @@
 {#if showTimelineWorkingIndicator}
 	<div class="thinking-indicator" role="status">
 		<PiWorkingSpinner tone="timeline" />
+		{#if chat.streamThinking}
+			<ReasoningMarkdown text={chat.streamThinking} />
+		{:else}
+			<span class="thinking-placeholder">Thinking</span>
+		{/if}
 		<span class="visually-hidden">Working</span>
 	</div>
 {/if}
@@ -738,13 +743,27 @@
 
 	.thinking-indicator {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		box-sizing: border-box;
 		width: min(54rem, 100%);
 		margin: 1rem auto;
 		color: var(--text-muted);
+		gap: 0.5rem;
 		padding: 0.45rem 0.8rem;
 		font-size: 0.78rem;
+	}
+
+	.thinking-indicator :global(.pi-working-spinner) {
+		margin-top: 0.35rem;
+	}
+
+	.thinking-placeholder {
+		color: var(--text-muted);
+		font:
+			700 0.85rem/1.55 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			monospace;
 	}
 
 	.visually-hidden {

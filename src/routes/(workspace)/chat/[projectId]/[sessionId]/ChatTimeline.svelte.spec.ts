@@ -403,9 +403,10 @@ describe('ChatTimeline', () => {
 		expect(screen.container.querySelector('.pi-working-spinner')).toBeNull();
 	});
 
-	it('remains hidden after the runtime turn finishes', async () => {
+	it('shows Thinking by default and hides the indicator after the runtime turn finishes', async () => {
 		const screen = render(ChatTimeline, { chat: chat() });
 		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
+		await expect.element(screen.getByText('Thinking', { exact: true })).toBeVisible();
 
 		await screen.rerender({
 			chat: chat({ snapshot: { ...chat().snapshot!, isStreaming: false } })
@@ -1051,13 +1052,16 @@ describe('ChatTimeline', () => {
 		expect(screen.container.querySelectorAll('details.activity-group')).toHaveLength(1);
 	});
 
-	it('hides reasoning-only stream deltas until reasoning display is enabled', async () => {
+	it('shows the latest reasoning as markdown beside the working spinner', async () => {
 		const screen = render(ChatTimeline, {
 			chat: chat({ streamThinking: '*Streaming reasoning*' })
 		});
 
 		expect(screen.container.querySelector('.streaming')).toBeNull();
 		await expect.element(screen.getByRole('img', { name: 'Working' })).toBeVisible();
+		const indicatorReasoning = screen.container.querySelector('.thinking-indicator .thinking');
+		expect(indicatorReasoning?.textContent).toContain('Streaming reasoning');
+		expect(indicatorReasoning?.querySelector('em')).toHaveTextContent('Streaming reasoning');
 
 		await screen.rerender({
 			chat: chat({ streamThinking: '*Streaming reasoning*' }),
