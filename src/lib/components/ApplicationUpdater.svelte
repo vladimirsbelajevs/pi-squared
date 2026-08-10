@@ -23,10 +23,16 @@
 		platform: string;
 		instanceId?: string;
 	};
+	type ReminderStatus = {
+		serverTime: string;
+		lastCheckedAt: string | null;
+		due: boolean;
+	};
 
-	const REMINDER_KEY = 'pi-squared.application-update-next-reminder';
-	const REMINDER_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 	const FIRST_REMINDER_DELAY_MS = 1500;
+	const REMINDER_RETRY_DELAY_MS = 30_000;
+	const REMINDER_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000;
+	const MAX_TIMER_DELAY_MS = 2_147_483_647;
 	const RECONNECT_TIMEOUT_MS = 30_000;
 	const MAX_OUTPUT_BYTES = 256 * 1024;
 
@@ -91,13 +97,61 @@
 		}
 	}
 
-	function recordReminderChoice(): void {
-		localStorage.setItem(REMINDER_KEY, String(Date.now() + REMINDER_DELAY_MS));
+	function scheduleReminderTimer(delayMs: number, callback: () => void): void {
+		clearReminderTimer();
+		const boundedDelay = Math.min(MAX_TIMER_DELAY_MS, Math.max(0, Math.ceil(delayMs)));
+		reminderTimer = setTimeout(() => {
+			reminderTimer = undefined;
+			if (mounted) {
+				callback();
+			}
+		}, boundedDelay);
+	}
+
+	function scheduleReminderRetry(): void {
+		if (mounted && !snackbarVisible) {
+			scheduleReminderTimer(REMINDER_RETRY_DELAY_MS, () => void loadReminder());
+		}
+	}
+
+	function scheduleNextReminderCheck(reminder: ReminderStatus): void {
+		const serverTime = Date.parse(reminder.serverTime);
+		const lastCheckedAt = reminder.lastCheckedAt ? Date.parse(reminder.lastCheckedAt) : Number.NaN;
+		if (!Number.isFinite(serverTime) || !Number.isFinite(lastCheckedAt)) {
+			scheduleReminderRetry();
+
+			return;
+		}
+
+		const dueIn = lastCheckedAt + REMINDER_INTERVAL_MS - serverTime;
+		scheduleReminderTimer(dueIn, () => void loadReminder());
+	}
+
+	async function recordReminderChoice(): Promise<void> {
 		snackbarVisible = false;
+		try {
+			const response = await fetch('/api/application/reminder', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			if (!response.ok) {
+				scheduleReminderRetry();
+
+				return;
+			}
+
+			const reminder = (await response.json()) as ReminderStatus;
+			if (mounted && !reminder.due) {
+				scheduleNextReminderCheck(reminder);
+			}
+		} catch {
+			// A reminder write failure must not block the user's update choice.
+			scheduleReminderRetry();
+		}
 	}
 
 	function dismissReminder(): void {
-		recordReminderChoice();
+		void recordReminderChoice();
 	}
 
 	function parseRecords(buffer: string, id: number): string {
@@ -226,12 +280,13 @@
 				activeReader = null;
 				activeUpdateController = null;
 				applicationUpdateState.busy = false;
+				void loadReminder();
 			}
 		}
 	}
 
 	function chooseYes(): void {
-		recordReminderChoice();
+		void recordReminderChoice();
 		void startUpdate();
 	}
 
@@ -341,20 +396,87 @@
 		await polling;
 	}
 
+	async function loadReminder(): Promise<void> {
+		if (!mounted || snackbarVisible) {
+			return;
+		}
+
+		try {
+			const response = await fetch('/api/application/reminder', { cache: 'no-store' });
+			if (!response.ok) {
+				scheduleReminderRetry();
+
+				return;
+			}
+
+			const reminder = (await response.json()) as ReminderStatus;
+			if (!mounted || snackbarVisible) {
+				return;
+			}
+
+			if (!reminder.due) {
+				scheduleNextReminderCheck(reminder);
+
+				return;
+			}
+
+			if (updateBusy || applicationUpdateState.busy) {
+				scheduleReminderRetry();
+
+				return;
+			}
+
+			// Re-fetch after the presentation delay so another tab can record the
+			// reminder before this tab displays stale due state.
+			scheduleReminderTimer(
+				FIRST_REMINDER_DELAY_MS,
+				() => void confirmReminderBeforePresentation()
+			);
+		} catch {
+			// A reminder status failure must not block normal application use.
+			scheduleReminderRetry();
+		}
+	}
+
+	async function confirmReminderBeforePresentation(): Promise<void> {
+		if (!mounted || snackbarVisible) {
+			return;
+		}
+
+		try {
+			const response = await fetch('/api/application/reminder', { cache: 'no-store' });
+			if (!response.ok) {
+				scheduleReminderRetry();
+
+				return;
+			}
+
+			const reminder = (await response.json()) as ReminderStatus;
+			if (!mounted || snackbarVisible) {
+				return;
+			}
+
+			if (!reminder.due) {
+				scheduleNextReminderCheck(reminder);
+
+				return;
+			}
+
+			if (updateBusy || applicationUpdateState.busy) {
+				scheduleReminderRetry();
+
+				return;
+			}
+
+			snackbarVisible = true;
+		} catch {
+			scheduleReminderRetry();
+		}
+	}
+
 	onMount(() => {
 		mounted = true;
-		const scheduleReminder = (): void => {
-			const nextReminder = Number(localStorage.getItem(REMINDER_KEY) ?? '0');
-			const delay = nextReminder > Date.now() ? nextReminder - Date.now() : FIRST_REMINDER_DELAY_MS;
-			reminderTimer = setTimeout(() => {
-				reminderTimer = undefined;
-				if (!updateBusy && !applicationUpdateState.busy) {
-					snackbarVisible = true;
-				}
-			}, delay);
-		};
-
-		scheduleReminder();
+		void loadReminder();
 		const unregister = registerApplicationUpdateStarter(() => void startUpdate());
 
 		return () => {

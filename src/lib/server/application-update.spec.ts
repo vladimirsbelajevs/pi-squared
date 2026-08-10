@@ -221,11 +221,26 @@ describe('application update process streams', () => {
 
 describe('restart and update scripts', () => {
 	it('delegate successful updates to reusable restart scripts', async () => {
-		const [linux, linuxRestart, windows, windowsRestart] = await Promise.all([
+		const [
+			linux,
+			linuxRestart,
+			windows,
+			windowsRestart,
+			linuxSetup,
+			linuxRun,
+			windowsSetup,
+			windowsRun,
+			initializer
+		] = await Promise.all([
 			readFile(`${getRepositoryRoot()}/Linux/update.sh`, 'utf8'),
 			readFile(`${getRepositoryRoot()}/Linux/restart-service.sh`, 'utf8'),
 			readFile(`${getRepositoryRoot()}/Windows/update.ps1`, 'utf8'),
-			readFile(`${getRepositoryRoot()}/Windows/restart-service.ps1`, 'utf8')
+			readFile(`${getRepositoryRoot()}/Windows/restart-service.ps1`, 'utf8'),
+			readFile(`${getRepositoryRoot()}/Linux/setup.sh`, 'utf8'),
+			readFile(`${getRepositoryRoot()}/Linux/run.sh`, 'utf8'),
+			readFile(`${getRepositoryRoot()}/Windows/setup.ps1`, 'utf8'),
+			readFile(`${getRepositoryRoot()}/Windows/run.ps1`, 'utf8'),
+			readFile(`${getRepositoryRoot()}/scripts/initialize-update-reminder.mjs`, 'utf8')
 		]);
 		expect(linux).toContain('Linux/restart-service.sh');
 		expect(linux).toContain('--no-restart');
@@ -236,6 +251,21 @@ describe('restart and update scripts', () => {
 		expect(windowsRestart).toContain('Start-ScheduledTask -TaskName $taskName');
 		expect(windowsRestart).toContain('[Console]::Error.WriteLine');
 		expect(windowsRestart).not.toContain('Write-Error');
+		expect(linuxSetup).toContain('scripts/initialize-update-reminder.mjs');
+		expect(linuxSetup).toContain('data_directory="$(node');
+		expect(linuxSetup).toContain('PI_SQUARED_DATA_DIR=${data_directory}');
+		expect(linuxSetup).toContain('install_user_service "${data_directory}"');
+		expect(linuxRun).toContain('setsid npm run start &');
+		expect(windowsSetup).toContain('scripts\\initialize-update-reminder.mjs');
+		expect(windowsSetup).toContain('ConvertTo-CommandLineArgument');
+		expect(windowsSetup).toContain('-DataDirectory $quotedDataDirectory');
+		expect(windowsSetup).toContain('Register-PiSquaredTask -DataDirectory $dataDirectory');
+		expect(windowsRun).toContain('[string]$DataDirectory');
+		expect(windowsRun).toContain('$env:PI_SQUARED_DATA_DIR = $DataDirectory');
+		expect(windowsRun).toContain('-DataDirectory can only be used with -ServiceMode.');
+		expect(initializer).toContain('PI_SQUARED_DATA_DIR');
+		expect(initializer).toContain("process.argv.includes('--print-path')");
+		expect(initializer).toContain('application-update-reminder.json');
 		expect(await readFile(`${getRepositoryRoot()}/package.json`, 'utf8')).toContain(
 			"process.env.HOST='127.0.0.1'"
 		);

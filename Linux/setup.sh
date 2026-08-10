@@ -23,6 +23,7 @@ escape_systemd_value() {
 }
 
 install_user_service() {
+  local data_directory="$1"
   local service_directory
   local temporary_file
   local runtime_path
@@ -43,6 +44,7 @@ install_user_service() {
     printf 'Type=simple\n'
     printf 'WorkingDirectory=%s\n' "$(escape_systemd_value "${project_root}")"
     printf 'Environment=%s\n' "$(escape_systemd_value "PATH=${runtime_path}")"
+    printf 'Environment=%s\n' "$(escape_systemd_value "PI_SQUARED_DATA_DIR=${data_directory}")"
     printf 'ExecStart=%s %s --service\n' \
       "$(escape_systemd_value "${bash_path}" true)" \
       "$(escape_systemd_value "${run_script}" true)"
@@ -67,12 +69,14 @@ install_user_service() {
 cd "${project_root}"
 npm install
 npm run build
+data_directory="$(node "${project_root}/scripts/initialize-update-reminder.mjs" --print-path)"
+node "${project_root}/scripts/initialize-update-reminder.mjs"
 
 printf 'Install Pi Squared as a user systemd service (%s)? [y/N] ' "${service_name}"
 IFS= read -r install_service || install_service=''
 case "${install_service}" in
   y|Y)
-    install_user_service
+    install_user_service "${data_directory}"
     ;;
   n|N|'')
     printf 'Skipping user service registration.\n'

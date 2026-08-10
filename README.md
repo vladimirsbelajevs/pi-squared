@@ -19,7 +19,7 @@ Pi Squared is a web UI using [Pi SDK](https://pi.dev/docs/latest/sdk).
 
 The scripts in [`Linux/`](Linux/) can be run from any directory:
 
-- [`setup.sh`](Linux/setup.sh) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application. After a successful build it asks whether to register the optional current-user systemd service `pi-squared.service`; an empty answer defaults to no.
+- [`setup.sh`](Linux/setup.sh) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application and initializes the server-side update reminder timestamp. After a successful build it asks whether to register the optional current-user systemd service `pi-squared.service`; an empty answer defaults to no.
 - [`update.sh`](Linux/update.sh) pulls the latest repository version, updates Pi and its extensions, installs the current project dependencies, then rebuilds the application. If `pi-squared.service` is registered, it delegates the restart to [`restart-service.sh`](Linux/restart-service.sh); otherwise it leaves the current process alone.
 - [`restart-service.sh`](Linux/restart-service.sh) requests a no-block restart of the registered `pi-squared.service` user unit and can be run manually from any directory.
 - [`run.sh`](Linux/run.sh) starts the production build on port `3049`. Press **Esc** or **Ctrl+C** to stop a manually started server. When the user service is registered, normal invocation does not start a duplicate; use `Linux/run.sh --service` only from the service unit.
@@ -48,7 +48,7 @@ This is a login-scoped user service: setup does not enable systemd lingering, so
 
 Equivalent PowerShell scripts are available in [`Windows/`](Windows/):
 
-- [`setup.ps1`](Windows/setup.ps1) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application. After a successful build it asks whether to register the optional hidden current-user Scheduled Task `Pi Squared`; an empty answer defaults to no.
+- [`setup.ps1`](Windows/setup.ps1) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application and initializes the server-side update reminder timestamp. After a successful build it asks whether to register the optional hidden current-user Scheduled Task `Pi Squared`; an empty answer defaults to no.
 - [`update.ps1`](Windows/update.ps1) pulls the latest repository version, updates Pi and its extensions, installs the current project dependencies, then rebuilds the application. If `Pi Squared` is registered, it delegates the restart to [`restart-service.ps1`](Windows/restart-service.ps1); otherwise it leaves the current process alone.
 - [`restart-service.ps1`](Windows/restart-service.ps1) requests a replacement instance of the registered `Pi Squared` Scheduled Task and can be run manually from any directory. The setup-created `MultipleInstances StopExisting` policy performs the replacement.
 - [`run.ps1`](Windows/run.ps1) starts the production build on port `3049`. Press **Esc** or **Ctrl+C** to stop a manually started server. When the task is registered, normal invocation does not start a duplicate; use `Windows/run.ps1 -ServiceMode` only from the task.
@@ -75,7 +75,7 @@ The task runs only for the interactive user who ran setup at logon. It has no ex
 
 ## In-app application updates
 
-Settings includes an **Update application** action, and Pi Squared shows a persistent update reminder once every seven days per browser. Choosing **Yes** or **No** snoozes the next reminder for seven days. Updates execute the platform update script, stream labeled stdout and stderr into an accessible dialog, and keep running if the browser disconnects.
+Settings includes an **Update application** action, and Pi Squared shows a persistent update reminder every five days. The reminder timestamp is shared by the server installation and stored in its Pi Squared data directory rather than in browser storage. Choosing **Yes** or **No** records the current server time and dismisses the reminder. Updates execute the platform update script, stream labeled stdout and stderr into an accessible dialog, and keep running if the browser disconnects.
 
 After a successful update, the dialog offers **Restart app** when the native background registration exists. Linux requires the `pi-squared.service` user unit and Windows requires the `Pi Squared` Scheduled Task. Without either registration, updating still works but setup must be rerun with background registration enabled before the app can restart itself. A restart waits for the updated server to reconnect and then reloads the browser; a failed update retains its output and offers Retry instead of restart.
 
@@ -99,13 +99,15 @@ Open the printed local URL. Add a project from a new-chat tab, choose an authent
 
 ## Data Locations
 
-Pi Squared stores only its added-project registry. The registry is created on first use and is never bundled with the application.
+Pi Squared stores its added-project registry and the server-side application update reminder state. These files are created in the data directory and are never bundled with the application.
 
-| Platform | Default registry path                                    |
+| Platform | Default projects registry path                           |
 | -------- | -------------------------------------------------------- |
 | Linux    | `~/.config/pi-squared/projects.json`                     |
 | macOS    | `~/Library/Application Support/pi-squared/projects.json` |
 | Windows  | `%APPDATA%\\pi-squared\\projects.json`                   |
+
+The application update reminder is stored beside the registry as `application-update-reminder.json`. Setup initializes it before registering a background process and persists the resolved absolute data directory in the registration, so custom `PI_SQUARED_DATA_DIR`, `XDG_CONFIG_HOME`, and paths containing spaces remain consistent between setup and the service.
 
 Set `PI_SQUARED_DATA_DIR` to use a custom or portable data directory.
 

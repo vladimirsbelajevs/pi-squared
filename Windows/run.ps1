@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [switch]$ServiceMode
+    [switch]$ServiceMode,
+
+    [Parameter()]
+    [string]$DataDirectory
 )
 
 Set-StrictMode -Version Latest
@@ -9,6 +12,25 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $taskName = 'Pi Squared'
+
+if (-not [string]::IsNullOrWhiteSpace($DataDirectory)) {
+    if (-not $ServiceMode) {
+        throw '-DataDirectory can only be used with -ServiceMode.'
+    }
+
+    if ($DataDirectory -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)') {
+        throw 'The Pi Squared data directory must be an absolute path.'
+    }
+
+    try {
+        $DataDirectory = [System.IO.Path]::GetFullPath($DataDirectory)
+    }
+    catch {
+        throw "The supplied Pi Squared data directory is invalid: $($_.Exception.Message)"
+    }
+
+    $env:PI_SQUARED_DATA_DIR = $DataDirectory
+}
 
 function Get-PiSquaredTask {
     try {

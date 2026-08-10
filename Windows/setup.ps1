@@ -41,13 +41,30 @@ function Stop-PiSquaredTaskIfRunning {
     }
 }
 
+function ConvertTo-CommandLineArgument {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Value
+    )
+
+    $escaped = $Value -replace '(\\*)"', '$1$1\\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    return '"' + $escaped + '"'
+}
+
 function Register-PiSquaredTask {
+    param(
+        [Parameter(Mandatory)]
+        [string]$DataDirectory
+    )
+
     Stop-PiSquaredTaskIfRunning
     $runScript = Join-Path $projectRoot 'Windows\run.ps1'
     $powerShellCommand = (Get-Command 'powershell.exe' -ErrorAction Stop).Source
     $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $quotedRunScript = '"' + $runScript + '"'
-    $actionArguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $quotedRunScript -ServiceMode"
+    $quotedRunScript = ConvertTo-CommandLineArgument $runScript
+    $quotedDataDirectory = ConvertTo-CommandLineArgument $DataDirectory
+    $actionArguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File $quotedRunScript -ServiceMode -DataDirectory $quotedDataDirectory"
 
     $action = New-ScheduledTaskAction `
         -Execute $powerShellCommand `
@@ -94,9 +111,19 @@ try {
         throw "Application build failed with exit code $LASTEXITCODE."
     }
 
+    $dataDirectory = (& node (Join-Path $projectRoot 'scripts\initialize-update-reminder.mjs') --print-path).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($dataDirectory)) {
+        throw "Application update reminder data directory resolution failed with exit code $LASTEXITCODE."
+    }
+
+    & node (Join-Path $projectRoot 'scripts\initialize-update-reminder.mjs')
+    if ($LASTEXITCODE -ne 0) {
+        throw "Application update reminder initialization failed with exit code $LASTEXITCODE."
+    }
+
     $registerTask = (Read-Host "Register Pi Squared as a Scheduled Task ('$taskName')? [y/N]").Trim()
     if ($registerTask -match '^[yY]$') {
-        Register-PiSquaredTask
+        Register-PiSquaredTask -DataDirectory $dataDirectory
     }
     elseif ($registerTask -notmatch '^[nN]?$') {
         throw 'Please answer y or n. No Scheduled Task was registered.'

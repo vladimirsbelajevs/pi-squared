@@ -1,32 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { homedir, platform } from 'node:os';
-import { basename, isAbsolute, join, resolve } from 'node:path';
+import { basename, isAbsolute } from 'node:path';
 import type { Project } from '$lib/contracts';
+import { getDataDirectory, getDataFilePath } from './data-directory.js';
 
 interface ProjectsDocument {
 	version: 1;
 	projects: Project[];
 }
 
-function getDataDirectory(): string {
-	if (process.env.PI_SQUARED_DATA_DIR) {
-		return resolve(process.env.PI_SQUARED_DATA_DIR);
-	}
-
-	if (platform() === 'win32') {
-		return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'pi-squared');
-	}
-
-	if (platform() === 'darwin') {
-		return join(homedir(), 'Library', 'Application Support', 'pi-squared');
-	}
-
-	return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'pi-squared');
-}
-
 function getProjectsPath(): string {
-	return join(getDataDirectory(), 'projects.json');
+	return getDataFilePath('projects.json');
 }
 
 function isProject(value: unknown): value is Project {
