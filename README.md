@@ -13,30 +13,43 @@ Pi Squared is a web UI using [Pi SDK](https://pi.dev/docs/latest/sdk).
 - Pi CLI harness installed
 - Pi provider credentials configured for the local user
 
-## Linux Setup Scripts
+## Setup and Local Use
 
-The Linux setup scripts are in [`setup/Linux/`](setup/Linux/):
+### Linux
 
-- [`pi-install.sh`](setup/Linux/pi-install.sh) installs Pi, the required extensions, and the permission configuration.
-- [`pi-permission-adjust.sh`](setup/Linux/pi-permission-adjust.sh) copies [`setup/configs/permissions.json`](setup/configs/permissions.json) to the `pi-permission-system` extension configuration.
+The scripts in [`Linux/`](Linux/) can be run from any directory:
 
-Run the installer from the repository root (or any directory):
-
-```sh
-./setup/Linux/pi-install.sh
-```
-
-To apply only the permission configuration, run:
+- [`setup.sh`](Linux/setup.sh) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application.
+- [`update.sh`](Linux/update.sh) pulls the latest repository version, updates Pi and its extensions, then rebuilds the application.
+- [`run.sh`](Linux/run.sh) starts the production build on port `3049`. Press **Esc** or **Ctrl+C** to stop it.
 
 ```sh
-./setup/Linux/pi-permission-adjust.sh
+./Linux/setup.sh
+./Linux/update.sh
+./Linux/run.sh
 ```
 
-By default, the permission configuration is installed to `~/.pi/agent/extensions/pi-permission-system/config.json`. Set `PI_CODING_AGENT_DIR` to use a different Pi agent directory, or `PI_PERMISSION_SYSTEM_CONFIG_PATH` to set the exact destination file.
+### Windows
+
+Equivalent PowerShell scripts are available in [`Windows/`](Windows/):
+
+- [`setup.ps1`](Windows/setup.ps1) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application.
+- [`update.ps1`](Windows/update.ps1) pulls the latest repository version, updates Pi and its extensions, then rebuilds the application.
+- [`run.ps1`](Windows/run.ps1) starts the production build on port `3049`. Press **Esc** or **Ctrl+C** to stop it.
+
+```powershell
+.\Windows\setup.ps1
+.\Windows\update.ps1
+.\Windows\run.ps1
+```
+
+The platform-specific installers and permission scripts used by these wrappers are in [`pi_setup/`](pi_setup/). The shared permission configuration is [`pi_setup/configs/permissions.json`](pi_setup/configs/permissions.json). Set `PI_CODING_AGENT_DIR` to use a different Pi agent directory, or `PI_PERMISSION_SYSTEM_CONFIG_PATH` to set the exact permission configuration destination.
 
 Pi reads models and credentials from its standard locations, including `~/.pi/agent/auth.json` and `~/.pi/agent/models.json`. Configure a provider with Pi before starting a model-backed chat.
 
-## Local Use
+The app is designed for local, single-user use. Bind it to localhost unless an authentication and isolation layer is added.
+
+## Development
 
 Start the SvelteKit development server:
 
@@ -44,20 +57,7 @@ Start the SvelteKit development server:
 npm run dev
 ```
 
-Open the printed local URL. Add a project only from a new-chat tab, choose one of the authenticated models, select a reasoning level, and send an opening prompt.
-
-The app is designed for local, single-user use. Bind it to localhost unless an authentication and isolation layer is added.
-
-## Navigation
-
-The browser workspace stays alive while navigating between routes. The URL selects the visible tab:
-
-- `/history` lists sessions from all added projects.
-- `/settings` contains harness preferences.
-- `/new/<tab-id>` identifies an unsent new-chat draft.
-- `/chat/<project-id>/<session-id>` opens a persistent Pi session.
-
-Open tabs, drafts, runtime IDs, and the SSE replay cursor are stored in the browser so live runtimes can be reused after reload when still available.
+Open the printed local URL. Add a project from a new-chat tab, choose an authenticated model, select a reasoning level, and send an opening prompt.
 
 ## Data Locations
 
