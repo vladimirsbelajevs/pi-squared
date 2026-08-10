@@ -1,9 +1,20 @@
 import { page } from 'vitest/browser';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { registerApplicationUpdateStarter } from '$lib/application-updater.svelte';
 import Settings from './+page.svelte';
 
 describe('Settings notifications', () => {
+	it('launches the global application updater from Settings', async () => {
+		const start = vi.fn();
+		const unregister = registerApplicationUpdateStarter(start);
+		render(Settings);
+
+		await expect.element(page.getByRole('heading', { name: 'Application update' })).toBeVisible();
+		await page.getByRole('button', { name: 'Update application' }).click();
+		expect(start).toHaveBeenCalledOnce();
+		unregister();
+	});
 	it('renders accessible controls and persists sound preferences', async () => {
 		localStorage.clear();
 		render(Settings);

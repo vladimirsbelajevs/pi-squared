@@ -123,7 +123,7 @@
 	}
 
 	function navigateWorkspace(pathname: Pathname): Promise<void> {
-		return goto(resolve(pathname));
+		return goto(resolve(pathname as '/'));
 	}
 
 	function closeCurrentTab(tab: WorkspaceTab): void {

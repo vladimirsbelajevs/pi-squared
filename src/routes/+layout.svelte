@@ -2,6 +2,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import ErrorNoticeHost from '$lib/components/ErrorNoticeHost.svelte';
+	import ApplicationUpdater from '$lib/components/ApplicationUpdater.svelte';
 
 	let { children } = $props();
 </script>
@@ -9,3 +10,4 @@
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 {@render children()}
 <ErrorNoticeHost />
+<ApplicationUpdater />

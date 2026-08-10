@@ -2,6 +2,10 @@
 	import { afterNavigate } from '$app/navigation';
 	import { Slider } from 'bits-ui';
 	import Selector from '$lib/components/Selector.svelte';
+	import {
+		applicationUpdateState,
+		requestApplicationUpdate
+	} from '$lib/application-updater.svelte';
 	import Switch from '$lib/components/Switch.svelte';
 	import { THEME_LABELS, workspace } from '$lib/harness/workspace.svelte';
 	import type { Theme } from '$lib/harness/types';
@@ -117,6 +121,26 @@
 				onchange={handleShowModelChangesChange}
 			/>
 		</div>
+	</div>
+</section>
+
+<section class="settings-card" aria-labelledby="application-update-heading">
+	<h2 id="application-update-heading">Application update</h2>
+	<div class="application-update-preference">
+		<div class="display-copy">
+			<strong>Update Pi Squared</strong>
+			<small>
+				Pulls repository changes, updates Pi and extensions and npm dependencies, then rebuilds the
+				app.
+			</small>
+		</div>
+		<button
+			type="button"
+			disabled={applicationUpdateState.busy}
+			onclick={() => requestApplicationUpdate()}
+		>
+			Update application
+		</button>
 	</div>
 </section>
 
@@ -263,6 +287,13 @@
 		gap: 1rem;
 	}
 
+	.application-update-preference {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
 	.display-preference {
 		display: flex;
 		align-items: center;
@@ -352,7 +383,8 @@
 	}
 
 	.notification-actions button,
-	.system-notification-preference button {
+	.system-notification-preference button,
+	.application-update-preference button {
 		width: fit-content;
 		border: 1px solid var(--border);
 		border-radius: 0.4rem;
@@ -362,12 +394,14 @@
 	}
 
 	.notification-actions button:hover,
-	.system-notification-preference button:hover:not(:disabled) {
+	.system-notification-preference button:hover:not(:disabled),
+	.application-update-preference button:hover:not(:disabled) {
 		border-color: var(--accent);
 	}
 
 	.notification-actions button:disabled,
-	.system-notification-preference button:disabled {
+	.system-notification-preference button:disabled,
+	.application-update-preference button:disabled {
 		cursor: not-allowed;
 		opacity: 0.55;
 	}

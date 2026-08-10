@@ -1,24 +1,12 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$NoRestart
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$taskName = 'Pi Squared'
-
-function Get-PiSquaredTask {
-    try {
-        Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-    }
-    catch {
-        if ([string]$_.FullyQualifiedErrorId -match '^CmdletizationQuery_NotFound_TaskName,') {
-            return $null
-        }
-
-        throw
-    }
-}
 
 function Invoke-CheckedCommand {
     param(
@@ -43,26 +31,19 @@ try {
     Invoke-CheckedCommand -Name 'npm' -Arguments @('install')
     Invoke-CheckedCommand -Name 'npm' -Arguments @('run', 'build')
 
-    $registeredTask = Get-PiSquaredTask
-    if ($null -ne $registeredTask) {
-        if ($registeredTask.State -eq 'Running') {
-            Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
-            $deadline = [DateTime]::UtcNow.AddSeconds(30)
-            do {
-                Start-Sleep -Milliseconds 200
-                $registeredTask = Get-PiSquaredTask
-                if ($null -eq $registeredTask) {
-                    throw "Scheduled Task '$taskName' disappeared while it was being restarted."
-                }
-            } while ($registeredTask.State -eq 'Running' -and [DateTime]::UtcNow -lt $deadline)
+    if ($NoRestart) {
+        Write-Host 'Update completed without restarting the application.'
+        return
+    }
 
-            if ($registeredTask.State -eq 'Running') {
-                throw "Scheduled Task '$taskName' did not stop within 30 seconds."
-            }
-        }
-
-        Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
-        Write-Host "Restarted registered Scheduled Task '$taskName'."
+    & (Join-Path $projectRoot 'Windows\restart-service.ps1')
+    $restartStatus = $LASTEXITCODE
+    if ($restartStatus -eq 3) {
+        Write-Host "Update completed; no registered Scheduled Task was restarted."
+        return
+    }
+    if ($restartStatus -ne 0) {
+        throw "Restart script failed with exit code $restartStatus."
     }
 }
 finally {

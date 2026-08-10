@@ -1,5 +1,36 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readObject } from './http';
+import { isSameOriginRequest, readObject } from './http';
+
+describe('application-management request origin checks', () => {
+	it('accepts same-origin browser requests and rejects cross-origin or missing origins', () => {
+		const sameOrigin = new Request('http://localhost/api/application/update', {
+			method: 'POST',
+			headers: { Origin: 'http://localhost', 'Sec-Fetch-Site': 'same-origin' }
+		});
+		expect(isSameOriginRequest(sameOrigin, 'http://localhost')).toBe(true);
+
+		const crossOrigin = new Request('http://localhost/api/application/update', {
+			method: 'POST',
+			headers: { Origin: 'https://attacker.example', 'Sec-Fetch-Site': 'cross-site' }
+		});
+		expect(isSameOriginRequest(crossOrigin, 'http://localhost')).toBe(false);
+		expect(
+			isSameOriginRequest(
+				new Request('http://localhost/api/application/update', { method: 'POST' }),
+				'http://localhost'
+			)
+		).toBe(false);
+	});
+
+	it('rejects same-site requests that are not same-origin', () => {
+		const request = new Request('http://localhost/api/application/update', {
+			method: 'POST',
+			headers: { Origin: 'http://localhost', 'Sec-Fetch-Site': 'same-site' }
+		});
+
+		expect(isSameOriginRequest(request, 'http://localhost')).toBe(false);
+	});
+});
 
 describe('bounded JSON request parsing', () => {
 	it('preserves request.json behavior when no byte limit is provided', async () => {

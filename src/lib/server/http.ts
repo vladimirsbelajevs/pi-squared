@@ -1,5 +1,22 @@
 import { json } from '@sveltejs/kit';
 
+/**
+ * Mutating application-management routes are intentionally browser-local APIs.
+ * Requiring an exact Origin keeps cross-origin forms and fetches from starting
+ * an update or restarting the local server. The Fetch Metadata check catches
+ * browsers that provide it even if an Origin header is rewritten by a proxy.
+ */
+export function isSameOriginRequest(request: Request, expectedOrigin: string): boolean {
+	const origin = request.headers.get('origin');
+	if (!origin || origin !== expectedOrigin) {
+		return false;
+	}
+
+	const fetchSite = request.headers.get('sec-fetch-site');
+
+	return fetchSite === null || fetchSite === 'same-origin';
+}
+
 export function errorResponse(error: unknown, status = 400) {
 	return json(
 		{ error: error instanceof Error ? error.message : 'An unexpected server error occurred.' },
