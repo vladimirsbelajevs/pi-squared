@@ -46,8 +46,21 @@ export interface DesktopUpdateStatus {
 	error?: string;
 }
 
+export interface DesktopWindowState {
+	maximized: boolean;
+}
+
+export interface PiSquaredDesktopWindowControls {
+	getState(): Promise<DesktopWindowState>;
+	onStateChange(listener: (state: DesktopWindowState) => void): () => void;
+	minimize(): Promise<void>;
+	toggleMaximize(): Promise<void>;
+	close(): Promise<void>;
+}
+
 export interface PiSquaredDesktopApi {
 	readonly mode: 'electron';
+	readonly windowControls: PiSquaredDesktopWindowControls;
 	getBootstrapStatus(): Promise<DesktopBootstrapStatus>;
 	startBootstrap(): Promise<DesktopBootstrapStatus>;
 	onBootstrapProgress(listener: (progress: DesktopBootstrapProgress) => void): () => void;
@@ -68,9 +81,17 @@ export function isPiSquaredDesktopApi(value: unknown): value is PiSquaredDesktop
 	}
 
 	const api = value as Partial<PiSquaredDesktopApi>;
+	const windowControls = api.windowControls;
 
 	return (
 		api.mode === 'electron' &&
+		!!windowControls &&
+		typeof windowControls === 'object' &&
+		typeof windowControls.getState === 'function' &&
+		typeof windowControls.onStateChange === 'function' &&
+		typeof windowControls.minimize === 'function' &&
+		typeof windowControls.toggleMaximize === 'function' &&
+		typeof windowControls.close === 'function' &&
 		typeof api.getBootstrapStatus === 'function' &&
 		typeof api.startBootstrap === 'function' &&
 		typeof api.onBootstrapProgress === 'function' &&

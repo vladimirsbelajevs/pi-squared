@@ -7,6 +7,7 @@ import type {
 	DesktopBootstrapProgress,
 	DesktopBootstrapStatus,
 	DesktopPiUpdateProgress,
+	DesktopWindowState,
 	DesktopPiUpdateStatus,
 	DesktopUpdateStatus,
 	PiSquaredDesktopApi
@@ -48,7 +49,20 @@ const api: PiSquaredDesktopApi = {
 		ipcRenderer.invoke('desktop:update-download') as Promise<DesktopUpdateStatus>,
 	restartAndInstall: () => ipcRenderer.invoke('desktop:update-install') as Promise<void>,
 	quit: () => ipcRenderer.invoke('desktop:quit') as Promise<void>,
-	getVersion: () => ipcRenderer.invoke('desktop:version') as Promise<string>
+	getVersion: () => ipcRenderer.invoke('desktop:version') as Promise<string>,
+	windowControls: {
+		getState: () => ipcRenderer.invoke('desktop:window-state') as Promise<DesktopWindowState>,
+		onStateChange: (listener) => {
+			const handler = (_event: Electron.IpcRendererEvent, state: DesktopWindowState) =>
+				listener(state);
+			ipcRenderer.on('desktop:window-state-changed', handler);
+
+			return () => ipcRenderer.removeListener('desktop:window-state-changed', handler);
+		},
+		minimize: () => ipcRenderer.invoke('desktop:window-minimize') as Promise<void>,
+		toggleMaximize: () => ipcRenderer.invoke('desktop:window-toggle-maximize') as Promise<void>,
+		close: () => ipcRenderer.invoke('desktop:window-close') as Promise<void>
+	}
 };
 
 contextBridge.exposeInMainWorld('piSquaredDesktop', api);

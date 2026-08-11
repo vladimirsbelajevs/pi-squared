@@ -1,5 +1,29 @@
 import { expect, test } from '@playwright/test';
 
+test('keeps the source-web app shell and workspace at viewport height without a titlebar', async ({
+	page
+}) => {
+	await page.goto('/history');
+	await expect(page.locator('.app-shell')).toBeVisible();
+	await expect(page.locator('.titlebar')).toHaveCount(0);
+
+	const metrics = await page.locator('.app-shell').evaluate((shell) => {
+		const content = shell.querySelector('.app-content');
+		const workspace = shell.querySelector('.harness-shell');
+
+		return {
+			viewportHeight: window.innerHeight,
+			shellHeight: shell.getBoundingClientRect().height,
+			contentHeight: content?.getBoundingClientRect().height ?? 0,
+			workspaceHeight: workspace?.getBoundingClientRect().height ?? 0
+		};
+	});
+
+	expect(metrics.shellHeight).toBe(metrics.viewportHeight);
+	expect(metrics.contentHeight).toBe(metrics.viewportHeight);
+	expect(metrics.workspaceHeight).toBe(metrics.viewportHeight);
+});
+
 test('opens a new tab from a fresh workspace', async ({ page }) => {
 	await page.goto('/');
 	await expect(page).toHaveURL(/\/new\/[^/]+$/);

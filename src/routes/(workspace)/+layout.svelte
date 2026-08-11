@@ -269,8 +269,8 @@
 	.harness-shell {
 		display: grid;
 		grid-template-columns: 16rem minmax(0, 1fr);
-		height: 100vh;
-		height: 100dvh;
+		height: 100%;
+		min-height: 0;
 		overflow: hidden;
 		transition: grid-template-columns 180ms ease;
 	}

@@ -89,6 +89,13 @@ describe('ApplicationUpdater electron mode', () => {
 	it('checks, downloads, and offers Restart and install only after download', async () => {
 		const api = {
 			mode: 'electron' as const,
+			windowControls: {
+				getState: vi.fn(),
+				onStateChange: vi.fn(() => () => undefined),
+				minimize: vi.fn(),
+				toggleMaximize: vi.fn(),
+				close: vi.fn()
+			},
 			getBootstrapStatus: vi.fn(),
 			startBootstrap: vi.fn(),
 			onBootstrapProgress: vi.fn(() => () => undefined),

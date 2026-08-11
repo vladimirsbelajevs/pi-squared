@@ -30,6 +30,13 @@ describe('Settings notifications', () => {
 		});
 		window.piSquaredDesktop = {
 			mode: 'electron',
+			windowControls: {
+				getState: vi.fn(),
+				onStateChange: vi.fn(() => () => undefined),
+				minimize: vi.fn(),
+				toggleMaximize: vi.fn(),
+				close: vi.fn()
+			},
 			getBootstrapStatus: vi.fn(),
 			startBootstrap: vi.fn(),
 			onBootstrapProgress: vi.fn(() => () => undefined),

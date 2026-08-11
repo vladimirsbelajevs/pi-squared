@@ -24,6 +24,7 @@ import type {
 import { terminateChild } from './lifecycle.js';
 import { runPiUpdate } from './pi-updater.js';
 import { isTrustedAppUrl, isTrustedFrame } from './security.js';
+import { bindWindowStateNotifications, registerWindowControlsIpc } from './window-controls.js';
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -288,6 +289,7 @@ function createWindow(): void {
 		minWidth: 900,
 		minHeight: 600,
 		show: false,
+		frame: false,
 		icon: iconPath(),
 		webPreferences: {
 			contextIsolation: true,
@@ -306,6 +308,7 @@ function createWindow(): void {
 		event.preventDefault();
 		mainWindow?.hide();
 	});
+	bindWindowStateNotifications(mainWindow, (state) => send('desktop:window-state-changed', state));
 	if (serverUrl) {
 		void mainWindow.loadURL(serverUrl);
 	}
@@ -441,6 +444,11 @@ function registerIpc(): void {
 		}
 
 		await quitApplication();
+	});
+	registerWindowControlsIpc({
+		ipcMain,
+		getWindow: () => mainWindow,
+		isTrustedSender
 	});
 }
 

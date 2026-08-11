@@ -31,6 +31,13 @@ describe('DesktopOnboarding', () => {
 	it('offers to install a missing Pi CLI instead of treating it as a manual prerequisite', async () => {
 		api = {
 			mode: 'electron',
+			windowControls: {
+				getState: vi.fn(),
+				onStateChange: vi.fn(() => () => undefined),
+				minimize: vi.fn(),
+				toggleMaximize: vi.fn(),
+				close: vi.fn()
+			},
 			getBootstrapStatus: vi.fn(async () => needsSetup),
 			startBootstrap: vi.fn(async () => ready),
 			onBootstrapProgress: vi.fn(() => () => undefined),
