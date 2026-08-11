@@ -15,8 +15,14 @@ import {
 	UPDATE_CHECK_INTERVAL_MS,
 	UPDATE_INITIAL_DELAY_MS
 } from './updater.js';
-import type { DesktopBootstrapProgress, DesktopUpdateStatus } from '../src/lib/desktop-contract.js';
+import type {
+	DesktopBootstrapProgress,
+	DesktopPiUpdateProgress,
+	DesktopPiUpdateStatus,
+	DesktopUpdateStatus
+} from '../src/lib/desktop-contract.js';
 import { terminateChild } from './lifecycle.js';
+import { runPiUpdate } from './pi-updater.js';
 import { isTrustedAppUrl, isTrustedFrame } from './security.js';
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -38,6 +44,7 @@ let serverProcess: ChildProcess | undefined;
 let serverUrl: string | undefined;
 let quitting = false;
 let bootstrapRunning = false;
+let piUpdateRunning = false;
 let updateTimer: ReturnType<typeof setInterval> | undefined;
 const shutdownToken = randomBytes(32).toString('hex');
 
@@ -349,6 +356,47 @@ function registerIpc(): void {
 			};
 		} finally {
 			bootstrapRunning = false;
+		}
+	});
+	ipcMain.handle('desktop:pi-update-start', async (event) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		if (piUpdateRunning) {
+			return {
+				phase: 'failed',
+				error: 'A Pi update is already running.'
+			} satisfies DesktopPiUpdateStatus;
+		}
+
+		piUpdateRunning = true;
+		try {
+			await runPiUpdate({
+				onOutput: (progress) =>
+					send('desktop:pi-update-progress', progress satisfies DesktopPiUpdateProgress)
+			});
+			send('desktop:pi-update-progress', {
+				stream: 'system',
+				text: 'Pi and its extensions were updated. Restarting the local server…\n'
+			} satisfies DesktopPiUpdateProgress);
+			setTimeout(() => {
+				void restartServer().catch((error: unknown) =>
+					send('desktop:pi-update-progress', {
+						stream: 'stderr',
+						text: `Unable to restart the local server: ${error instanceof Error ? error.message : String(error)}\n`
+					} satisfies DesktopPiUpdateProgress)
+				);
+			}, 250);
+
+			return { phase: 'success' } satisfies DesktopPiUpdateStatus;
+		} catch (error) {
+			return {
+				phase: 'failed',
+				error: error instanceof Error ? error.message : String(error)
+			} satisfies DesktopPiUpdateStatus;
+		} finally {
+			piUpdateRunning = false;
 		}
 	});
 	ipcMain.handle('desktop:update-status', (event) => {

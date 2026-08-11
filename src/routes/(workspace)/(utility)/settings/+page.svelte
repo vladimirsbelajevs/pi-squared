@@ -1,12 +1,19 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
 	import { Slider } from 'bits-ui';
+	import { onMount } from 'svelte';
 	import Selector from '$lib/components/Selector.svelte';
 	import {
 		applicationUpdateState,
 		requestApplicationUpdate
 	} from '$lib/application-updater.svelte';
 	import Switch from '$lib/components/Switch.svelte';
+	import { getDesktopApi } from '$lib/desktop';
+	import type {
+		DesktopPiUpdateProgress,
+		DesktopPiUpdateStatus,
+		PiSquaredDesktopApi
+	} from '$lib/desktop-contract';
 	import { THEME_LABELS, workspace } from '$lib/harness/workspace.svelte';
 	import type { Theme } from '$lib/harness/types';
 
@@ -46,6 +53,32 @@
 	let systemTestDisabled = $derived(
 		workspace.notificationPermission !== 'granted' || !workspace.systemNotificationsEnabled
 	);
+	let desktopApi = $state<PiSquaredDesktopApi | undefined>();
+	let piUpdateStatus = $state<DesktopPiUpdateStatus>({ phase: 'idle' });
+	let piUpdateOutput = $state('');
+	let piUpdateRunning = $derived(piUpdateStatus.phase === 'running');
+
+	function appendPiUpdateOutput(progress: DesktopPiUpdateProgress): void {
+		const next = `${piUpdateOutput}[${progress.stream}] ${progress.text}`;
+		piUpdateOutput = next.length > 64 * 1024 ? next.slice(-64 * 1024) : next;
+	}
+
+	async function updatePiAndExtensions(): Promise<void> {
+		if (!desktopApi || piUpdateRunning) {
+			return;
+		}
+
+		piUpdateOutput = '';
+		piUpdateStatus = { phase: 'running' };
+		try {
+			piUpdateStatus = await desktopApi.startPiUpdate();
+		} catch (error) {
+			piUpdateStatus = {
+				phase: 'failed',
+				error: error instanceof Error ? error.message : String(error)
+			};
+		}
+	}
 
 	function handleShowReasoningChange(checked: boolean): void {
 		workspace.setShowReasoning(checked);
@@ -81,6 +114,15 @@
 
 	afterNavigate(() => {
 		workspace.refreshNotificationPermission();
+	});
+
+	onMount(() => {
+		desktopApi = getDesktopApi();
+		if (!desktopApi) {
+			return;
+		}
+
+		return desktopApi.onPiUpdateProgress(appendPiUpdateOutput);
 	});
 </script>
 
@@ -136,12 +178,35 @@
 		</div>
 		<button
 			type="button"
-			disabled={applicationUpdateState.busy}
+			disabled={applicationUpdateState.busy || piUpdateRunning}
 			onclick={() => requestApplicationUpdate()}
 		>
 			Check for updates
 		</button>
 	</div>
+	{#if desktopApi}
+		<div class="application-update-preference">
+			<div class="display-copy">
+				<strong>Pi CLI and extensions</strong>
+				<small>
+					Update the global Pi installation and all installed extensions, then restart the local Pi
+					Squared server.
+				</small>
+			</div>
+			<button
+				type="button"
+				disabled={piUpdateRunning || applicationUpdateState.busy}
+				onclick={() => void updatePiAndExtensions()}
+			>
+				{piUpdateRunning ? 'Updating Pi…' : 'Update Pi and extensions'}
+			</button>
+		</div>
+		{#if piUpdateOutput || piUpdateStatus.phase === 'failed'}
+			<div class="pi-update-status" aria-live="polite">
+				<pre>{piUpdateOutput || piUpdateStatus.error}</pre>
+			</div>
+		{/if}
+	{/if}
 </section>
 
 <section class="settings-card" aria-labelledby="notifications-heading">
@@ -292,6 +357,28 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
+	}
+
+	.pi-update-status {
+		max-height: 12rem;
+		overflow: auto;
+		border: 1px solid var(--border);
+		border-radius: 0.4rem;
+		background: var(--surface-muted);
+		color: var(--text-muted);
+		padding: 0.75rem;
+	}
+
+	.pi-update-status pre {
+		margin: 0;
+		font:
+			0.78rem/1.45 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			Consolas,
+			monospace;
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 
 	.display-preference {

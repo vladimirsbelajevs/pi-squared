@@ -92,6 +92,8 @@ describe('ApplicationUpdater electron mode', () => {
 			getBootstrapStatus: vi.fn(),
 			startBootstrap: vi.fn(),
 			onBootstrapProgress: vi.fn(() => () => undefined),
+			startPiUpdate: vi.fn(),
+			onPiUpdateProgress: vi.fn(() => () => undefined),
 			getUpdateStatus: vi.fn(async () => ({ phase: 'idle' as const })),
 			checkForUpdates: vi.fn(async () => ({ phase: 'available' as const, version: '1.1.0' })),
 			onUpdateStatus: vi.fn(() => () => undefined),

@@ -20,6 +20,18 @@ export interface DesktopBootstrapProgress {
 	text: string;
 }
 
+export type DesktopPiUpdatePhase = 'idle' | 'running' | 'success' | 'failed';
+
+export interface DesktopPiUpdateStatus {
+	phase: DesktopPiUpdatePhase;
+	error?: string;
+}
+
+export interface DesktopPiUpdateProgress {
+	stream: 'stdout' | 'stderr' | 'system';
+	text: string;
+}
+
 export type DesktopUpdatePhase =
 	'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
 
@@ -39,6 +51,8 @@ export interface PiSquaredDesktopApi {
 	getBootstrapStatus(): Promise<DesktopBootstrapStatus>;
 	startBootstrap(): Promise<DesktopBootstrapStatus>;
 	onBootstrapProgress(listener: (progress: DesktopBootstrapProgress) => void): () => void;
+	startPiUpdate(): Promise<DesktopPiUpdateStatus>;
+	onPiUpdateProgress(listener: (progress: DesktopPiUpdateProgress) => void): () => void;
 	getUpdateStatus(): Promise<DesktopUpdateStatus>;
 	checkForUpdates(): Promise<DesktopUpdateStatus>;
 	onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
@@ -60,6 +74,8 @@ export function isPiSquaredDesktopApi(value: unknown): value is PiSquaredDesktop
 		typeof api.getBootstrapStatus === 'function' &&
 		typeof api.startBootstrap === 'function' &&
 		typeof api.onBootstrapProgress === 'function' &&
+		typeof api.startPiUpdate === 'function' &&
+		typeof api.onPiUpdateProgress === 'function' &&
 		typeof api.getUpdateStatus === 'function' &&
 		typeof api.checkForUpdates === 'function' &&
 		typeof api.onUpdateStatus === 'function' &&

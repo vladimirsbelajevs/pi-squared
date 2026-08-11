@@ -6,6 +6,8 @@ const { contextBridge, ipcRenderer } = electron;
 import type {
 	DesktopBootstrapProgress,
 	DesktopBootstrapStatus,
+	DesktopPiUpdateProgress,
+	DesktopPiUpdateStatus,
 	DesktopUpdateStatus,
 	PiSquaredDesktopApi
 } from '../src/lib/desktop-contract.js';
@@ -22,6 +24,15 @@ const api: PiSquaredDesktopApi = {
 		ipcRenderer.on('desktop:bootstrap-progress', handler);
 
 		return () => ipcRenderer.removeListener('desktop:bootstrap-progress', handler);
+	},
+	startPiUpdate: () =>
+		ipcRenderer.invoke('desktop:pi-update-start') as Promise<DesktopPiUpdateStatus>,
+	onPiUpdateProgress: (listener) => {
+		const handler = (_event: Electron.IpcRendererEvent, progress: DesktopPiUpdateProgress) =>
+			listener(progress);
+		ipcRenderer.on('desktop:pi-update-progress', handler);
+
+		return () => ipcRenderer.removeListener('desktop:pi-update-progress', handler);
 	},
 	getUpdateStatus: () =>
 		ipcRenderer.invoke('desktop:update-status') as Promise<DesktopUpdateStatus>,

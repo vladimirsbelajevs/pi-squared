@@ -37,7 +37,7 @@ export default {
       test: {
         name: 'server',
         environment: 'node',
-        include: ['src/**/*.{test,spec}.{js,ts}'],
+        include: ['src/**/*.{test,spec}.{js,ts}', 'electron/**/*.spec.ts'],
         exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
       }
     }]

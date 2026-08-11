@@ -34,6 +34,8 @@ describe('DesktopOnboarding', () => {
 			getBootstrapStatus: vi.fn(async () => needsSetup),
 			startBootstrap: vi.fn(async () => ready),
 			onBootstrapProgress: vi.fn(() => () => undefined),
+			startPiUpdate: vi.fn(),
+			onPiUpdateProgress: vi.fn(() => () => undefined),
 			getUpdateStatus: vi.fn(),
 			checkForUpdates: vi.fn(),
 			onUpdateStatus: vi.fn(() => () => undefined),
