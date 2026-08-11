@@ -128,10 +128,10 @@
 	<h2 id="application-update-heading">Application update</h2>
 	<div class="application-update-preference">
 		<div class="display-copy">
-			<strong>Update Pi Squared</strong>
+			<strong>Pi Squared updates</strong>
 			<small>
-				Pulls repository changes, updates Pi and extensions and npm dependencies, then rebuilds the
-				app.
+				Desktop releases are checked on GitHub. Manual web users can build the latest source
+				checkout and then restart the foreground server.
 			</small>
 		</div>
 		<button
@@ -139,7 +139,7 @@
 			disabled={applicationUpdateState.busy}
 			onclick={() => requestApplicationUpdate()}
 		>
-			Update application
+			Check for updates
 		</button>
 	</div>
 </section>

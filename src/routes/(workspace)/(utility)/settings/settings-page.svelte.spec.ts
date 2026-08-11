@@ -11,7 +11,7 @@ describe('Settings notifications', () => {
 		render(Settings);
 
 		await expect.element(page.getByRole('heading', { name: 'Application update' })).toBeVisible();
-		await page.getByRole('button', { name: 'Update application' }).click();
+		await page.getByRole('button', { name: 'Check for updates' }).click();
 		expect(start).toHaveBeenCalledOnce();
 		unregister();
 	});

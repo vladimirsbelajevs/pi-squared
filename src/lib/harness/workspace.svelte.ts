@@ -1758,6 +1758,10 @@ export class HarnessWorkspace {
 	}
 
 	#writeStoredWorkspace(document: StoredWorkspaceV1): void {
+		if (typeof localStorage === 'undefined') {
+			return;
+		}
+
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(document));
 	}
 }

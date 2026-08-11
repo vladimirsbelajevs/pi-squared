@@ -2,10 +2,11 @@
 	import { Dialog } from 'bits-ui';
 	import { onMount } from 'svelte';
 	import {
-		applicationUpdateEnvironment,
 		applicationUpdateState,
 		registerApplicationUpdateStarter
 	} from '$lib/application-updater.svelte';
+	import { getDesktopApi } from '$lib/desktop';
+	import type { DesktopUpdateStatus, PiSquaredDesktopApi } from '$lib/desktop-contract';
 
 	type UpdatePhase = 'idle' | 'starting' | 'running' | 'success' | 'failed' | 'reconnecting';
 	type OutputRecord = {
@@ -15,13 +16,6 @@
 		message?: string;
 		code?: number | null;
 		error?: string;
-	};
-	type UpdateStatus = {
-		supported: boolean;
-		nativeRegistration: boolean;
-		running: boolean;
-		platform: string;
-		instanceId?: string;
 	};
 	type ReminderStatus = {
 		serverTime: string;
@@ -33,7 +27,6 @@
 	const REMINDER_RETRY_DELAY_MS = 30_000;
 	const REMINDER_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000;
 	const MAX_TIMER_DELAY_MS = 2_147_483_647;
-	const RECONNECT_TIMEOUT_MS = 30_000;
 	const MAX_OUTPUT_BYTES = 256 * 1024;
 
 	let phase = $state<UpdatePhase>('idle');
@@ -42,29 +35,46 @@
 	let output = $state('');
 	let latestOutputAnnouncement = $state('');
 	let errorMessage = $state('');
-	let status = $state<UpdateStatus | null>(null);
 	let outputElement = $state<HTMLDivElement | null>(null);
 	let activeReader = $state<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 	let activeUpdateController = $state<AbortController | null>(null);
 	let runId = 0;
-	let reconnectCancelled = false;
 	let mounted = false;
 	let reminderTimer: ReturnType<typeof setTimeout> | undefined;
+	let desktopApi = $state<PiSquaredDesktopApi | undefined>();
+	let desktopStatus = $state<DesktopUpdateStatus>({ phase: 'idle' });
+	let desktopUnsubscribe = $state<(() => void) | undefined>();
+	let desktopMode = $derived(Boolean(desktopApi));
 
 	let updateBusy = $derived(
-		phase === 'starting' || phase === 'running' || phase === 'reconnecting'
+		phase === 'starting' ||
+			phase === 'running' ||
+			phase === 'reconnecting' ||
+			(desktopMode && (desktopStatus.phase === 'checking' || desktopStatus.phase === 'downloading'))
 	);
 	let statusText = $derived(
-		phase === 'starting'
-			? 'Starting application update…'
-			: phase === 'running'
-				? 'Updating Pi, extensions, dependencies, and the application build…'
-				: phase === 'success'
-					? 'Application update completed successfully.'
-					: phase === 'failed'
-						? 'Application update failed.'
-						: phase === 'reconnecting'
-							? 'Waiting for the updated application to restart…'
+		desktopMode
+			? desktopStatus.phase === 'checking'
+				? 'Checking GitHub Releases for a newer Pi Squared build…'
+				: desktopStatus.phase === 'available'
+					? `Version ${desktopStatus.version ?? 'new'} is available.`
+					: desktopStatus.phase === 'downloading'
+						? `Downloading update${desktopStatus.percent !== undefined ? ` (${Math.round(desktopStatus.percent)}%)` : '…'}`
+						: desktopStatus.phase === 'downloaded'
+							? 'Update downloaded and ready to install.'
+							: desktopStatus.phase === 'not-available'
+								? 'Pi Squared is up to date.'
+								: desktopStatus.phase === 'error'
+									? 'Desktop update check failed.'
+									: 'Check for Pi Squared updates from GitHub Releases.'
+			: phase === 'starting'
+				? 'Starting application update…'
+				: phase === 'running'
+					? 'Updating Pi, extensions, dependencies, and the application build…'
+					: phase === 'success'
+						? 'Application build completed. Stop and rerun the server to use it.'
+						: phase === 'failed'
+							? 'Application update failed.'
 							: 'Application update is ready.'
 	);
 
@@ -129,6 +139,10 @@
 
 	async function recordReminderChoice(): Promise<void> {
 		snackbarVisible = false;
+		if (desktopMode) {
+			return;
+		}
+
 		try {
 			const response = await fetch('/api/application/reminder', {
 				method: 'POST',
@@ -163,7 +177,7 @@
 			}
 
 			try {
-				handleRecord(JSON.parse(line) as OutputRecord, id);
+				handleRecord(JSON.parse(line) as OutputRecord);
 			} catch {
 				appendOutput(`[protocol] ${line}\n`);
 			}
@@ -172,7 +186,7 @@
 		return remainder;
 	}
 
-	function handleRecord(record: OutputRecord, id: number): void {
+	function handleRecord(record: OutputRecord): void {
 		if (record.type === 'output') {
 			const stream = record.stream === 'stderr' ? 'stderr' : 'stdout';
 			appendOutput(`[${stream}] ${record.text ?? ''}`);
@@ -189,7 +203,6 @@
 		if (record.type === 'complete') {
 			if (record.code === 0) {
 				phase = 'success';
-				void loadStatus(id);
 			} else {
 				phase = 'failed';
 				errorMessage =
@@ -199,21 +212,57 @@
 		}
 	}
 
-	async function loadStatus(id: number): Promise<void> {
+	async function startDesktopUpdate(): Promise<void> {
+		if (!desktopApi || updateBusy || applicationUpdateState.busy) {
+			return;
+		}
+
+		clearReminderTimer();
+		dialogOpen = true;
+		snackbarVisible = false;
+		errorMessage = '';
+		applicationUpdateState.busy = true;
 		try {
-			const response = await fetch('/api/application/update', { cache: 'no-store' });
-			if (response.ok) {
-				const nextStatus = (await response.json()) as UpdateStatus;
-				if (mounted && id === runId) {
-					status = nextStatus;
-				}
+			desktopStatus = await desktopApi.checkForUpdates();
+			if (desktopStatus.phase === 'not-available') {
+				dialogOpen = true;
 			}
-		} catch {
-			// The update result remains useful even if the status query is interrupted.
+		} catch (error) {
+			desktopStatus = {
+				phase: 'error',
+				error: error instanceof Error ? error.message : String(error)
+			};
+		} finally {
+			applicationUpdateState.busy = false;
+		}
+	}
+
+	async function downloadDesktopUpdate(): Promise<void> {
+		if (!desktopApi || desktopStatus.phase !== 'available') {
+			return;
+		}
+
+		applicationUpdateState.busy = true;
+		errorMessage = '';
+		try {
+			desktopStatus = await desktopApi.downloadUpdate();
+		} catch (error) {
+			desktopStatus = {
+				phase: 'error',
+				error: error instanceof Error ? error.message : String(error)
+			};
+		} finally {
+			applicationUpdateState.busy = false;
 		}
 	}
 
 	async function startUpdate(): Promise<void> {
+		if (desktopApi) {
+			await startDesktopUpdate();
+
+			return;
+		}
+
 		if (updateBusy || applicationUpdateState.busy) {
 			return;
 		}
@@ -221,14 +270,12 @@
 		clearReminderTimer();
 		const id = ++runId;
 		applicationUpdateState.busy = true;
-		reconnectCancelled = false;
 		phase = 'starting';
 		dialogOpen = true;
 		snackbarVisible = false;
 		output = '';
 		latestOutputAnnouncement = '';
 		errorMessage = '';
-		status = null;
 		let buffer = '';
 		const decoder = new TextDecoder();
 		const controller = new AbortController();
@@ -304,100 +351,21 @@
 		}
 	}
 
-	function wait(milliseconds: number): Promise<void> {
-		return new Promise((resolve) => setTimeout(resolve, milliseconds));
-	}
-
-	async function waitForRestart(baselineInstanceId: string | undefined): Promise<void> {
-		const deadline = Date.now() + RECONNECT_TIMEOUT_MS;
-		const graceDeadline = Date.now() + 1000;
-		let offlineObserved = false;
-
-		// Poll immediately, but do not reload a response from the old process. The
-		// instance id makes a fast restart observable even when no request fails.
-		while (!reconnectCancelled && Date.now() < deadline) {
-			try {
-				const response = await fetch('/api/application/update', { cache: 'no-store' });
-				if (!response.ok) {
-					offlineObserved = true;
-				} else {
-					const nextStatus = (await response.json()) as UpdateStatus;
-					if (
-						baselineInstanceId &&
-						nextStatus.instanceId &&
-						nextStatus.instanceId !== baselineInstanceId
-					) {
-						applicationUpdateEnvironment.reload();
-
-						return;
-					}
-
-					// Older/custom servers may not expose an instance id. In that case
-					// only reload after observing a real disconnect and a healthy response.
-					if (!baselineInstanceId && offlineObserved && Date.now() >= graceDeadline) {
-						applicationUpdateEnvironment.reload();
-
-						return;
-					}
-				}
-			} catch {
-				offlineObserved = true;
-			}
-
-			await wait(350);
-		}
-
-		if (!reconnectCancelled) {
-			phase = 'success';
-			applicationUpdateState.busy = false;
-			errorMessage = 'The updated application did not return within 30 seconds.';
-		}
-	}
-
 	async function restartApplication(): Promise<void> {
-		if (phase !== 'success' || status?.nativeRegistration !== true) {
+		if (!desktopApi || desktopStatus.phase !== 'downloaded') {
 			return;
 		}
 
-		phase = 'reconnecting';
-		applicationUpdateState.busy = true;
-		errorMessage = '';
-		reconnectCancelled = false;
-		const polling = waitForRestart(status.instanceId);
 		try {
-			const response = await fetch('/api/application/restart', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' }
-			});
-			if (!response.ok) {
-				throw new Error(await response.text());
-			}
+			await desktopApi.restartAndInstall();
 		} catch (error) {
-			// A restart normally interrupts this request when the old server exits.
-			if (reconnectCancelled) {
-				return;
-			}
-
-			if (error instanceof TypeError) {
-				await polling;
-
-				return;
-			}
-
-			reconnectCancelled = true;
-			await polling;
-			applicationUpdateState.busy = false;
-			phase = 'success';
 			errorMessage = error instanceof Error ? error.message : String(error);
-
-			return;
+			desktopStatus = { phase: 'error', error: errorMessage };
 		}
-
-		await polling;
 	}
 
 	async function loadReminder(): Promise<void> {
-		if (!mounted || snackbarVisible) {
+		if (desktopMode || !mounted || snackbarVisible) {
 			return;
 		}
 
@@ -476,7 +444,19 @@
 
 	onMount(() => {
 		mounted = true;
-		void loadReminder();
+		desktopApi = getDesktopApi();
+		if (desktopApi) {
+			desktopUnsubscribe = desktopApi.onUpdateStatus((next) => {
+				desktopStatus = next;
+				if (next.phase === 'available') {
+					snackbarVisible = true;
+				}
+			});
+			void desktopApi.getUpdateStatus().then((next) => (desktopStatus = next));
+		} else {
+			void loadReminder();
+		}
+
 		const unregister = registerApplicationUpdateStarter(() => void startUpdate());
 
 		return () => {
@@ -485,7 +465,7 @@
 			unregister();
 			clearReminderTimer();
 
-			reconnectCancelled = true;
+			desktopUnsubscribe?.();
 			activeUpdateController?.abort();
 			void activeReader?.cancel();
 			applicationUpdateState.busy = false;
@@ -495,7 +475,7 @@
 
 {#if snackbarVisible}
 	<aside class="application-update-snackbar" data-application-updater role="status">
-		<strong>Update application?</strong>
+		<strong>{desktopMode ? 'Pi Squared update available?' : 'Update application?'}</strong>
 		<div class="application-update-snackbar-actions">
 			<button type="button" disabled={updateBusy} onclick={chooseYes}>Yes</button>
 			<button type="button" disabled={updateBusy} onclick={dismissReminder}>No</button>
@@ -516,32 +496,46 @@
 				Application update
 			</Dialog.Title>
 			<Dialog.Description data-application-updater class="application-update-description">
-				This operation pulls repository changes, updates Pi and extensions and npm dependencies, and
-				rebuilds the app.
+				{#if desktopMode}
+					Desktop releases are downloaded from GitHub Releases. Pi packages are repaired separately
+					during first-run setup.
+				{:else}
+					This operation pulls repository changes, updates Pi and extensions and npm dependencies,
+					and rebuilds the app. Stop and rerun the foreground server after it completes.
+				{/if}
 			</Dialog.Description>
 			<p class="application-update-status" role="status" aria-live="polite">{statusText}</p>
 			{#if updateBusy}
-				<progress class="application-update-progress" aria-label="Application update progress"
+				<progress
+					class="application-update-progress"
+					value={desktopMode ? desktopStatus.percent : undefined}
+					max={desktopMode ? 100 : undefined}
+					aria-label="Application update progress"
 				></progress>
 			{/if}
-			<div
-				{@attach attachOutput}
-				class="application-update-output"
-				data-application-updater
-				tabindex="0"
-				role="textbox"
-				aria-readonly="true"
-				aria-label="Application update output"
-				aria-live="off"
-			>
-				<pre>{output || 'Waiting for update output…'}</pre>
-			</div>
-			<p class="visually-hidden" role="status" aria-live="polite">{latestOutputAnnouncement}</p>
-			{#if phase === 'success' && status?.nativeRegistration === false}
-				<p class="application-update-help" role="note">
-					Restart app is unavailable because no native background registration was found. Rerun
-					setup with background registration enabled.
-				</p>
+			{#if desktopMode}
+				<div class="application-update-output application-update-desktop-status" role="status">
+					{#if desktopStatus.error}{desktopStatus.error}{:else}{statusText}{/if}
+				</div>
+			{:else}
+				<div
+					{@attach attachOutput}
+					class="application-update-output"
+					data-application-updater
+					tabindex="0"
+					role="textbox"
+					aria-readonly="true"
+					aria-label="Application update output"
+					aria-live="off"
+				>
+					<pre>{output || 'Waiting for update output…'}</pre>
+				</div>
+				<p class="visually-hidden" role="status" aria-live="polite">{latestOutputAnnouncement}</p>
+				{#if phase === 'success'}
+					<p class="application-update-help" role="note">
+						The build is ready. Stop and rerun the manually started server to load the update.
+					</p>
+				{/if}
 			{/if}
 			{#if errorMessage}
 				<p class="application-update-error" role="alert">{errorMessage}</p>
@@ -550,17 +544,16 @@
 				{#if !updateBusy}
 					<button type="button" onclick={closeDialog}>Close</button>
 				{/if}
-				{#if phase === 'failed'}
+				{#if (!desktopMode && phase === 'failed') || (desktopMode && desktopStatus.phase === 'error')}
 					<button type="button" onclick={() => void startUpdate()}>Retry</button>
 				{/if}
-				{#if phase === 'success'}
-					<button
-						type="button"
-						class="restart-action"
-						disabled={status?.nativeRegistration !== true}
-						onclick={() => void restartApplication()}
+				{#if desktopMode && desktopStatus.phase === 'available'}
+					<button type="button" onclick={() => void downloadDesktopUpdate()}>Download update</button
 					>
-						Restart app
+				{/if}
+				{#if desktopMode && desktopStatus.phase === 'downloaded'}
+					<button type="button" class="restart-action" onclick={() => void restartApplication()}>
+						Restart and install
 					</button>
 				{/if}
 			</div>

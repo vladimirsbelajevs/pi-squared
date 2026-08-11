@@ -1,0 +1,85 @@
+name: Desktop release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish artifacts to the GitHub Release
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '22.19.0'
+
+jobs:
+  validate:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: node -e "const p=require('./package.json'); const tag=process.env.GITHUB_REF_NAME; if (tag && tag.startsWith('v') && tag !== 'v'+p.version) { throw new Error('Tag '+tag+' does not match package version '+p.version); }"
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+      - run: npm run lint
+      - run: npm run check
+      - run: npx playwright install chromium
+      - run: npm run test:unit -- --run
+
+  linux:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build:app
+      - run: npx electron-builder --dir --config electron-builder.yml --publish never
+      - run: xvfb-run -a node scripts/electron-packaged-smoke.mjs
+      - run: npx electron-builder --linux AppImage deb --publish ${{ (github.event_name == 'push' || inputs.publish) && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Linux validation artifacts
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-squared-linux-${{ github.run_number }}
+          path: release/*
+          if-no-files-found: error
+
+  windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build:app
+      - run: npx electron-builder --win nsis --publish ${{ (github.event_name == 'push' || inputs.publish) && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Windows validation artifacts
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-squared-windows-${{ github.run_number }}
+          path: release/*
+          if-no-files-found: error

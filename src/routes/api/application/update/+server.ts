@@ -2,20 +2,15 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import {
 	claimApplicationUpdate,
 	createApplicationUpdateStream,
+	getApplicationRuntimeMode,
 	getApplicationUpdateStatus,
-	getSupportedApplicationPlatform,
 	isApplicationUpdateRunning,
-	releaseApplicationUpdate
+	releaseApplicationUpdate,
+	selectApplicationUpdateCommand
 } from '$lib/server/application-update';
 import { errorResponse, isSameOriginRequest } from '$lib/server/http';
 
-export const GET: RequestHandler = async () => {
-	try {
-		return json(await getApplicationUpdateStatus());
-	} catch (error) {
-		return errorResponse(error, 500);
-	}
-};
+export const GET: RequestHandler = () => json(getApplicationUpdateStatus());
 
 export const POST: RequestHandler = ({ request, url }) => {
 	if (!isSameOriginRequest(request, url.origin)) {
@@ -25,9 +20,13 @@ export const POST: RequestHandler = ({ request, url }) => {
 		);
 	}
 
-	if (!getSupportedApplicationPlatform()) {
+	if (getApplicationRuntimeMode() === 'electron') {
+		return json({ error: 'Desktop updates are managed by the Electron updater.' }, { status: 501 });
+	}
+
+	if (!selectApplicationUpdateCommand()) {
 		return json(
-			{ error: 'Application updates are not supported on this platform.' },
+			{ error: 'Source checkout updates are not supported on this platform.' },
 			{ status: 501 }
 		);
 	}

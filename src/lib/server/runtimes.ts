@@ -706,3 +706,18 @@ export async function cleanupIdleRuntimes(): Promise<void> {
 		}
 	}
 }
+
+export async function disposeAllRuntimes(): Promise<void> {
+	const failures: unknown[] = [];
+	for (const runtimeId of [...runtimes.keys()]) {
+		try {
+			await disposeRuntime(runtimeId);
+		} catch (error) {
+			failures.push(error);
+		}
+	}
+
+	if (failures.length > 0) {
+		throw failures[0];
+	}
+}

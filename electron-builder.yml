@@ -1,0 +1,39 @@
+appId: com.vladimirsbelajevs.pi-squared
+productName: Pi Squared
+asar: true
+icon: static/icon
+files:
+  - build/**/*
+  - electron/dist/**/*
+  - package.json
+  - node_modules/electron-updater/**/*
+extraResources:
+  - from: pi_setup
+    to: pi_setup
+  - from: static/favicon.svg
+    to: static/favicon.svg
+  - from: static/icon.png
+    to: static/icon.png
+  - from: static/icon.ico
+    to: static/icon.ico
+directories:
+  output: release
+publish:
+  provider: github
+  owner: vladimirsbelajevs
+  repo: pi-squared
+  releaseType: release
+linux:
+  category: Development
+  syncDesktopName: true
+  target:
+    - AppImage
+    - deb
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false

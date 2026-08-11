@@ -1,120 +1,81 @@
 # Pi Squared
 
-Pi Squared is a web UI using [Pi SDK](https://pi.dev/docs/latest/sdk).
-
-- Each chat tab owns an independent persistent Pi session.
-- Projects, models, and reasoning levels are selected when creating a new tab.
-- A pinned utility tab contains historical sessions and harness theme settings.
-- Historical sessions reopen as ordinary, continuable chat tabs.
+Pi Squared is a SvelteKit web UI for the [Pi SDK](https://pi.dev/docs/latest/sdk). Each chat tab owns an independent persistent Pi session, while projects, models, history, and themes are shared by the local server.
 
 ## Requirements
 
-- Node.js `>=22.19.0`
-- Pi CLI harness installed
-- Pi provider credentials configured for the local user
+- Node.js `>=22.19.0` and npm
+- A Pi provider credential configured for the local user (Pi owns authentication)
+- Network access on first desktop launch to install the global Pi CLI/extensions
 
-## Setup and Local Use
+## Desktop app (Linux and Windows)
 
-### Linux
+Desktop releases are distributed as a Linux AppImage/DEB or a per-user Windows NSIS installer. The app starts the existing adapter-node server on an ephemeral `127.0.0.1` port and opens it in a secured Electron window. The server is private to the desktop app; no systemd service, Scheduled Task, or automatic login startup is installed.
 
-The scripts in [`Linux/`](Linux/) can be run from any directory:
+On first launch, Pi Squared checks Node.js, npm, the global `pi` command, the six required extensions, and the permission configuration. A blocking setup dialog runs the existing platform setup script and streams labeled output. Existing `~/.pi/agent` credentials, settings, models, packages, and sessions are preserved. Provider secrets are never collected by Electron.
 
-- [`setup.sh`](Linux/setup.sh) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application and initializes the server-side update reminder timestamp. After a successful build it asks whether to register the optional current-user systemd service `pi-squared.service`; an empty answer defaults to no.
-- [`update.sh`](Linux/update.sh) pulls the latest repository version, updates Pi and its extensions, installs the current project dependencies, then rebuilds the application. If `pi-squared.service` is registered, it delegates the restart to [`restart-service.sh`](Linux/restart-service.sh); otherwise it leaves the current process alone.
-- [`restart-service.sh`](Linux/restart-service.sh) requests a no-block restart of the registered `pi-squared.service` user unit and can be run manually from any directory.
-- [`run.sh`](Linux/run.sh) starts the production build on port `3049`. Press **Esc** or **Ctrl+C** to stop a manually started server. When the user service is registered, normal invocation does not start a duplicate; use `Linux/run.sh --service` only from the service unit.
-- [`uninstall.sh`](Linux/uninstall.sh) stops, disables, and removes `pi-squared.service` when it is installed. It does not remove the application or its data.
+Closing the window hides it in the system tray. **Show Pi Squared** restores it; **Quit** stops the local server and active runtimes. Tray availability is not an OS-login startup mechanism.
+
+Windows installers are unsigned initially. Windows may display a SmartScreen warning; signing configuration is intentionally absent until a trusted certificate is available.
+
+## Install and run from source (manual web server)
+
+The source checkout remains a supported foreground web app. These scripts install Pi prerequisites/dependencies, build the app, and do not register background services/tasks:
 
 ```sh
 ./Linux/setup.sh
-./Linux/update.sh
-./Linux/restart-service.sh
 ./Linux/run.sh
-./Linux/uninstall.sh
+./Linux/update.sh
 ```
-
-When setup registers `pi-squared.service`, it writes an absolute repository path and the setup-time `PATH` to `~/.config/systemd/user/pi-squared.service`, then enables and starts it immediately. Manage it with:
-
-```sh
-systemctl --user status pi-squared.service
-systemctl --user start pi-squared.service
-systemctl --user stop pi-squared.service
-systemctl --user restart pi-squared.service
-```
-
-This is a login-scoped user service: setup does not enable systemd lingering, so it runs when the current user has a normal user session. Moving the repository requires running setup again so the registered absolute paths are updated.
-
-### Windows
-
-Equivalent PowerShell scripts are available in [`Windows/`](Windows/):
-
-- [`setup.ps1`](Windows/setup.ps1) installs Pi, the required extensions, the permission configuration, and the project dependencies, then builds the application and initializes the server-side update reminder timestamp. After a successful build it asks whether to register the optional hidden current-user Scheduled Task `Pi Squared`; an empty answer defaults to no.
-- [`update.ps1`](Windows/update.ps1) pulls the latest repository version, updates Pi and its extensions, installs the current project dependencies, then rebuilds the application. If `Pi Squared` is registered, it delegates the restart to [`restart-service.ps1`](Windows/restart-service.ps1); otherwise it leaves the current process alone.
-- [`restart-service.ps1`](Windows/restart-service.ps1) requests a replacement instance of the registered `Pi Squared` Scheduled Task and can be run manually from any directory. The setup-created `MultipleInstances StopExisting` policy performs the replacement.
-- [`run.ps1`](Windows/run.ps1) starts the production build on port `3049`. Press **Esc** or **Ctrl+C** to stop a manually started server. When the task is registered, normal invocation does not start a duplicate; use `Windows/run.ps1 -ServiceMode` only from the task.
-- [`uninstall.ps1`](Windows/uninstall.ps1) stops and unregisters the `Pi Squared` task when it exists. It does not remove the application or its data.
 
 ```powershell
 .\Windows\setup.ps1
-.\Windows\update.ps1
-.\Windows\restart-service.ps1
 .\Windows\run.ps1
-.\Windows\uninstall.ps1
+.\Windows\update.ps1
 ```
 
-When setup registers `Pi Squared`, it uses the built-in ScheduledTasks cmdlets to create a hidden, current-user task that runs `Windows/run.ps1 -ServiceMode` immediately and at the current user's logon, without storing a password. Manage it with:
+The foreground server listens on `http://127.0.0.1:3049`; stop it with Ctrl+C. `npm run start` is the cross-platform production start command. Do not expose this privileged coding-agent UI to a LAN or the public internet without authentication, HTTPS, CSRF protection, and an audit/rate-limiting layer.
 
-```powershell
-Get-ScheduledTask -TaskName 'Pi Squared'
-Start-ScheduledTask -TaskName 'Pi Squared'
-Stop-ScheduledTask -TaskName 'Pi Squared'
-Stop-ScheduledTask -TaskName 'Pi Squared'; Start-ScheduledTask -TaskName 'Pi Squared'
+## Desktop development and packaging
+
+```sh
+npm install
+npm run dev                 # SvelteKit development server
+npm run build:app           # SvelteKit + Electron TypeScript build
+npm run electron:dev        # build and launch the Electron shell
+npm run electron:package   # unpacked build for local smoke testing
+npm run electron:dist      # Linux AppImage/DEB and Windows NSIS (on native runners)
 ```
 
-The task runs only for the interactive user who ran setup at logon. It has no execution time limit, can start and remain running on battery power, and replaces an existing instance when setup re-registers it. Moving the repository requires running setup again so the registered absolute paths are updated.
+`electron-builder.yml` packages the SvelteKit build, Electron code, production updater dependency, setup resources, and icon. User data is never included in an artifact. The Linux AppImage is the primary auto-update artifact; DEB is a convenience installer. Windows is per-user NSIS.
 
-## In-app application updates
+## Updates
 
-Settings includes an **Update application** action, and Pi Squared shows a persistent update reminder every five days. The reminder timestamp is shared by the server installation and stored in its Pi Squared data directory rather than in browser storage. Choosing **Yes** or **No** records the current server time and dismisses the reminder. Updates execute the platform update script, stream labeled stdout and stderr into an accessible dialog, and keep running if the browser disconnects.
+In Electron, Settings says **Check for updates** and uses `electron-updater` against public GitHub Releases for `vladimirsbelajevs/pi-squared`. Checks run shortly after launch and every five days. Downloads require confirmation, report progress/errors in the accessible dialog, and finish with **Restart and install**. Electron application releases do not run `git pull`, npm builds, or service/task scripts; Pi package repair remains a separate first-run/setup operation.
 
-After a successful update, the dialog offers **Restart app** when the native background registration exists. Linux requires the `pi-squared.service` user unit and Windows requires the `Pi Squared` Scheduled Task. Without either registration, updating still works but setup must be rerun with background registration enabled before the app can restart itself. A restart waits for the updated server to reconnect and then reloads the browser; a failed update retains its output and offers Retry instead of restart.
+In a source checkout, the same Settings action runs the update script and streams its output. A successful source build requires manually stopping and rerunning the foreground server. Source update endpoints are disabled in packaged desktop mode.
 
-The UI invokes `Linux/update.sh --no-restart` or `Windows/update.ps1 -NoRestart`, so the update process can report completion before the current server is restarted. Manual restart commands are `./Linux/restart-service.sh` and `.\Windows\restart-service.ps1`.
+To publish a release, bump `package.json` and `package-lock.json` to the same version, commit, and push the matching `vX.Y.Z` tag. CI validates the tag, runs lint/check/tests, builds on Ubuntu and Windows, and publishes both platform artifacts and updater metadata to one GitHub Release. `workflow_dispatch` validates artifacts without publishing.
 
-The platform-specific installers and permission scripts used by these wrappers are in [`pi_setup/`](pi_setup/). The shared permission configuration is [`pi_setup/configs/permissions.json`](pi_setup/configs/permissions.json). Set `PI_CODING_AGENT_DIR` to use a different Pi agent directory, or `PI_PERMISSION_SYSTEM_CONFIG_PATH` to set the exact permission configuration destination.
+## Data locations
 
-Pi reads models and credentials from its standard locations, including `~/.pi/agent/auth.json` and `~/.pi/agent/models.json`. Configure a provider with Pi before starting a model-backed chat.
+Pi Squared stores its project registry and update reminder under its application data directory:
 
-The app is designed for local, single-user use. Bind it to localhost unless an authentication and isolation layer is added.
+| Platform       | Default project registry               |
+| -------------- | -------------------------------------- |
+| Linux source   | `~/.config/pi-squared/projects.json`   |
+| Windows source | `%APPDATA%\\pi-squared\\projects.json` |
+| Electron       | Electron `userData/projects.json`      |
+
+Set `PI_SQUARED_DATA_DIR` for a source server. Electron sets it to its `userData` path. Pi credentials, settings, models, extension state, and sessions remain in the standard `~/.pi/agent/` directory (or `PI_CODING_AGENT_DIR`) and are not migrated or bundled.
 
 ## Development
 
-Start the SvelteKit development server:
-
 ```sh
+npm run check
+npm run lint
+npm run test:unit -- --run
 npm run dev
 ```
 
-Open the printed local URL. Add a project from a new-chat tab, choose an authenticated model, select a reasoning level, and send an opening prompt.
-
-## Data Locations
-
-Pi Squared stores its added-project registry and the server-side application update reminder state. These files are created in the data directory and are never bundled with the application.
-
-| Platform | Default projects registry path                           |
-| -------- | -------------------------------------------------------- |
-| Linux    | `~/.config/pi-squared/projects.json`                     |
-| macOS    | `~/Library/Application Support/pi-squared/projects.json` |
-| Windows  | `%APPDATA%\\pi-squared\\projects.json`                   |
-
-The application update reminder is stored beside the registry as `application-update-reminder.json`. Setup initializes it before registering a background process and persists the resolved absolute data directory in the registration, so custom `PI_SQUARED_DATA_DIR`, `XDG_CONFIG_HOME`, and paths containing spaces remain consistent between setup and the service.
-
-Set `PI_SQUARED_DATA_DIR` to use a custom or portable data directory.
-
-Pi owns credentials, settings, and session JSONL files under `~/.pi/agent/` by default. Closing a browser tab disposes its in-memory runtime but does not delete the Pi session.
-
-## Trust And Security
-
-Adding a project explicitly trusts its Pi project resources. Pi can then load that project's `.pi` settings, extensions, prompts, and skills. Pi has no built-in sandbox: its tools can read files, edit files, and execute commands with the permissions of the process running this application.
-
-Only add projects you trust. For untrusted repositories or remote deployment, run the harness in a properly isolated container, VM, or sandbox with restricted files, credentials, and networking.
+Adding a project explicitly trusts its Pi resources. Pi tools can read, edit, and execute commands with the permissions of the local process, so only add repositories you trust.

@@ -4,7 +4,9 @@ set -euo pipefail
 
 #Install PI
 curl -fsSL https://pi.dev/install.sh | sh
-
+# The installer may place `pi` in the user-local bin directory without
+# updating this non-interactive shell's PATH.
+export PATH="${HOME}/.local/bin:${PATH}"
 
 # Install necessary PI extensions
 pi install npm:@gotgenes/pi-permission-system

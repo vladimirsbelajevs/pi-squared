@@ -3,6 +3,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import ErrorNoticeHost from '$lib/components/ErrorNoticeHost.svelte';
 	import ApplicationUpdater from '$lib/components/ApplicationUpdater.svelte';
+	import DesktopOnboarding from '$lib/components/DesktopOnboarding.svelte';
 
 	let { children } = $props();
 </script>
@@ -11,3 +12,4 @@
 {@render children()}
 <ErrorNoticeHost />
 <ApplicationUpdater />
+<DesktopOnboarding />

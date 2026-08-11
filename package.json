@@ -15,7 +15,17 @@
 		"format": "prettier --write .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright install && playwright test"
+		"test:e2e": "playwright install && playwright test",
+		"build:app": "npm run build && npm run build:electron",
+		"build:electron": "node -e \"require('node:fs').rmSync('electron/dist',{recursive:true,force:true})\" && tsc -p electron/tsconfig.json",
+		"electron:dev": "npm run build:electron && node scripts/electron-dev.mjs",
+		"electron:package": "npm run build:app && electron-builder --dir --config electron-builder.yml",
+		"electron:dist": "npm run build:app && electron-builder --linux AppImage deb --win nsis --publish never --config electron-builder.yml",
+		"release:check": "npm run lint && npm run check && npm run test:unit -- --run && npm run build:app",
+		"electron:dist:linux": "npm run build:app && electron-builder --linux AppImage deb --publish never --config electron-builder.yml",
+		"electron:dist:windows": "npm run build:app && electron-builder --win nsis --publish never --config electron-builder.yml",
+		"electron:smoke": "npm run build:app && node scripts/electron-smoke.mjs",
+		"electron:package:smoke": "npm run build:app && electron-builder --dir --config electron-builder.yml && node scripts/electron-packaged-smoke.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -29,6 +39,8 @@
 		"@types/node": "^22",
 		"@vitest/browser-playwright": "^4.1.8",
 		"@vitest/coverage-v8": "4.1.10",
+		"electron": "^43.3.0",
+		"electron-builder": "^26.15.3",
 		"eslint": "^10.4.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.19.0",
@@ -49,8 +61,89 @@
 	"dependencies": {
 		"@earendil-works/pi-coding-agent": "^0.83.0",
 		"bits-ui": "^2.18.1",
+		"electron-updater": "^6.8.9",
 		"highlight.js": "^11.11.1",
 		"ignore": "^7.0.6",
 		"markdown-it": "^14.3.0"
-	}
+	},
+	"main": "electron/dist/electron/main.js",
+	"build": {
+		"appId": "com.vladimirsbelajevs.pi-squared",
+		"productName": "Pi Squared",
+		"asar": true,
+		"icon": "static/icon",
+		"files": [
+			"build/**/*",
+			"electron/dist/**/*",
+			"package.json",
+			"node_modules/electron-updater/**/*"
+		],
+		"extraResources": [
+			{
+				"from": "pi_setup",
+				"to": "pi_setup"
+			},
+			{
+				"from": "static/favicon.svg",
+				"to": "static/favicon.svg"
+			},
+			{
+				"from": "static/icon.png",
+				"to": "static/icon.png"
+			},
+			{
+				"from": "static/icon.ico",
+				"to": "static/icon.ico"
+			}
+		],
+		"directories": {
+			"output": "release"
+		},
+		"publish": {
+			"provider": "github",
+			"owner": "vladimirsbelajevs",
+			"repo": "pi-squared",
+			"releaseType": "release"
+		},
+		"linux": {
+			"target": [
+				{
+					"target": "AppImage",
+					"arch": [
+						"x64"
+					]
+				},
+				{
+					"target": "deb",
+					"arch": [
+						"x64"
+					]
+				}
+			],
+			"category": "Development",
+			"syncDesktopName": true
+		},
+		"win": {
+			"target": [
+				{
+					"target": "nsis",
+					"arch": [
+						"x64"
+					]
+				}
+			],
+			"artifactName": "${productName}-${version}-setup.${ext}"
+		},
+		"nsis": {
+			"oneClick": true,
+			"perMachine": false,
+			"allowToChangeInstallationDirectory": false
+		}
+	},
+	"description": "Pi Squared local Pi coding agent desktop and web application",
+	"author": {
+		"name": "Vladimirs Belajevs",
+		"email": "vladimirsbelajevs@users.noreply.github.com"
+	},
+	"desktopName": "pi-squared"
 }
