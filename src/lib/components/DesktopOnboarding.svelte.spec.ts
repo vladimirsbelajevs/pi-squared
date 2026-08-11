@@ -48,6 +48,15 @@ describe('DesktopOnboarding', () => {
 			onUpdateStatus: vi.fn(() => () => undefined),
 			downloadUpdate: vi.fn(),
 			restartAndInstall: vi.fn(),
+			getLanSharingStatus: vi.fn(),
+			setLanSharingConfig: vi.fn(),
+			onLanSharingStatus: vi.fn(() => () => undefined),
+			approveLanPairing: vi.fn(),
+			createLanPairingCode: vi.fn(),
+			rejectLanPairing: vi.fn(),
+			revokeLanDevice: vi.fn(),
+			exportLanCa: vi.fn(),
+			resetLanTls: vi.fn(),
 			quit: vi.fn(),
 			getVersion: vi.fn()
 		};

@@ -50,6 +50,59 @@ export interface DesktopWindowState {
 	maximized: boolean;
 }
 
+export interface LanSharingBinding {
+	interfaceName: string;
+	address: string;
+	family: 'IPv4' | 'IPv6';
+}
+
+export interface LanSharingAddress {
+	interfaceName: string;
+	address: string;
+	family: 'IPv4' | 'IPv6';
+	internal: boolean;
+	risk: string[];
+	label: string;
+	recommended?: boolean;
+}
+
+export interface LanSharingListener {
+	binding: LanSharingBinding;
+	state: 'listening' | 'missing' | 'error' | 'stopped';
+	error?: string;
+	url?: string;
+}
+
+export interface LanSharingDevice {
+	id: string;
+	host: string;
+	deviceName: string;
+	createdAt: string;
+	lastSeenAt: string;
+	expiresAt: string;
+}
+
+export interface LanSharingPendingPairing {
+	nonce: string;
+	status: 'pending' | 'approved' | 'rejected' | 'expired';
+	createdAt: string;
+	expiresAt: string;
+	host: string;
+	deviceName: string;
+}
+
+export interface LanSharingStatus {
+	available: LanSharingAddress[];
+	config: { enabled: boolean; port: number; bindings: LanSharingBinding[]; dnsNames: string[] };
+	listeners: LanSharingListener[];
+	urls: string[];
+	caFingerprint?: string;
+	caNotAfter?: string;
+	leafNotAfter?: string;
+	keyProtectionWarning?: string;
+	pairing: { pending: LanSharingPendingPairing[]; devices: LanSharingDevice[] };
+}
+
 export interface PiSquaredDesktopWindowControls {
 	getState(): Promise<DesktopWindowState>;
 	onStateChange(listener: (state: DesktopWindowState) => void): () => void;
@@ -71,6 +124,15 @@ export interface PiSquaredDesktopApi {
 	onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 	downloadUpdate(): Promise<DesktopUpdateStatus>;
 	restartAndInstall(): Promise<void>;
+	getLanSharingStatus(): Promise<LanSharingStatus>;
+	setLanSharingConfig(config: LanSharingStatus['config']): Promise<LanSharingStatus>;
+	onLanSharingStatus(listener: (status: LanSharingStatus) => void): () => void;
+	approveLanPairing(nonce: string): Promise<void>;
+	createLanPairingCode(deviceName: string): Promise<{ expiresAt: string }>;
+	rejectLanPairing(nonce: string): Promise<void>;
+	revokeLanDevice(id: string): Promise<void>;
+	exportLanCa(): Promise<{ path: string; fingerprint: string }>;
+	resetLanTls(): Promise<LanSharingStatus>;
 	quit(): Promise<void>;
 	getVersion(): Promise<string>;
 }
@@ -102,6 +164,15 @@ export function isPiSquaredDesktopApi(value: unknown): value is PiSquaredDesktop
 		typeof api.onUpdateStatus === 'function' &&
 		typeof api.downloadUpdate === 'function' &&
 		typeof api.restartAndInstall === 'function' &&
+		typeof api.getLanSharingStatus === 'function' &&
+		typeof api.setLanSharingConfig === 'function' &&
+		typeof api.onLanSharingStatus === 'function' &&
+		typeof api.approveLanPairing === 'function' &&
+		typeof api.createLanPairingCode === 'function' &&
+		typeof api.rejectLanPairing === 'function' &&
+		typeof api.revokeLanDevice === 'function' &&
+		typeof api.exportLanCa === 'function' &&
+		typeof api.resetLanTls === 'function' &&
 		typeof api.quit === 'function' &&
 		typeof api.getVersion === 'function'
 	);

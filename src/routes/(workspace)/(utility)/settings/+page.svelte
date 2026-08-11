@@ -8,6 +8,7 @@
 		requestApplicationUpdate
 	} from '$lib/application-updater.svelte';
 	import Switch from '$lib/components/Switch.svelte';
+	import LanSharingSettings from '$lib/components/LanSharingSettings.svelte';
 	import { getDesktopApi } from '$lib/desktop';
 	import type {
 		DesktopPiUpdateProgress,
@@ -208,6 +209,12 @@
 		{/if}
 	{/if}
 </section>
+
+{#if desktopApi}
+	<section class="settings-card" aria-labelledby="lan-sharing-heading">
+		<LanSharingSettings />
+	</section>
+{/if}
 
 <section class="settings-card" aria-labelledby="notifications-heading">
 	<h2 id="notifications-heading">Notifications</h2>

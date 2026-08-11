@@ -1,4 +1,14 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, Tray, type IpcMainInvokeEvent } from 'electron';
+import {
+	app,
+	BrowserWindow,
+	dialog,
+	ipcMain,
+	Menu,
+	safeStorage,
+	shell,
+	Tray,
+	type IpcMainInvokeEvent
+} from 'electron';
 import { randomBytes } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { access } from 'node:fs/promises';
@@ -25,6 +35,9 @@ import { terminateChild } from './lifecycle.js';
 import { runPiUpdate } from './pi-updater.js';
 import { isTrustedAppUrl, isTrustedFrame } from './security.js';
 import { bindWindowStateNotifications, registerWindowControlsIpc } from './window-controls.js';
+import { LanSharingManager } from './lan-sharing.js';
+import { RENDERER_COOKIE } from './loopback-auth.js';
+import type { LanSharingStatus } from '../src/lib/desktop-contract.js';
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -48,6 +61,15 @@ let bootstrapRunning = false;
 let piUpdateRunning = false;
 let updateTimer: ReturnType<typeof setInterval> | undefined;
 const shutdownToken = randomBytes(32).toString('hex');
+const isElectronDev = !app.isPackaged && process.env.PI_SQUARED_ELECTRON_DEV_URL !== undefined;
+const rendererSecret = isElectronDev
+	? (process.env.PI_SQUARED_RENDERER_SECRET ?? randomBytes(32).toString('hex'))
+	: randomBytes(32).toString('hex');
+const gatewaySecret = isElectronDev
+	? (process.env.PI_SQUARED_GATEWAY_SECRET ?? randomBytes(32).toString('hex'))
+	: randomBytes(32).toString('hex');
+let lanSharing: LanSharingManager | undefined;
+let lanSharingTimer: ReturnType<typeof setInterval> | undefined;
 
 function appRoot(): string {
 	if (app.isPackaged) {
@@ -174,6 +196,7 @@ async function waitForHealth(url: string, path = '/__pi_squared_health'): Promis
 	while (Date.now() < deadline) {
 		try {
 			const response = await fetch(`${url}${path}`, {
+				headers: { 'x-pi-squared-internal-auth': gatewaySecret },
 				signal: AbortSignal.timeout(2_000)
 			});
 			if (response.ok) {
@@ -203,7 +226,9 @@ async function startServer(): Promise<void> {
 			PI_SQUARED_DESKTOP: '1',
 			PI_SQUARED_DATA_DIR: app.getPath('userData'),
 			PI_SQUARED_BUILD_DIR: buildDirectory(),
-			PI_SQUARED_SHUTDOWN_TOKEN: shutdownToken
+			PI_SQUARED_SHUTDOWN_TOKEN: shutdownToken,
+			PI_SQUARED_RENDERER_SECRET: rendererSecret,
+			PI_SQUARED_GATEWAY_SECRET: gatewaySecret
 		},
 		stdio: ['ignore', 'pipe', 'pipe']
 	});
@@ -222,6 +247,7 @@ async function startServer(): Promise<void> {
 		if (serverProcess === child) {
 			serverProcess = undefined;
 			serverUrl = undefined;
+			void lanSharing?.stop();
 		}
 	});
 }
@@ -237,14 +263,76 @@ async function stopServer(): Promise<void> {
 	await terminateChild(child);
 }
 
+async function configureLanSharing(): Promise<void> {
+	if (!serverUrl) {
+		return;
+	}
+
+	if (!lanSharing) {
+		lanSharing = new LanSharingManager({
+			dataDirectory: app.getPath('userData'),
+			upstreamUrl: serverUrl,
+			gatewaySecret,
+			safeStorage: {
+				isEncryptionAvailable: () => {
+					try {
+						return safeStorage.isEncryptionAvailable();
+					} catch {
+						return false;
+					}
+				},
+				getSelectedStorageBackend:
+					process.platform === 'linux' &&
+					typeof safeStorage.getSelectedStorageBackend === 'function'
+						? () => safeStorage.getSelectedStorageBackend()
+						: undefined,
+				encryptString: (value) => safeStorage.encryptString(value),
+				decryptString: (value) => safeStorage.decryptString(value)
+			},
+			onStatus: (status: LanSharingStatus) => send('desktop:lan-sharing-status', status)
+		});
+		await lanSharing.load();
+		lanSharingTimer = setInterval(() => {
+			void lanSharing
+				?.reconcile()
+				.catch((error: unknown) =>
+					console.error('LAN sharing listener reconciliation failed:', error)
+				);
+		}, 30_000);
+
+		return;
+	}
+
+	await lanSharing.updateUpstream(serverUrl);
+}
+
+async function provisionRendererCookie(window: BrowserWindow): Promise<void> {
+	if (!serverUrl) {
+		return;
+	}
+
+	await window.webContents.session.cookies.set({
+		url: serverUrl,
+		name: RENDERER_COOKIE,
+		value: rendererSecret,
+		path: '/',
+		httpOnly: true,
+		sameSite: 'strict',
+		secure: false
+	});
+}
+
 async function restartServer(): Promise<void> {
 	if (process.env.PI_SQUARED_ELECTRON_DEV_URL) {
 		return;
 	}
 
+	await lanSharing?.stop();
 	await stopServer();
 	await startServer();
+	await configureLanSharing();
 	if (mainWindow && serverUrl) {
+		await provisionRendererCookie(mainWindow);
 		await mainWindow.loadURL(serverUrl);
 	}
 }
@@ -282,7 +370,7 @@ function createTray(): void {
 	tray.on('click', focusWindow);
 }
 
-function createWindow(): void {
+async function createWindow(): Promise<void> {
 	mainWindow = new BrowserWindow({
 		width: 1440,
 		height: 960,
@@ -310,12 +398,21 @@ function createWindow(): void {
 	});
 	bindWindowStateNotifications(mainWindow, (state) => send('desktop:window-state-changed', state));
 	if (serverUrl) {
-		void mainWindow.loadURL(serverUrl);
+		await provisionRendererCookie(mainWindow);
+		await mainWindow.loadURL(serverUrl);
 	}
 }
 
 function toRendererBootstrapStatus(status: BootstrapStatus): BootstrapStatus {
 	return status;
+}
+
+function requireLanSharing(): LanSharingManager {
+	if (!lanSharing) {
+		throw new Error('LAN sharing is not initialized.');
+	}
+
+	return lanSharing;
 }
 
 function registerIpc(): void {
@@ -402,6 +499,70 @@ function registerIpc(): void {
 			piUpdateRunning = false;
 		}
 	});
+	ipcMain.handle('desktop:lan-sharing-status', (event) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		return requireLanSharing().status;
+	});
+	ipcMain.handle('desktop:lan-sharing-config', async (event, config) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		return requireLanSharing().applyConfig(config);
+	});
+	ipcMain.handle('desktop:lan-pairing-approve', async (event, nonce: string) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		await requireLanSharing().approvePairing(nonce);
+	});
+	ipcMain.handle('desktop:lan-pairing-code', async (event, deviceName: string) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		const result = await requireLanSharing().createPairingCode(deviceName);
+		await dialog.showMessageBox(mainWindow!, {
+			type: 'info',
+			title: 'Pi Squared pairing code',
+			message: result.code,
+			detail: `This one-use code expires at ${result.expiresAt}. It is not returned to the renderer.`
+		});
+
+		return { expiresAt: result.expiresAt };
+	});
+	ipcMain.handle('desktop:lan-pairing-reject', async (event, nonce: string) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		await requireLanSharing().rejectPairing(nonce);
+	});
+	ipcMain.handle('desktop:lan-device-revoke', async (event, id: string) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		await requireLanSharing().revokeDevice(id);
+	});
+	ipcMain.handle('desktop:lan-ca-export', async (event) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		return requireLanSharing().exportCa();
+	});
+	ipcMain.handle('desktop:lan-tls-reset', async (event) => {
+		if (!isTrustedSender(event)) {
+			throw new Error('Untrusted IPC sender.');
+		}
+
+		return requireLanSharing().resetTls();
+	});
 	ipcMain.handle('desktop:update-status', (event) => {
 		if (!isTrustedSender(event)) {
 			throw new Error('Untrusted IPC sender.');
@@ -465,7 +626,12 @@ async function quitApplication(): Promise<void> {
 		clearInterval(updateTimer);
 	}
 
+	if (lanSharingTimer) {
+		clearInterval(lanSharingTimer);
+	}
+
 	tray?.destroy();
+	await lanSharing?.stop();
 	await stopServer();
 	app.quit();
 }
@@ -499,19 +665,21 @@ async function startApplication(): Promise<void> {
 		}
 	});
 	registerIpc();
-	const devServerUrl = process.env.PI_SQUARED_ELECTRON_DEV_URL;
+	const devServerUrl = !app.isPackaged ? process.env.PI_SQUARED_ELECTRON_DEV_URL : undefined;
 	if (devServerUrl) {
 		serverUrl = devServerUrl;
 		await waitForHealth(serverUrl, '/api/health');
 	} else {
 		await access(join(buildDirectory(), 'handler.js'));
 		await startServer();
-		if (process.env.PI_SQUARED_PACKAGED_SMOKE === '1' && serverUrl) {
-			console.log(JSON.stringify({ type: 'desktop-ready', url: serverUrl }));
-		}
 	}
 
-	createWindow();
+	await configureLanSharing();
+	if (!devServerUrl && process.env.PI_SQUARED_PACKAGED_SMOKE === '1' && serverUrl) {
+		console.log(JSON.stringify({ type: 'desktop-ready', url: serverUrl }));
+	}
+
+	await createWindow();
 	createTray();
 	configureUpdates();
 	app.on('activate', focusWindow);

@@ -106,6 +106,15 @@ describe('ApplicationUpdater electron mode', () => {
 			onUpdateStatus: vi.fn(() => () => undefined),
 			downloadUpdate: vi.fn(async () => ({ phase: 'downloaded' as const, version: '1.1.0' })),
 			restartAndInstall: vi.fn(async () => undefined),
+			getLanSharingStatus: vi.fn(),
+			setLanSharingConfig: vi.fn(),
+			onLanSharingStatus: vi.fn(() => () => undefined),
+			approveLanPairing: vi.fn(),
+			createLanPairingCode: vi.fn(),
+			rejectLanPairing: vi.fn(),
+			revokeLanDevice: vi.fn(),
+			exportLanCa: vi.fn(),
+			resetLanTls: vi.fn(),
 			quit: vi.fn(async () => undefined),
 			getVersion: vi.fn(async () => '1.0.0')
 		};

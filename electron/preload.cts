@@ -10,6 +10,7 @@ import type {
 	DesktopWindowState,
 	DesktopPiUpdateStatus,
 	DesktopUpdateStatus,
+	LanSharingStatus,
 	PiSquaredDesktopApi
 } from '../src/lib/desktop-contract.js';
 
@@ -48,6 +49,27 @@ const api: PiSquaredDesktopApi = {
 	downloadUpdate: () =>
 		ipcRenderer.invoke('desktop:update-download') as Promise<DesktopUpdateStatus>,
 	restartAndInstall: () => ipcRenderer.invoke('desktop:update-install') as Promise<void>,
+	getLanSharingStatus: () =>
+		ipcRenderer.invoke('desktop:lan-sharing-status') as Promise<LanSharingStatus>,
+	setLanSharingConfig: (config) =>
+		ipcRenderer.invoke('desktop:lan-sharing-config', config) as Promise<LanSharingStatus>,
+	onLanSharingStatus: (listener) => {
+		const handler = (_event: Electron.IpcRendererEvent, status: LanSharingStatus) =>
+			listener(status);
+		ipcRenderer.on('desktop:lan-sharing-status', handler);
+
+		return () => ipcRenderer.removeListener('desktop:lan-sharing-status', handler);
+	},
+	approveLanPairing: (nonce) =>
+		ipcRenderer.invoke('desktop:lan-pairing-approve', nonce) as Promise<void>,
+	createLanPairingCode: (deviceName) =>
+		ipcRenderer.invoke('desktop:lan-pairing-code', deviceName) as Promise<{ expiresAt: string }>,
+	rejectLanPairing: (nonce) =>
+		ipcRenderer.invoke('desktop:lan-pairing-reject', nonce) as Promise<void>,
+	revokeLanDevice: (id) => ipcRenderer.invoke('desktop:lan-device-revoke', id) as Promise<void>,
+	exportLanCa: () =>
+		ipcRenderer.invoke('desktop:lan-ca-export') as Promise<{ path: string; fingerprint: string }>,
+	resetLanTls: () => ipcRenderer.invoke('desktop:lan-tls-reset') as Promise<LanSharingStatus>,
 	quit: () => ipcRenderer.invoke('desktop:quit') as Promise<void>,
 	getVersion: () => ipcRenderer.invoke('desktop:version') as Promise<string>,
 	windowControls: {

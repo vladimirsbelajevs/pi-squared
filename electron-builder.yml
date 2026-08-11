@@ -7,6 +7,20 @@ files:
   - electron/dist/**/*
   - package.json
   - node_modules/electron-updater/**/*
+  - node_modules/@peculiar/**/*
+  - node_modules/asn1js/**/*
+  - node_modules/@homebridge/**/*
+  - node_modules/ws/**/*
+  - node_modules/reflect-metadata/**/*
+  - node_modules/tsyringe/**/*
+  - node_modules/tslib/**/*
+  - node_modules/pvtsutils/**/*
+  - node_modules/webcrypto-core/**/*
+  - node_modules/debug/**/*
+  - node_modules/fast-deep-equal/**/*
+  - node_modules/source-map-support/**/*
+  - node_modules/source-map/**/*
+  - node_modules/buffer-from/**/*
 extraResources:
   - from: pi_setup
     to: pi_setup
