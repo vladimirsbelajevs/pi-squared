@@ -39,7 +39,8 @@
 
 		"external_directory": {
 			"*": "ask",
-
+			"/tmp": "allow",
+      "/tmp/*": "allow",
 			"~/.cache/*": "allow",
 			"~/.local/share/pnpm/*": "allow",
 			"~/.npm/*": "allow",

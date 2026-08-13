@@ -10,7 +10,6 @@ export PATH="${HOME}/.local/bin:${PATH}"
 
 # Install necessary PI extensions
 pi install npm:@gotgenes/pi-permission-system
-pi install npm:pi-subagents
 pi install npm:@narumitw/pi-plan-mode
 pi install npm:@narumitw/pi-lsp
 pi install npm:pi-mcp-adapter
